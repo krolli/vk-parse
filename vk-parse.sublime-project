@@ -1,0 +1,13 @@
+{
+	"folders":
+	[
+		{
+			"folder_exclude_patterns":
+			[
+				"target"
+			],
+			"name": "vk-parse",
+			"path": "."
+		}
+	]
+}
