@@ -165,17 +165,6 @@ fn parse_registry_element<R: Read>(
     }
 }
 
-fn parse_text_element<R: Read>(events: &mut XmlEvents<R>) -> String {
-    let result = if let Some(Ok(XmlEvent::Characters(text))) = events.next() {
-        text
-    } else {
-        String::new()
-    };
-
-    consume_current_element(events);
-    result
-}
-
 //--------------------------------------------------------------------------------------------------
 fn parse_vendorids<R: Read>(
     attributes: Vec<XmlAttribute>,
@@ -695,19 +684,62 @@ fn parse_type_funcptr<R: Read>(events: &mut XmlEvents<R>) -> vkxml::FunctionPoin
         param: Vec::new(),
     };
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement { name, .. } => {
-                if name.local_name.as_str() == "name" {
-                    r.name = parse_text_element(events);
-                } else {
-                    consume_current_element(events);
-                }
-            }
+    let mut buffer = String::new();
+    for text in ChildrenDataIter::new(events) {
+        buffer.push_str(&text);
+    }
 
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
+    let mut iter = buffer
+        .split_whitespace()
+        .flat_map(|s| CTokenIter::new(s))
+        .peekable();
+    let token = iter.next().unwrap();
+    if token != "typedef" {
+        panic!("Unexpected token {:?}", token);
+    }
+
+    r.return_type = parse_c_field(&mut iter).unwrap();
+
+    let token = iter.next().unwrap();
+    if token != "(" {
+        panic!("Unexpected token {:?}", token);
+    }
+
+    let token = iter.next().unwrap();
+    if token != "VKAPI_PTR" {
+        panic!("Unexpected token {:?}", token);
+    }
+
+    let token = iter.next().unwrap();
+    if token != "*" {
+        panic!("Unexpected token {:?}", token);
+    }
+
+    r.name.push_str(iter.next().unwrap());
+
+    let token = iter.next().unwrap();
+    if token != ")" {
+        panic!("Unexpected token {:?}", token);
+    }
+
+    while let Some(token) = iter.next() {
+        match token {
+            "(" | "," => (),
+            ")" => break,
+            _ => panic!("Unexpected token {:?}", token),
         }
+
+        let field = if let Some(field) = parse_c_field(&mut iter) {
+            field
+        } else {
+            continue;
+        };
+
+        if field.basetype == "void" && field.reference.is_none() && field.name.is_none() {
+            continue;
+        }
+
+        r.param.push(field);
     }
 
     r
@@ -812,12 +844,14 @@ fn parse_type_struct_member<R: Read>(
         let name = a.name.local_name;
         let value = a.value;
         match name.as_str() {
-            "len" => if value.as_str() == "null-terminated" {
-                r.null_terminate = true;
-            } else {
-                r.size = Some(value);
+            "len" => {
+                if value.as_str() == "null-terminated" {
+                    r.null_terminate = true;
+                } else {
+                    r.size = Some(value);
+                }
                 r.array = Some(vkxml::ArrayType::Dynamic);
-            },
+            }
             "altlen" => (),
             "externsync" => r.sync = Some(value),
             "optional" => r.optional = Some(value),
@@ -1523,5 +1557,145 @@ fn consume_current_element<R: Read>(events: &mut XmlEvents<R>) {
             }
             _ => (),
         }
+    }
+}
+
+fn parse_text_element<R: Read>(events: &mut XmlEvents<R>) -> String {
+    let result = if let Some(Ok(XmlEvent::Characters(text))) = events.next() {
+        text
+    } else {
+        String::new()
+    };
+
+    consume_current_element(events);
+    result
+}
+
+//--------------------------------------------------------------------------------------------------
+fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
+    iter: &mut std::iter::Peekable<I>,
+) -> Option<vkxml::Field> {
+    match iter.peek() {
+        Some(&")") => return None,
+        _ => (),
+    }
+
+    let mut r = new_field();
+
+    let mut token = iter.next().unwrap();
+    if token == "const" {
+        r.is_const = true;
+        token = iter.next().unwrap();
+    }
+
+    r.basetype = String::from(token);
+
+    while let Some(&token) = iter.peek() {
+        match token {
+            "," | ")" | "(" | ";" => break,
+            "*" => r.reference = Some(vkxml::ReferenceType::Pointer),
+            _ => r.name = Some(String::from(token)),
+        }
+        iter.next().unwrap();
+    }
+
+    Some(r)
+}
+
+//--------------------------------------------------------------------------------------------------
+struct ChildrenDataIter<'a, R: Read + 'a> {
+    events: &'a mut XmlEvents<R>,
+    depth: usize,
+}
+
+impl<'a, R: Read> ChildrenDataIter<'a, R> {
+    fn new(events: &'a mut XmlEvents<R>) -> Self {
+        Self { events, depth: 1 }
+    }
+}
+
+impl<'a, R: Read> Iterator for ChildrenDataIter<'a, R> {
+    type Item = String;
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(Ok(e)) = self.events.next() {
+            match e {
+                XmlEvent::StartElement { .. } => self.depth += 1,
+                XmlEvent::EndElement { .. } => {
+                    self.depth -= 1;
+                    if self.depth == 0 {
+                        break;
+                    }
+                }
+
+                XmlEvent::Characters(text) => return Some(text),
+
+                _ => panic!("Unexpected xml event {:?}", e),
+            }
+        }
+
+        None
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+struct CTokenIter<'a> {
+    src: &'a str,
+}
+
+impl<'a> CTokenIter<'a> {
+    fn new(src: &'a str) -> Self {
+        Self { src }
+    }
+
+    fn is_c_identifier_char(c: char) -> bool {
+        if '0' <= c && c <= '9' {
+            true
+        } else if 'a' <= c && c <= 'z' {
+            true
+        } else if 'A' <= c && c <= 'Z' {
+            true
+        } else if c == '_' {
+            true
+        } else {
+            false
+        }
+    }
+
+    #[allow(dead_code)]
+    fn is_c_identifier(s: &str) -> bool {
+        for c in s.chars() {
+            if !CTokenIter::is_c_identifier_char(c) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl<'a> Iterator for CTokenIter<'a> {
+    type Item = &'a str;
+    fn next(&mut self) -> Option<&'a str> {
+        let mut iter = self.src.char_indices();
+        if let Some((_, c)) = iter.next() {
+            if CTokenIter::is_c_identifier_char(c) {
+                for (end_idx, c) in iter {
+                    if !CTokenIter::is_c_identifier_char(c) {
+                        let split = self.src.split_at(end_idx);
+                        self.src = split.1;
+                        return Some(split.0);
+                    }
+                }
+
+                let res = self.src;
+                self.src = "";
+                return Some(res);
+            } else {
+                let split = self.src.split_at(1);
+                self.src = split.1;
+                return Some(split.0);
+            }
+        }
+
+        None
     }
 }
