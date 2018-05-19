@@ -1133,7 +1133,11 @@ fn parse_command<R: Read>(
                         r.return_type = proto;
                     }
                     "param" => r.param.push(parse_type_struct_member(attributes, events)),
-                    "implicitexternsyncparams" => consume_current_element(events),
+                    "implicitexternsyncparams" => {
+                        for text in ChildrenDataIter::new(events) {
+                            r.external_sync = Some(vkxml::ExternalSync { sync: text })
+                        }
+                    }
                     _ => panic!("Unexpected element {:?}", name),
                 }
             }
@@ -1650,6 +1654,7 @@ impl<'a, R: Read> Iterator for ChildrenDataIter<'a, R> {
                 }
 
                 XmlEvent::Characters(text) => return Some(text),
+                XmlEvent::Whitespace(..) => (),
 
                 _ => panic!("Unexpected xml event {:?}", e),
             }
