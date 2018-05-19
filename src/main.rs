@@ -1,13 +1,11 @@
+extern crate clap;
 extern crate ron;
 extern crate serde_xml_rs;
 extern crate vk_parse;
 extern crate vkxml;
 extern crate xml;
 
-type XmlEventReader<R> = xml::reader::EventReader<R>;
-use xml::reader::XmlEvent;
-
-fn save_registry_ron(registry: &vkxml::Registry, path: &str) {
+fn save_registry_ron(registry: &vkxml::Registry, path: &std::path::Path) {
     use std::io::Write;
     let text = ron::ser::to_string_pretty(
         registry,
@@ -25,26 +23,32 @@ fn save_registry_ron(registry: &vkxml::Registry, path: &str) {
 }
 
 fn main() {
-    {
-        let file = std::io::BufReader::new(std::fs::File::open("test/vk.xml").unwrap());
-        let parser = XmlEventReader::new(file);
+    let matches = clap::App::new("vk-parse")
+        .version("0.1")
+        .author("krolli")
+        .about("Convert vk.xml to RON represenation of New Vulkan XML format.")
+        .arg(
+            clap::Arg::with_name("input")
+                .value_name("SRC")
+                .help("Path to vk.xml file to use as input.")
+                .takes_value(true)
+                .required(true),
+        )
+        .arg(
+            clap::Arg::with_name("output")
+                .value_name("DST")
+                .short("o")
+                .help("Output directory for directory structure contained within PBO source.")
+                .takes_value(true)
+                .default_value("vk.ron"),
+        )
+        .get_matches();
 
-        let mut events = parser.into_iter();
-        while let Some(Ok(e)) = events.next() {
-            match e {
-                XmlEvent::StartElement { ref name, .. } if name.local_name == "registry" => {
-                    let registry = vk_parse::parse_registry(&mut events);
-                    save_registry_ron(&registry, "test/vk.ron");
-                }
-                _ => {}
-            }
-        }
-    }
+    let input_str = matches.value_of("input").unwrap();
+    let output_str = matches.value_of("output").unwrap();
+    let output_path = std::path::Path::new(output_str);
+    let input_path = std::path::Path::new(input_str);
 
-    {
-        let file = std::io::BufReader::new(std::fs::File::open("test/vk_new.xml").unwrap());
-        let result = serde_xml_rs::from_reader(file);
-        let registry: vkxml::Registry = result.unwrap();
-        save_registry_ron(&registry, "test/vk_ref.ron");
-    }
+    let registry = vk_parse::parse_file(input_path);
+    save_registry_ron(&registry, output_path);
 }
