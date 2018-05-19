@@ -845,6 +845,14 @@ fn parse_type_struct_member<R: Read>(
         let value = a.value;
         match name.as_str() {
             "len" => {
+                let mut value = value;
+                let null_terminated_part = ",null-terminated";
+                if value.as_str().ends_with(null_terminated_part) {
+                    r.null_terminate = true;
+                    let start = value.len() - null_terminated_part.len();
+                    value.drain(start..);
+                }
+
                 if value.as_str() == "null-terminated" {
                     r.null_terminate = true;
                 } else {
@@ -852,7 +860,7 @@ fn parse_type_struct_member<R: Read>(
                 }
                 r.array = Some(vkxml::ArrayType::Dynamic);
             }
-            "altlen" => (),
+            "altlen" => r.c_size = Some(value),
             "externsync" => r.sync = Some(value),
             "optional" => r.optional = Some(value),
             "noautovalidity" => (),
@@ -863,6 +871,7 @@ fn parse_type_struct_member<R: Read>(
 
     // mk:TODO Full parsing. (const, reference/pointer, array, ...)
 
+    let mut panic_cause = None;
     while let Some(Ok(e)) = events.next() {
         match e {
             XmlEvent::StartElement { name, .. } => {
@@ -880,21 +889,32 @@ fn parse_type_struct_member<R: Read>(
                 }
             }
 
-            XmlEvent::Characters(text) => {
-                if text.contains("const") {
-                    r.is_const = true;
-                }
+            XmlEvent::Characters(mut text) => {
+                text.retain(|c| !c.is_ascii_whitespace());
+                match text.as_str() {
+                    "const" => r.is_const = true,
+                    "*" => r.reference = Some(vkxml::ReferenceType::Pointer),
+                    "**" => r.reference = Some(vkxml::ReferenceType::PointerToPointer),
+                    "*const*" => r.reference = Some(vkxml::ReferenceType::PointerToConstPointer),
+                    "struct" => r.is_struct = true,
+                    "]" => match r.array {
+                        Some(vkxml::ArrayType::Static) => (),
+                        _ => panic!("Found ']' with no corresponding '[' for array declaration."),
+                    },
 
-                if text.contains('*') {
-                    r.reference = Some(if text.contains("**") {
-                        vkxml::ReferenceType::PointerToPointer
-                    } else {
-                        vkxml::ReferenceType::Pointer
-                    });
-                }
-
-                if text.contains('[') {
-                    r.array = Some(vkxml::ArrayType::Static);
+                    // Can be "[" but also "[2]"
+                    _ => {
+                        if text.starts_with('[') {
+                            r.array = Some(vkxml::ArrayType::Static);
+                            if text.len() > 1 && text.ends_with(']') {
+                                text.pop().unwrap();
+                                text.remove(0);
+                                r.size = Some(text);
+                            }
+                        } else if panic_cause.is_none() {
+                            panic_cause = Some(text);
+                        }
+                    }
                 }
             }
 
@@ -903,6 +923,9 @@ fn parse_type_struct_member<R: Read>(
         }
     }
 
+    if let Some(text) = panic_cause {
+        panic!("Unexpected text {:?} when parsing field {:?}", text, r);
+    }
     r
 }
 
@@ -1417,11 +1440,10 @@ fn parse_extension_require<R: Read>(
                     }
 
                     "type" => {
-                        r.elements.push(
-                            vkxml::ExtensionSpecificationElement::DefinitionReference(
+                        r.elements
+                            .push(vkxml::ExtensionSpecificationElement::DefinitionReference(
                                 parse_extension_require_ref(attributes, events),
-                            ),
-                        );
+                            ));
                     }
 
                     _ => panic!("Unexpected element {:?}", name),
