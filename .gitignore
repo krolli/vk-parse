@@ -1,5 +1,5 @@
 
 /target
 **/*.rs.bk
-/test/*.ron
+/test-data/*
 *.sublime-workspace
