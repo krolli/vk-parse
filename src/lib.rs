@@ -3,6 +3,7 @@ extern crate xml;
 
 use std::io::Read;
 
+type XmlEventReader<R> = xml::reader::EventReader<R>;
 type XmlEvents<R> = xml::reader::Events<R>;
 type XmlAttribute = xml::attribute::OwnedAttribute;
 use xml::reader::XmlEvent;
@@ -30,6 +31,23 @@ fn new_field() -> vkxml::Field {
 }
 
 //--------------------------------------------------------------------------------------------------
+pub fn parse_file(path: &std::path::Path) -> vkxml::Registry {
+    let file = std::io::BufReader::new(std::fs::File::open(path).unwrap());
+    let parser = XmlEventReader::new(file);
+
+    let mut events = parser.into_iter();
+    while let Some(Ok(e)) = events.next() {
+        match e {
+            XmlEvent::StartElement { ref name, .. } if name.local_name == "registry" => {
+                return parse_registry(&mut events);
+            }
+            _ => {}
+        }
+    }
+
+    panic!("Couldn't find 'registry' element in file {:?}", path);
+}
+
 pub fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registry {
     let mut registry = vkxml::Registry {
         elements: Vec::new(),
@@ -158,6 +176,8 @@ fn parse_registry_element<R: Read>(
                 events,
             )));
         }
+
+        "platforms" => consume_current_element(events), // mk:TODO Not supported by vkxml.
 
         _ => {
             panic!("Unexpected element {:?}", name);
@@ -865,6 +885,7 @@ fn parse_type_struct_member<R: Read>(
             "optional" => r.optional = Some(value),
             "noautovalidity" => (),
             "values" => r.type_enums = Some(value),
+            "validextensionstructs" => (), // mk:TODO Not supported by vkxml.
             _ => panic!("Unexpected attribute {:?}", name),
         }
     }
@@ -890,29 +911,46 @@ fn parse_type_struct_member<R: Read>(
             }
 
             XmlEvent::Characters(mut text) => {
-                text.retain(|c| !c.is_ascii_whitespace());
-                match text.as_str() {
-                    "const" => r.is_const = true,
-                    "*" => r.reference = Some(vkxml::ReferenceType::Pointer),
-                    "**" => r.reference = Some(vkxml::ReferenceType::PointerToPointer),
-                    "*const*" => r.reference = Some(vkxml::ReferenceType::PointerToConstPointer),
-                    "struct" => r.is_struct = true,
-                    "]" => match r.array {
-                        Some(vkxml::ArrayType::Static) => (),
-                        _ => panic!("Found ']' with no corresponding '[' for array declaration."),
-                    },
+                let mut iter = text.split_whitespace().flat_map(|s| CTokenIter::new(s));
 
-                    // Can be "[" but also "[2]"
-                    _ => {
-                        if text.starts_with('[') {
-                            r.array = Some(vkxml::ArrayType::Static);
-                            if text.len() > 1 && text.ends_with(']') {
-                                text.pop().unwrap();
-                                text.remove(0);
-                                r.size = Some(text);
+                let mut array_start_curr = false;
+                for token in iter {
+                    let array_start_prev = array_start_curr;
+                    array_start_curr = false;
+                    match token {
+                        "struct" => r.is_struct = true,
+                        "*" => match r.reference {
+                            None => r.reference = Some(vkxml::ReferenceType::Pointer),
+                            Some(vkxml::ReferenceType::Pointer) => {
+                                r.reference = Some(vkxml::ReferenceType::PointerToPointer)
                             }
-                        } else if panic_cause.is_none() {
-                            panic_cause = Some(text);
+                            // PointerToPointer should not encounter * token
+                            // PointerToConstPointer is created by encountering const and assumes there will be one more * following it.
+                            _ => (),
+                        },
+                        "const" => match r.reference {
+                            None => r.is_const = true,
+                            Some(vkxml::ReferenceType::Pointer) => {
+                                r.reference = Some(vkxml::ReferenceType::PointerToConstPointer)
+                            }
+                            _ => (),
+                        },
+                        "[" => {
+                            r.array = Some(vkxml::ArrayType::Static);
+                            array_start_curr = true;
+                        }
+                        "]" => match r.array {
+                            Some(vkxml::ArrayType::Static) => (),
+                            _ => {
+                                panic!("Found ']' with no corresponding '[' for array declaration.")
+                            }
+                        },
+                        t => {
+                            if array_start_prev && t.len() > 0 {
+                                r.size = Some(String::from(t));
+                            } else if panic_cause.is_none() {
+                                panic_cause = Some(String::from(t));
+                            }
                         }
                     }
                 }
@@ -1039,6 +1077,7 @@ fn parse_constant<R: Read>(
 
             "bitpos" => r.bitpos = Some(u32::from_str_radix(&a.value, 10).unwrap()),
             "comment" => r.notation = Some(a.value),
+            "alias" => (), // mk:TODO Not supported by vkxml.
             _ => panic!("Unexpected attribute {:?}", name),
         }
     }
@@ -1166,6 +1205,8 @@ fn parse_command<R: Read>(
                 "outside" => r.renderpass = Some(vkxml::Renderpass::Outside),
                 _ => panic!("Unexpected attribute value {:?}", a.value),
             },
+            "name" => (),  // mk:TODO Not supported by vkxml.
+            "alias" => (), // mk:TODO Not supported by vkxml.
             _ => panic!("Unexpected attribute {:?}", name),
         }
     }
@@ -1260,6 +1301,9 @@ fn parse_feature_require<R: Read>(
                     "command" => r.elements.push(vkxml::FeatureReference::CommandReference(
                         parse_feature_require_ref(attributes, events),
                     )),
+                    "comment" => r.elements.push(vkxml::FeatureReference::Notation(
+                        parse_text_element(events),
+                    )),
                     _ => panic!("Unexpected element {:?}", name),
                 }
             }
@@ -1284,6 +1328,12 @@ fn parse_feature_require_ref<R: Read>(
         let name = a.name.local_name.as_str();
         match name {
             "name" => r.name = a.value,
+            "comment" => r.notation = Some(a.value),
+            "extends" => (),   // mk:TODO Not supported by vkxml.
+            "extnumber" => (), // mk:TODO Not supported by vkxml.
+            "offset" => (),    // mk:TODO Not supported by vkxml.
+            "bitpos" => (),    // mk:TODO Not supported by vkxml.
+            "dir" => (),       // mk:TODO Not supported by vkxml.
             _ => panic!("Unexpected attribute {:?}", name),
         }
     }
@@ -1351,6 +1401,7 @@ fn parse_extension<R: Read>(
         let name = a.name.local_name.as_str();
         match name {
             "name" => r.name = a.value,
+            "comment" => r.notation = Some(a.value),
             "number" => {
                 use std::str::FromStr;
                 r.number = i32::from_str(&a.value).unwrap();
@@ -1372,6 +1423,8 @@ fn parse_extension<R: Read>(
             },
             "requires" => r.requires = Some(a.value),
             "protect" => r.define = Some(a.value),
+            "platform" => (),     // mk:TODO Not supported by vkxml.
+            "requiresCore" => (), // mk:TODO Not supported by vkxml.
             _ => panic!("Unexpected attribute {:?}", name),
         }
     }
@@ -1413,6 +1466,7 @@ fn parse_extension_require<R: Read>(
         let name = a.name.local_name.as_str();
         match name {
             "extension" => r.extension = Some(a.value),
+            "feature" => (), // mk:TODO Not supported by vkxml.
             _ => panic!("Unexpected attribute {:?}", name),
         }
     }
@@ -1510,6 +1564,9 @@ fn parse_extension_require_enum<R: Read>(
             "extends" => extends = Some(a.value),
             "comment" => notation = Some(a.value),
             "bitpos" => bitpos = Some(u32::from_str_radix(&a.value, 10).unwrap()),
+
+            "extnumber" => (), // mk:TODO Not supported by vkxml.
+            "alias" => (),     // mk:TODO Not supported by vkxml.
 
             _ => panic!("Unexpected attributes {:?}", n),
         }
