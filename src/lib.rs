@@ -3,7 +3,6 @@ extern crate xml;
 
 use std::io::Read;
 
-type XmlEventReader<R> = xml::reader::EventReader<R>;
 type XmlEvents<R> = xml::reader::Events<R>;
 type XmlAttribute = xml::attribute::OwnedAttribute;
 use xml::reader::XmlEvent;
@@ -33,7 +32,7 @@ fn new_field() -> vkxml::Field {
 //--------------------------------------------------------------------------------------------------
 pub fn parse_file(path: &std::path::Path) -> vkxml::Registry {
     let file = std::io::BufReader::new(std::fs::File::open(path).unwrap());
-    let parser = XmlEventReader::new(file);
+    let parser = xml::reader::ParserConfig::new().create_reader(file);
 
     let mut events = parser.into_iter();
     while let Some(Ok(e)) = events.next() {
@@ -48,7 +47,7 @@ pub fn parse_file(path: &std::path::Path) -> vkxml::Registry {
     panic!("Couldn't find 'registry' element in file {:?}", path);
 }
 
-pub fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registry {
+fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registry {
     let mut registry = vkxml::Registry {
         elements: Vec::new(),
     };
@@ -628,7 +627,7 @@ fn parse_type_define<R: Read>(
     let mut r = vkxml::Define {
         name: vkxml::Identifier::new(),
         notation: None,
-        is_disabled: false,
+        is_disabled: true,
         comment: None,
         replace: false,
         defref: Vec::new(),
@@ -645,23 +644,251 @@ fn parse_type_define<R: Read>(
         }
     }
 
+    let mut code = String::new();
     while let Some(Ok(e)) = events.next() {
         match e {
             XmlEvent::StartElement { name, .. } => {
                 let name = name.local_name.as_str();
                 if name == "name" {
                     r.name = parse_text_element(events);
+                    code.push_str(&r.name);
                 } else if name == "type" {
-                    r.defref.push(parse_text_element(events));
+                    let text = parse_text_element(events);
+                    code.push_str(&text);
+                    r.defref.push(text);
                 } else {
-                    consume_current_element(events);
+                    panic!("Unexpected element {:?}", name);
                 }
             }
+
+            XmlEvent::Characters(text) => code.push_str(&text),
+            XmlEvent::Whitespace(text) => code.push_str(&text),
+            XmlEvent::CData(text) => code.push_str(&text),
 
             XmlEvent::EndElement { .. } => break,
 
             _ => (),
         }
+    }
+
+    fn consume_whitespace(chars: &mut std::str::Chars, mut current: Option<char>) -> Option<char> {
+        while let Some(c) = current {
+            if !c.is_whitespace() {
+                break;
+            }
+            current = chars.next();
+        }
+        current
+    }
+
+    {
+        enum State {
+            Initial,
+            LineComment,
+            BlockComment,
+            DefineName,
+            DefineArgs,
+            DefineExpression,
+            DefineValue,
+        }
+        let mut state = State::Initial;
+        let mut chars = code.chars();
+        loop {
+            match state {
+                State::Initial => {
+                    let mut current = chars.next();
+                    current = consume_whitespace(&mut chars, current);
+
+                    match current {
+                        Some('/') => {
+                            current = chars.next();
+                            match current {
+                                Some('/') => state = State::LineComment,
+                                Some('*') => state = State::BlockComment,
+                                Some(c) => panic!("Unexpected symbol {:?}", c),
+                                None => panic!("Unexpected end of code."),
+                            }
+                        }
+
+                        Some('#') => {
+                            let text = chars.as_str();
+                            let mut directive_len = 0;
+                            while let Some(c) = chars.next() {
+                                if c.is_whitespace() {
+                                    break;
+                                }
+                                if 'a' <= c && c <= 'z' {
+                                    directive_len += 1;
+                                } else {
+                                    panic!("Unexpected symbol in preprocessor directive: {:?}", c);
+                                }
+                            }
+
+                            let directive = &text[..directive_len];
+                            match directive {
+                                "define" => state = State::DefineName,
+                                _ => {
+                                    // Different directive. Whole text treated as c expression and replace set to true.
+                                    r.replace = true;
+                                    r.is_disabled = false;
+                                    break;
+                                }
+                            }
+                        }
+
+                        Some('s') => {
+                            let expected = "truct ";
+
+                            let text = chars.as_str();
+                            if text.starts_with(expected) {
+                                // mk:TODO Less hacky handling of define which is actually forward declaration.
+                                r.replace = true;
+                                break;
+                            } else {
+                                println!("Unexpected code segment {:?}", code);
+                            }
+                        }
+
+                        Some(c) => panic!("Unexpected symbol {:?}", c),
+                        None => panic!("Unexpected end of code."),
+                    }
+                }
+
+                State::LineComment => {
+                    let text = chars.as_str();
+                    if let Some(idx) = text.find('\n') {
+                        let comment = text[..idx].trim();
+                        if r.comment.is_none() {
+                            r.comment = Some(String::from(comment));
+                        }
+                        chars = text[idx + 1..].chars();
+                        state = State::Initial;
+                    } else {
+                        if r.comment.is_none() {
+                            r.comment = Some(String::from(text.trim()));
+                        }
+
+                        break;
+                    }
+                }
+
+                State::BlockComment => {
+                    let text = chars.as_str();
+                    if let Some(idx) = text.find("*/") {
+                        let comment = &text[..idx];
+                        if r.comment.is_none() {
+                            r.comment = Some(String::from(comment));
+                        }
+                        chars = text[idx + 2..].chars();
+                        state = State::Initial;
+                    } else {
+                        panic!("Unterminated block comment {:?}", text);
+                    }
+                }
+
+                State::DefineName => {
+                    r.is_disabled = false;
+                    let text = chars.as_str();
+                    let mut current = chars.next();
+                    let mut whitespace_len = 0;
+                    while let Some(c) = current {
+                        if !c.is_whitespace() {
+                            break;
+                        }
+                        current = chars.next();
+                        whitespace_len += 1;
+                    }
+
+                    let mut name_len = 0;
+                    while let Some(c) = current {
+                        if !CTokenIter::is_c_identifier_char(c) {
+                            break;
+                        }
+                        name_len += 1;
+                        current = chars.next();
+                    }
+
+                    let name = &text[whitespace_len..whitespace_len + name_len];
+                    if name != r.name.as_str() {
+                        panic!("#define name mismatch. {:?} vs. {:?}", name, r.name);
+                    }
+
+                    match current {
+                        Some('(') => state = State::DefineArgs,
+                        Some(c) => if c.is_whitespace() {
+                            state = State::DefineValue;
+                        } else {
+                            panic!("Unexpected char after #define name: {:?}", c);
+                        },
+                        None => break,
+                    }
+                }
+
+                State::DefineArgs => {
+                    let mut text = chars.as_str();
+                    let mut current = chars.next();
+                    loop {
+                        let mut whitespace_len = 0;
+                        while let Some(c) = current {
+                            if !c.is_whitespace() {
+                                break;
+                            }
+                            whitespace_len += 1;
+                            current = chars.next();
+                        }
+
+                        let mut name_len = 0;
+                        while let Some(c) = current {
+                            if !CTokenIter::is_c_identifier_char(c) {
+                                break;
+                            }
+                            current = chars.next();
+                            name_len += 1;
+                        }
+                        let name = &text[whitespace_len..whitespace_len + name_len];
+                        r.parameters.push(String::from(name));
+
+                        current = consume_whitespace(&mut chars, current);
+                        match current {
+                            Some(',') => {
+                                text = chars.as_str();
+                                current = chars.next();
+                            }
+                            Some(')') => {
+                                chars.next();
+                                break;
+                            }
+                            Some(c) => {
+                                panic!("Unexpected character in #define argument list: {:?}", c)
+                            }
+                            None => {
+                                panic!("End of text while in the middle of #define argument list.")
+                            }
+                        }
+                    }
+                    state = State::DefineExpression;
+                }
+
+                State::DefineExpression => {
+                    r.c_expression = Some(String::from(chars.as_str().trim()));
+                    break;
+                }
+
+                State::DefineValue => {
+                    let v = Some(String::from(chars.as_str().trim()));
+                    if r.defref.len() > 0 {
+                        r.c_expression = v;
+                    } else {
+                        r.value = v;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    if r.replace {
+        r.c_expression = Some(code);
     }
 
     r
