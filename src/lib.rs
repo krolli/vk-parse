@@ -25,7 +25,10 @@ pub enum RegistryItem {
         comment: Option<String>,
         items: Vec<Platform>,
     },
-    Tags,
+    Tags {
+        comment: Option<String>,
+        items: Vec<Tag>,
+    },
     Types,
     Enums,
     Commands,
@@ -45,6 +48,13 @@ pub struct Platform {
     pub name: String,
     pub comment: Option<String>,
     pub protect: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Tag {
+    pub name: String,
+    pub author: String,
+    pub contact: String,
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -170,9 +180,36 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
                     }
 
                     "tags" => {
-                        consume_current_element(events);
-                        registry.0.push(RegistryItem::Tags);
+                        let mut comment = None;
+                        for a in attributes {
+                            let name = a.name.local_name.as_str();
+                            match name {
+                                "comment" => comment = Some(a.value),
+                                _ => panic!("Unexpected attribute {:?}", name),
+                            }
+                        }
+
+                        let mut items = Vec::new();
+                        while let Some(Ok(e)) = events.next() {
+                            match e {
+                                XmlEvent::StartElement {
+                                    name, attributes, ..
+                                } => {
+                                    let name = name.local_name.as_str();
+                                    match name {
+                                        "tag" => items.push(parse_tag(attributes, events)),
+                                        _ => panic!("Unexpected element {:?}", name),
+                                    }
+                                }
+
+                                XmlEvent::EndElement { .. } => break,
+                                _ => (),
+                            }
+                        }
+
+                        registry.0.push(RegistryItem::Tags { comment, items });
                     }
+
                     "types" => {
                         consume_current_element(events);
                         registry.0.push(RegistryItem::Types);
@@ -288,7 +325,10 @@ fn parse_registry_element<R: Read>(
 
         "tags" => {
             flush_enums(enums, registry_elements);
-            registry_elements.push(vkxml::RegistryElement::Tags(parse_tags(attributes, events)));
+            registry_elements.push(vkxml::RegistryElement::Tags(parse_tags_vkxml(
+                attributes,
+                events,
+            )));
         }
 
         "types" => {
@@ -418,13 +458,27 @@ fn parse_vendorid_vkxml<R: Read>(
     result
 }
 
+macro_rules! unwrap_attribute (
+    ( $element:ident, $attribute:ident ) => {
+        let $attribute = match $attribute {
+            Some(val) => val,
+            None => panic!(
+                "Missing attribute '{}' on element '{}'.",
+                stringify!($attribute),
+                stringify!($element),
+            ),
+        };
+    };
+);
+
 fn parse_vendorid<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> VendorId {
     let mut name = None;
     let mut comment = None;
     let mut id = None;
 
     for a in attributes {
-        match a.name.local_name.as_str() {
+        let a_name = a.name.local_name.as_str();
+        match a_name {
             "name" => name = Some(a.value),
             "comment" => comment = Some(a.value),
             "id" => {
@@ -433,19 +487,13 @@ fn parse_vendorid<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
                 }
                 id = Some(u32::from_str_radix(&a.value.split_at(2).1, 16).unwrap());
             }
-            _ => panic!("Unexpected attribute {:?}", name),
+            _ => panic!("Unexpected attribute {:?}", a_name),
         }
     }
     consume_current_element(events);
 
-    let name = match name {
-        Some(val) => val,
-        None => panic!("Missing 'name' attribute on 'vendorid' element."),
-    };
-    let id = match id {
-        Some(val) => val,
-        None => panic!("Missing 'id' attribute on 'vendorid' element."),
-    };
+    unwrap_attribute!(vendorid, name);
+    unwrap_attribute!(vendorid, id);
 
     VendorId { name, comment, id }
 }
@@ -457,23 +505,18 @@ fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
     let mut protect = None;
 
     for a in attributes {
-        match a.name.local_name.as_str() {
+        let a_name = a.name.local_name.as_str();
+        match a_name {
             "name" => name = Some(a.value),
             "comment" => comment = Some(a.value),
             "protect" => protect = Some(a.value),
-            _ => panic!("Unexpected attribute {:?}", name),
+            _ => panic!("Unexpected attribute {:?}", a_name),
         }
     }
     consume_current_element(events);
 
-    let name = match name {
-        Some(val) => val,
-        None => panic!("Missing 'name' attribute on 'platform' element."),
-    };
-    let protect = match protect {
-        Some(val) => val,
-        None => panic!("Missing 'protect' attribute on 'platform' element."),
-    };
+    unwrap_attribute!(platform, name);
+    unwrap_attribute!(platform, protect);
 
     Platform {
         name,
@@ -483,7 +526,10 @@ fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
 }
 
 //--------------------------------------------------------------------------------------------------
-fn parse_tags<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> vkxml::Tags {
+fn parse_tags_vkxml<R: Read>(
+    attributes: Vec<XmlAttribute>,
+    events: &mut XmlEvents<R>,
+) -> vkxml::Tags {
     let mut notation = None;
     for a in attributes {
         if a.name.local_name == "comment" {
@@ -499,7 +545,7 @@ fn parse_tags<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
                 name, attributes, ..
             } => {
                 if name.local_name == "tag" {
-                    let tag = parse_tag(attributes, events);
+                    let tag = parse_tag_vkxml(attributes, events);
                     elements.push(tag);
                 } else {
                     consume_current_element(events);
@@ -514,7 +560,10 @@ fn parse_tags<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
     vkxml::Tags { notation, elements }
 }
 
-fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> vkxml::Tag {
+fn parse_tag_vkxml<R: Read>(
+    attributes: Vec<XmlAttribute>,
+    events: &mut XmlEvents<R>,
+) -> vkxml::Tag {
     let mut result = vkxml::Tag {
         name: String::new(),
         notation: None,
@@ -534,6 +583,33 @@ fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) 
 
     consume_current_element(events);
     result
+}
+
+fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Tag {
+    let mut name = None;
+    let mut author = None;
+    let mut contact = None;
+
+    for a in attributes {
+        let a_name = a.name.local_name.as_str();
+        match a_name {
+            "name" => name = Some(a.value),
+            "author" => author = Some(a.value),
+            "contact" => contact = Some(a.value),
+            _ => panic!("Unexpected attribute {:?}", a_name),
+        }
+    }
+    consume_current_element(events);
+
+    unwrap_attribute!(tag, name);
+    unwrap_attribute!(tag, author);
+    unwrap_attribute!(tag, contact);
+
+    Tag {
+        name,
+        author,
+        contact,
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
