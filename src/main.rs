@@ -49,6 +49,6 @@ fn main() {
     let output_path = std::path::Path::new(output_str);
     let input_path = std::path::Path::new(input_str);
 
-    let registry = vk_parse::parse_file(input_path);
+    let registry = vk_parse::parse_file_as_vkxml(input_path);
     save_registry_ron(&registry, output_path);
 }

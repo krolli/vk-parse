@@ -1039,7 +1039,9 @@ dependencies = [
  "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest 0.8.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "ron 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.50 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde-xml-rs 0.2.1 (git+https://github.com/RReverser/serde-xml-rs.git)",
+ "serde_derive 1.0.50 (registry+https://github.com/rust-lang/crates.io-index)",
  "vkxml 0.3.1 (git+https://github.com/terrybrashaw/vkxml)",
  "xml-rs 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
