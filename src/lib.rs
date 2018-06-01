@@ -57,6 +57,19 @@ pub struct Tag {
     pub contact: String,
 }
 
+macro_rules! unwrap_attribute (
+    ( $element:ident, $attribute:ident ) => {
+        let $attribute = match $attribute {
+            Some(val) => val,
+            None => panic!(
+                "Missing attribute '{}' on element '{}'.",
+                stringify!($attribute),
+                stringify!($element),
+            ),
+        };
+    };
+);
+
 //--------------------------------------------------------------------------------------------------
 fn new_field() -> vkxml::Field {
     vkxml::Field {
@@ -114,36 +127,7 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
                     }
 
                     "vendorids" => {
-                        let mut comment = None;
-                        for a in attributes {
-                            let name = a.name.local_name.as_str();
-                            match name {
-                                "comment" => comment = Some(a.value),
-                                _ => panic!("Unexpected attribute {:?}", name),
-                            }
-                        }
-
-                        let mut items = Vec::new();
-                        while let Some(Ok(e)) = events.next() {
-                            match e {
-                                XmlEvent::StartElement {
-                                    name, attributes, ..
-                                } => {
-                                    let name = name.local_name.as_str();
-                                    match name {
-                                        "vendorid" => {
-                                            items.push(parse_vendorid(attributes, events))
-                                        }
-                                        _ => panic!("Unexpected element {:?}", name),
-                                    }
-                                }
-
-                                XmlEvent::EndElement { .. } => break,
-                                _ => (),
-                            }
-                        }
-
-                        registry.0.push(RegistryItem::VendorIds { comment, items });
+                        registry.0.push(parse_vendorids(attributes, events));
                     }
 
                     "platforms" => {
@@ -180,34 +164,7 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
                     }
 
                     "tags" => {
-                        let mut comment = None;
-                        for a in attributes {
-                            let name = a.name.local_name.as_str();
-                            match name {
-                                "comment" => comment = Some(a.value),
-                                _ => panic!("Unexpected attribute {:?}", name),
-                            }
-                        }
-
-                        let mut items = Vec::new();
-                        while let Some(Ok(e)) = events.next() {
-                            match e {
-                                XmlEvent::StartElement {
-                                    name, attributes, ..
-                                } => {
-                                    let name = name.local_name.as_str();
-                                    match name {
-                                        "tag" => items.push(parse_tag(attributes, events)),
-                                        _ => panic!("Unexpected element {:?}", name),
-                                    }
-                                }
-
-                                XmlEvent::EndElement { .. } => break,
-                                _ => (),
-                            }
-                        }
-
-                        registry.0.push(RegistryItem::Tags { comment, items });
+                        registry.0.push(parse_tags(attributes, events));
                     }
 
                     "types" => {
@@ -317,18 +274,12 @@ fn parse_registry_element<R: Read>(
 
         "vendorids" => {
             flush_enums(enums, registry_elements);
-            registry_elements.push(vkxml::RegistryElement::VendorIds(parse_vendorids_vkxml(
-                attributes,
-                events,
-            )));
+            registry_elements.push(parse_vendorids(attributes, events).into());
         }
 
         "tags" => {
             flush_enums(enums, registry_elements);
-            registry_elements.push(vkxml::RegistryElement::Tags(parse_tags_vkxml(
-                attributes,
-                events,
-            )));
+            registry_elements.push(parse_tags(attributes, events).into());
         }
 
         "types" => {
@@ -401,75 +352,39 @@ fn parse_registry_element<R: Read>(
 }
 
 //--------------------------------------------------------------------------------------------------
-fn parse_vendorids_vkxml<R: Read>(
+fn parse_vendorids<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> vkxml::VendorIds {
-    let mut notation = None;
+) -> RegistryItem {
+    let mut comment = None;
     for a in attributes {
-        if a.name.local_name == "comment" {
-            notation = Some(a.value);
-            break;
+        let name = a.name.local_name.as_str();
+        match name {
+            "comment" => comment = Some(a.value),
+            _ => panic!("Unexpected attribute {:?}", name),
         }
     }
 
-    let mut elements = Vec::new();
+    let mut items = Vec::new();
     while let Some(Ok(e)) = events.next() {
         match e {
             XmlEvent::StartElement {
                 name, attributes, ..
             } => {
-                if name.local_name == "vendorid" {
-                    let vendorid = parse_vendorid_vkxml(attributes, events);
-                    elements.push(vendorid);
-                } else {
-                    consume_current_element(events)
+                let name = name.local_name.as_str();
+                match name {
+                    "vendorid" => items.push(parse_vendorid(attributes, events)),
+                    _ => panic!("Unexpected element {:?}", name),
                 }
             }
 
-            XmlEvent::EndElement { ref name } if name.local_name == "vendorids" => break,
+            XmlEvent::EndElement { .. } => break,
             _ => (),
         }
     }
 
-    vkxml::VendorIds { notation, elements }
+    RegistryItem::VendorIds { comment, items }
 }
-
-fn parse_vendorid_vkxml<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::VendorId {
-    let mut result = vkxml::VendorId {
-        name: String::new(),
-        notation: None,
-        id: vkxml::HexadecimalNumber::new(),
-    };
-
-    for a in attributes {
-        match a.name.local_name.as_str() {
-            "name" => result.name = a.value,
-            "id" => result.id = a.value,
-            "comment" => result.notation = Some(a.value),
-            _ => (),
-        }
-    }
-
-    consume_current_element(events);
-    result
-}
-
-macro_rules! unwrap_attribute (
-    ( $element:ident, $attribute:ident ) => {
-        let $attribute = match $attribute {
-            Some(val) => val,
-            None => panic!(
-                "Missing attribute '{}' on element '{}'.",
-                stringify!($attribute),
-                stringify!($element),
-            ),
-        };
-    };
-);
 
 fn parse_vendorid<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> VendorId {
     let mut name = None;
@@ -526,63 +441,35 @@ fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
 }
 
 //--------------------------------------------------------------------------------------------------
-fn parse_tags_vkxml<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Tags {
-    let mut notation = None;
+fn parse_tags<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> RegistryItem {
+    let mut comment = None;
     for a in attributes {
-        if a.name.local_name == "comment" {
-            notation = Some(a.value);
-            break;
+        let name = a.name.local_name.as_str();
+        match name {
+            "comment" => comment = Some(a.value),
+            _ => panic!("Unexpected attribute {:?}", name),
         }
     }
 
-    let mut elements = Vec::new();
+    let mut items = Vec::new();
     while let Some(Ok(e)) = events.next() {
         match e {
             XmlEvent::StartElement {
                 name, attributes, ..
             } => {
-                if name.local_name == "tag" {
-                    let tag = parse_tag_vkxml(attributes, events);
-                    elements.push(tag);
-                } else {
-                    consume_current_element(events);
+                let name = name.local_name.as_str();
+                match name {
+                    "tag" => items.push(parse_tag(attributes, events)),
+                    _ => panic!("Unexpected element {:?}", name),
                 }
             }
 
-            XmlEvent::EndElement { ref name } if name.local_name == "tags" => break,
+            XmlEvent::EndElement { .. } => break,
             _ => (),
         }
     }
 
-    vkxml::Tags { notation, elements }
-}
-
-fn parse_tag_vkxml<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Tag {
-    let mut result = vkxml::Tag {
-        name: String::new(),
-        notation: None,
-        author: String::new(),
-        contact: String::new(),
-    };
-
-    for a in attributes {
-        match a.name.local_name.as_str() {
-            "name" => result.name = a.value,
-            "author" => result.author = a.value,
-            "contact" => result.contact = a.value,
-            "comment" => result.notation = Some(a.value),
-            _ => (),
-        }
-    }
-
-    consume_current_element(events);
-    result
+    RegistryItem::Tags { comment, items }
 }
 
 fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Tag {
@@ -2324,5 +2211,57 @@ impl<'a> Iterator for CTokenIter<'a> {
         }
 
         None
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+impl From<RegistryItem> for vkxml::RegistryElement {
+    fn from(orig: RegistryItem) -> Self {
+        match orig {
+            RegistryItem::Comment(..) => {
+                panic!("Cannot convert using from as it affects enums state.")
+            }
+
+            RegistryItem::VendorIds { comment, mut items } => {
+                vkxml::RegistryElement::VendorIds(vkxml::VendorIds {
+                    notation: comment,
+                    elements: items.drain(..).map(|i| i.into()).collect(),
+                })
+            }
+
+            RegistryItem::Platforms { .. } => {
+                panic!("Not supported by vkxml (cannot be converted 1:1).")
+            }
+
+            RegistryItem::Tags { comment, mut items } => {
+                vkxml::RegistryElement::Tags(vkxml::Tags {
+                    notation: comment,
+                    elements: items.drain(..).map(|i| i.into()).collect(),
+                })
+            }
+
+            _ => panic!("Missing implementation"),
+        }
+    }
+}
+
+impl From<VendorId> for vkxml::VendorId {
+    fn from(orig: VendorId) -> Self {
+        Self {
+            name: orig.name,
+            notation: orig.comment,
+            id: format!("0x{:X}", orig.id),
+        }
+    }
+}
+
+impl From<Tag> for vkxml::Tag {
+    fn from(orig: Tag) -> Self {
+        Self {
+            name: orig.name,
+            notation: None,
+            author: orig.author,
+            contact: orig.contact,
+        }
     }
 }
