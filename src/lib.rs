@@ -520,7 +520,11 @@ fn parse_types<R: Read>(
             } => {
                 let name = name.local_name.as_str();
                 match name {
-                    "type" => elements.push(parse_type(attributes, events)),
+                    "type" => {
+                        if let Some(t) = parse_type(attributes, events) {
+                            elements.push(t);
+                        }
+                    }
                     "comment" => elements.push(vkxml::DefinitionsElement::Notation(
                         parse_text_element(events),
                     )),
@@ -536,42 +540,51 @@ fn parse_types<R: Read>(
     vkxml::Definitions { notation, elements }
 }
 
-type ParseTypeFn<R> =
-    for<'r> std::ops::Fn(Vec<XmlAttribute>, &'r mut XmlEvents<R>) -> vkxml::DefinitionsElement;
+type ParseTypeFn<R> = for<'r> std::ops::Fn(Vec<XmlAttribute>, &'r mut XmlEvents<R>)
+    -> Option<vkxml::DefinitionsElement>;
 
 fn parse_type<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> vkxml::DefinitionsElement {
+) -> Option<vkxml::DefinitionsElement> {
     let fn_reference = |a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::Reference(parse_type_reference(a, e));
+        return Some(vkxml::DefinitionsElement::Reference(parse_type_reference(
+            a,
+            e,
+        )));
     };
     let fn_include = |a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::Include(parse_type_include(a, e));
+        return Some(vkxml::DefinitionsElement::Include(parse_type_include(a, e)));
     };
     let fn_typedef = |_a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::Typedef(parse_type_typedef(e));
+        return Some(vkxml::DefinitionsElement::Typedef(parse_type_typedef(e)));
     };
     let fn_bitmask = |a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::Bitmask(parse_type_bitmask(a, e));
+        if let Some(bitmask) = parse_type_bitmask(a, e) {
+            return Some(vkxml::DefinitionsElement::Bitmask(bitmask));
+        } else {
+            return None;
+        }
     };
     let fn_struct = |a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::Struct(parse_type_struct(a, e));
+        return Some(vkxml::DefinitionsElement::Struct(parse_type_struct(a, e)));
     };
     let fn_union = |a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::Union(parse_type_union(a, e));
+        return Some(vkxml::DefinitionsElement::Union(parse_type_union(a, e)));
     };
     let fn_define = |a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::Define(parse_type_define(a, e));
+        return Some(vkxml::DefinitionsElement::Define(parse_type_define(a, e)));
     };
     let fn_handle = |a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::Handle(parse_type_handle(a, e));
+        return Some(vkxml::DefinitionsElement::Handle(parse_type_handle(a, e)));
     };
     let fn_enumeration = |a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::Enumeration(parse_type_enumeration(a, e));
+        return Some(vkxml::DefinitionsElement::Enumeration(
+            parse_type_enumeration(a, e),
+        ));
     };
     let fn_funcptr = |_a, e: &mut XmlEvents<R>| {
-        return vkxml::DefinitionsElement::FuncPtr(parse_type_funcptr(e));
+        return Some(vkxml::DefinitionsElement::FuncPtr(parse_type_funcptr(e)));
     };
 
     let mut parse_fn: &ParseTypeFn<R> = &fn_reference;
@@ -743,7 +756,7 @@ fn parse_type_typedef<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Typedef {
 fn parse_type_bitmask<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> vkxml::Bitmask {
+) -> Option<vkxml::Bitmask> {
     let mut r = vkxml::Bitmask {
         name: vkxml::Identifier::new(),
         notation: None,
@@ -752,9 +765,16 @@ fn parse_type_bitmask<R: Read>(
     };
 
     for a in attributes {
-        if a.name.local_name.as_str() == "requires" {
-            r.enumref = Some(a.value);
-            break;
+        let name = a.name.local_name.as_str();
+        match name {
+            "requires" => r.enumref = Some(a.value),
+            "category" => (), // handled when deciding what type this is
+            "name" | "alias" => {
+                // mk:TODO Not supported by vkxml.
+                consume_current_element(events);
+                return None;
+            }
+            _ => panic!("Unexpected attribute {:?}", name),
         }
     }
 
@@ -776,7 +796,7 @@ fn parse_type_bitmask<R: Read>(
         }
     }
 
-    r
+    Some(r)
 }
 
 fn parse_type_handle<R: Read>(
@@ -1416,7 +1436,9 @@ fn parse_constants<R: Read>(
     while let Some(Ok(e)) = events.next() {
         match e {
             XmlEvent::StartElement { attributes, .. } => {
-                r.elements.push(parse_constant(attributes, events))
+                if let Some(c) = parse_constant(attributes, events) {
+                    r.elements.push(c);
+                }
             }
 
             XmlEvent::EndElement { .. } => break,
@@ -1459,7 +1481,9 @@ fn parse_enumeration<R: Read>(
             } => {
                 let name = name.local_name.as_str();
                 let element = match name {
-                    "enum" => vkxml::EnumerationElement::Enum(parse_constant(attributes, events)),
+                    "enum" => {
+                        vkxml::EnumerationElement::Enum(parse_constant(attributes, events).unwrap())
+                    }
                     "comment" => vkxml::EnumerationElement::Notation(parse_text_element(events)),
                     "unused" => vkxml::EnumerationElement::UnusedRange(parse_enum_unused(
                         attributes,
@@ -1481,7 +1505,7 @@ fn parse_enumeration<R: Read>(
 fn parse_constant<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> vkxml::Constant {
+) -> Option<vkxml::Constant> {
     let mut r = vkxml::Constant {
         name: String::new(),
         notation: None,
@@ -1507,13 +1531,17 @@ fn parse_constant<R: Read>(
 
             "bitpos" => r.bitpos = Some(u32::from_str_radix(&a.value, 10).unwrap()),
             "comment" => r.notation = Some(a.value),
-            "alias" => (), // mk:TODO Not supported by vkxml.
+            "alias" => {
+                // mk:TODO Not supported by vkxml.
+                consume_current_element(events);
+                return None;
+            }
             _ => panic!("Unexpected attribute {:?}", name),
         }
     }
 
     consume_current_element(events);
-    r
+    Some(r)
 }
 
 fn parse_enum_unused<R: Read>(
@@ -1560,7 +1588,9 @@ fn parse_commands<R: Read>(
                 name, attributes, ..
             } => {
                 if name.local_name.as_str() == "command" {
-                    r.elements.push(parse_command(attributes, events));
+                    if let Some(cmd) = parse_command(attributes, events) {
+                        r.elements.push(cmd);
+                    }
                 } else {
                     panic!("Unexpected element {:?}", name.local_name.as_str());
                 }
@@ -1576,7 +1606,7 @@ fn parse_commands<R: Read>(
 fn parse_command<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> vkxml::Command {
+) -> Option<vkxml::Command> {
     let mut r = vkxml::Command {
         name: vkxml::Identifier::new(),
         notation: None,
@@ -1635,13 +1665,15 @@ fn parse_command<R: Read>(
                 "outside" => r.renderpass = Some(vkxml::Renderpass::Outside),
                 _ => panic!("Unexpected attribute value {:?}", a.value),
             },
-            "name" => (),  // mk:TODO Not supported by vkxml.
-            "alias" => (), // mk:TODO Not supported by vkxml.
+            "name" | "alias" => {
+                // mk:TODO Not supported by vkxml.
+                return None;
+            }
             _ => panic!("Unexpected attribute {:?}", name),
         }
     }
 
-    r
+    Some(r)
 }
 
 //--------------------------------------------------------------------------------------------------
