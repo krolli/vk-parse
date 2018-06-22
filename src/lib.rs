@@ -285,8 +285,7 @@ fn parse_registry_element<R: Read>(
         "types" => {
             flush_enums(enums, registry_elements);
             registry_elements.push(vkxml::RegistryElement::Definitions(parse_types(
-                attributes,
-                events,
+                attributes, events,
             )));
         }
 
@@ -302,8 +301,7 @@ fn parse_registry_element<R: Read>(
             if is_constant {
                 flush_enums(enums, registry_elements);
                 registry_elements.push(vkxml::RegistryElement::Constants(parse_constants(
-                    attributes,
-                    events,
+                    attributes, events,
                 )));
             } else {
                 let enumeration = parse_enumeration(attributes, events);
@@ -323,8 +321,7 @@ fn parse_registry_element<R: Read>(
         "commands" => {
             flush_enums(enums, registry_elements);
             registry_elements.push(vkxml::RegistryElement::Commands(parse_commands(
-                attributes,
-                events,
+                attributes, events,
             )));
         }
 
@@ -338,8 +335,7 @@ fn parse_registry_element<R: Read>(
         "extensions" => {
             flush_enums(enums, registry_elements);
             registry_elements.push(vkxml::RegistryElement::Extensions(parse_extensions(
-                attributes,
-                events,
+                attributes, events,
             )));
         }
 
@@ -549,8 +545,7 @@ fn parse_type<R: Read>(
 ) -> Option<vkxml::DefinitionsElement> {
     let fn_reference = |a, e: &mut XmlEvents<R>| {
         return Some(vkxml::DefinitionsElement::Reference(parse_type_reference(
-            a,
-            e,
+            a, e,
         )));
     };
     let fn_include = |a, e: &mut XmlEvents<R>| {
@@ -1486,8 +1481,7 @@ fn parse_enumeration<R: Read>(
                     }
                     "comment" => vkxml::EnumerationElement::Notation(parse_text_element(events)),
                     "unused" => vkxml::EnumerationElement::UnusedRange(parse_enum_unused(
-                        attributes,
-                        events,
+                        attributes, events,
                     )),
                     _ => panic!("Unexpected element {:?}", name),
                 };
