@@ -147,6 +147,7 @@ pub struct Enum {
     pub spec: EnumSpec,
 }
 
+//--------------------------------------------------------------------------------------------------
 macro_rules! unwrap_attribute (
     ( $element:ident, $attribute:ident ) => {
         let $attribute = match $attribute {
@@ -169,6 +170,44 @@ macro_rules! match_attributes {
                     $p => $e,
                 )+
                 _ => panic!("Unexpected attribute {:?}", n),
+            }
+        }
+    };
+}
+
+macro_rules! match_elements {
+    ( $events:expr, $($p:pat => $e:expr),+) => {
+        while let Some(Ok(e)) = $events.next() {
+            match e {
+                XmlEvent::StartElement { name, .. } => {
+                    let name = name.local_name.as_str();
+                    match name {
+                        $(
+                            $p => $e,
+                        )+
+                        _ => panic!("Unexpected element {:?}", name),
+                    }
+                }
+                XmlEvent::EndElement { .. } => break,
+                _ => {}
+            }
+        }
+    };
+
+    ( $attributes:ident in $events:expr, $($p:pat => $e:expr),+) => {
+        while let Some(Ok(e)) = $events.next() {
+            match e {
+                XmlEvent::StartElement { name, $attributes, .. } => {
+                    let name = name.local_name.as_str();
+                    match name {
+                        $(
+                            $p => $e,
+                        )+
+                        _ => panic!("Unexpected element {:?}", name),
+                    }
+                }
+                XmlEvent::EndElement { .. } => break,
+                _ => {}
             }
         }
     };
@@ -203,13 +242,8 @@ pub fn parse_file(path: &std::path::Path) -> Registry {
     let parser = xml::reader::ParserConfig::new().create_reader(file);
 
     let mut events = parser.into_iter();
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement { ref name, .. } if name.local_name == "registry" => {
-                return parse_registry(&mut events);
-            }
-            _ => {}
-        }
+    match_elements!{events,
+        "registry" => return parse_registry(&mut events)
     }
 
     panic!("Couldn't find 'registry' element in file {:?}", path);
@@ -218,85 +252,60 @@ pub fn parse_file(path: &std::path::Path) -> Registry {
 fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
     let mut registry = Registry(Vec::new());
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
+    match_elements!{attributes in events,
+        "comment" => registry.0.push(RegistryItem::Comment(parse_text_element(events))),
+        "vendorids" => registry.0.push(parse_vendorids(attributes, events)),
+        "platforms" => {
+            let mut comment = None;
+            for a in attributes {
+                let name = a.name.local_name.as_str();
                 match name {
-                    "comment" => {
-                        let comment = parse_text_element(events);
-                        registry.0.push(RegistryItem::Comment(comment));
-                    }
-
-                    "vendorids" => {
-                        registry.0.push(parse_vendorids(attributes, events));
-                    }
-
-                    "platforms" => {
-                        let mut comment = None;
-                        for a in attributes {
-                            let name = a.name.local_name.as_str();
-                            match name {
-                                "comment" => comment = Some(a.value),
-                                _ => panic!("Unexpected attribute {:?}", name),
-                            }
-                        }
-
-                        let mut items = Vec::new();
-                        while let Some(Ok(e)) = events.next() {
-                            match e {
-                                XmlEvent::StartElement {
-                                    name, attributes, ..
-                                } => {
-                                    let name = name.local_name.as_str();
-                                    match name {
-                                        "platform" => {
-                                            items.push(parse_platform(attributes, events))
-                                        }
-                                        _ => panic!("Unexpected element {:?}", name),
-                                    }
-                                }
-
-                                XmlEvent::EndElement { .. } => break,
-                                _ => (),
-                            }
-                        }
-
-                        registry.0.push(RegistryItem::Platforms { comment, items });
-                    }
-
-                    "tags" => {
-                        registry.0.push(parse_tags(attributes, events));
-                    }
-
-                    "types" => {
-                        consume_current_element(events);
-                        registry.0.push(RegistryItem::Types);
-                    }
-                    "enums" => {
-                        consume_current_element(events);
-                        registry.0.push(RegistryItem::Enums);
-                    }
-                    "commands" => {
-                        consume_current_element(events);
-                        registry.0.push(RegistryItem::Commands);
-                    }
-                    "feature" => {
-                        consume_current_element(events);
-                        registry.0.push(RegistryItem::Feature);
-                    }
-                    "extensions" => {
-                        registry.0.push(parse_extensions(attributes, events));
-                    }
-                    _ => panic!("Unexpected element {:?}", name),
+                    "comment" => comment = Some(a.value),
+                    _ => panic!("Unexpected attribute {:?}", name),
                 }
             }
 
-            XmlEvent::EndElement { .. } => break,
-            _ => {}
-        }
+            let mut items = Vec::new();
+            while let Some(Ok(e)) = events.next() {
+                match e {
+                    XmlEvent::StartElement {
+                        name, attributes, ..
+                    } => {
+                        let name = name.local_name.as_str();
+                        match name {
+                            "platform" => {
+                                items.push(parse_platform(attributes, events))
+                            }
+                            _ => panic!("Unexpected element {:?}", name),
+                        }
+                    }
+
+                    XmlEvent::EndElement { .. } => break,
+                    _ => (),
+                }
+            }
+
+            registry.0.push(RegistryItem::Platforms { comment, items });
+        },
+
+        "tags" => registry.0.push(parse_tags(attributes, events)),
+        "types" => {
+            consume_current_element(events);
+            registry.0.push(RegistryItem::Types);
+        },
+        "enums" => {
+            consume_current_element(events);
+            registry.0.push(RegistryItem::Enums);
+        },
+        "commands" => {
+            consume_current_element(events);
+            registry.0.push(RegistryItem::Commands);
+        },
+        "feature" => {
+            consume_current_element(events);
+            registry.0.push(RegistryItem::Feature);
+        },
+        "extensions" => registry.0.push(parse_extensions(attributes, events))
     }
 
     registry
@@ -308,54 +317,14 @@ pub fn parse_file_as_vkxml(path: &std::path::Path) -> vkxml::Registry {
     let parser = xml::reader::ParserConfig::new().create_reader(file);
 
     let mut events = parser.into_iter();
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement { ref name, .. } if name.local_name == "registry" => {
-                return parse_registry_as_vkxml(&mut events);
-            }
-            _ => {}
-        }
+    match_elements!{events,
+        "registry" => return parse_registry_as_vkxml(&mut events)
     }
 
     panic!("Couldn't find 'registry' element in file {:?}", path);
 }
 
 fn parse_registry_as_vkxml<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registry {
-    let mut registry = vkxml::Registry {
-        elements: Vec::new(),
-    };
-
-    let mut enums: Option<vkxml::Enums> = None;
-
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                parse_registry_element(
-                    name.local_name.as_str(),
-                    attributes,
-                    events,
-                    &mut enums,
-                    &mut registry.elements,
-                );
-            }
-
-            XmlEvent::EndElement { .. } => break,
-            _ => {}
-        }
-    }
-
-    registry
-}
-
-fn parse_registry_element<R: Read>(
-    name: &str,
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-    enums: &mut Option<vkxml::Enums>,
-    registry_elements: &mut Vec<vkxml::RegistryElement>,
-) {
     fn flush_enums(
         enums: &mut Option<vkxml::Enums>,
         registry_elements: &mut Vec<vkxml::RegistryElement>,
@@ -365,32 +334,38 @@ fn parse_registry_element<R: Read>(
         }
     }
 
-    match name {
+    let mut registry = vkxml::Registry {
+        elements: Vec::new(),
+    };
+
+    let mut enums: Option<vkxml::Enums> = None;
+
+    match_elements!{attributes in events,
         "comment" => {
             let notation = parse_text_element(events);
-            if let &mut Some(ref mut enums) = enums {
+            if let Some(ref mut enums) = enums {
                 enums.elements.push(vkxml::EnumsElement::Notation(notation));
             } else {
-                registry_elements.push(vkxml::RegistryElement::Notation(notation));
+                registry.elements.push(vkxml::RegistryElement::Notation(notation));
             }
-        }
+        },
 
         "vendorids" => {
-            flush_enums(enums, registry_elements);
-            registry_elements.push(parse_vendorids(attributes, events).into());
-        }
+            flush_enums(&mut enums, &mut registry.elements);
+            registry.elements.push(parse_vendorids(attributes, events).into());
+        },
 
         "tags" => {
-            flush_enums(enums, registry_elements);
-            registry_elements.push(parse_tags(attributes, events).into());
-        }
+            flush_enums(&mut enums, &mut registry.elements);
+            registry.elements.push(parse_tags(attributes, events).into());
+        },
 
         "types" => {
-            flush_enums(enums, registry_elements);
-            registry_elements.push(vkxml::RegistryElement::Definitions(parse_types(
+            flush_enums(&mut enums, &mut registry.elements);
+            registry.elements.push(vkxml::RegistryElement::Definitions(parse_types(
                 attributes, events,
             )));
-        }
+        },
 
         "enums" => {
             let mut is_constant = true;
@@ -402,52 +377,50 @@ fn parse_registry_element<R: Read>(
             }
 
             if is_constant {
-                flush_enums(enums, registry_elements);
-                registry_elements.push(vkxml::RegistryElement::Constants(parse_constants(
+                flush_enums(&mut enums, &mut registry.elements);
+                registry.elements.push(vkxml::RegistryElement::Constants(parse_constants(
                     attributes, events,
                 )));
             } else {
                 let enumeration = parse_enumeration(attributes, events);
-                if let &mut Some(ref mut enums) = enums {
+                if let Some(ref mut enums) = enums {
                     enums
                         .elements
                         .push(vkxml::EnumsElement::Enumeration(enumeration));
                 } else {
-                    *enums = Some(vkxml::Enums {
+                    enums = Some(vkxml::Enums {
                         notation: None,
                         elements: vec![vkxml::EnumsElement::Enumeration(enumeration)],
                     });
                 }
             }
-        }
+        },
 
         "commands" => {
-            flush_enums(enums, registry_elements);
-            registry_elements.push(vkxml::RegistryElement::Commands(parse_commands(
+            flush_enums(&mut enums, &mut registry.elements);
+            registry.elements.push(vkxml::RegistryElement::Commands(parse_commands(
                 attributes, events,
             )));
-        }
+        },
 
         "feature" => {
-            flush_enums(enums, registry_elements);
-            registry_elements.push(vkxml::RegistryElement::Features(vkxml::Features {
+            flush_enums(&mut enums, &mut registry.elements);
+            registry.elements.push(vkxml::RegistryElement::Features(vkxml::Features {
                 elements: vec![parse_feature(attributes, events)],
             }));
-        }
+        },
 
         "extensions" => {
-            flush_enums(enums, registry_elements);
-            registry_elements.push(vkxml::RegistryElement::Extensions(parse_extensions_vkxml(
+            flush_enums(&mut enums, &mut registry.elements);
+            registry.elements.push(vkxml::RegistryElement::Extensions(parse_extensions_vkxml(
                 attributes, events,
             )));
-        }
+        },
 
-        "platforms" => consume_current_element(events), // mk:TODO Not supported by vkxml.
-
-        _ => {
-            panic!("Unexpected element {:?}", name);
-        }
+        "platforms" => consume_current_element(events) // mk:TODO Not supported by vkxml.
     }
+
+    registry
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -456,26 +429,14 @@ fn parse_vendorids<R: Read>(
     events: &mut XmlEvents<R>,
 ) -> RegistryItem {
     let mut comment = None;
+    let mut items = Vec::new();
+
     match_attributes!{a in attributes,
         "comment" => comment = Some(a.value)
     }
 
-    let mut items = Vec::new();
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "vendorid" => items.push(parse_vendorid(attributes, events)),
-                    _ => panic!("Unexpected element {:?}", name),
-                }
-            }
-
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+    match_elements!{attributes in events,
+        "vendorid" => items.push(parse_vendorid(attributes, events))
     }
 
     RegistryItem::VendorIds { comment, items }
@@ -496,6 +457,7 @@ fn parse_vendorid<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
             id = Some(u32::from_str_radix(&a.value.split_at(2).1, 16).unwrap());
         }
     }
+
     consume_current_element(events);
 
     unwrap_attribute!(vendorid, name);
@@ -515,6 +477,7 @@ fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
         "comment" => comment = Some(a.value),
         "protect" => protect = Some(a.value)
     }
+
     consume_current_element(events);
 
     unwrap_attribute!(platform, name);
@@ -530,26 +493,14 @@ fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
 //--------------------------------------------------------------------------------------------------
 fn parse_tags<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> RegistryItem {
     let mut comment = None;
+    let mut items = Vec::new();
+
     match_attributes!{a in attributes,
         "comment" => comment = Some(a.value)
     }
 
-    let mut items = Vec::new();
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "tag" => items.push(parse_tag(attributes, events)),
-                    _ => panic!("Unexpected element {:?}", name),
-                }
-            }
-
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+    match_elements!{attributes in events,
+        "tag" => items.push(parse_tag(attributes, events))
     }
 
     RegistryItem::Tags { comment, items }
@@ -565,6 +516,7 @@ fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) 
         "author"  => author  = Some(a.value),
         "contact" => contact = Some(a.value)
     }
+
     consume_current_element(events);
 
     unwrap_attribute!(tag, name);
@@ -584,34 +536,19 @@ fn parse_types<R: Read>(
     events: &mut XmlEvents<R>,
 ) -> vkxml::Definitions {
     let mut notation = None;
+    let mut elements = Vec::new();
 
     match_attributes!{a in attributes,
         "comment" => notation = Some(a.value)
     }
 
-    let mut elements = Vec::new();
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "type" => {
-                        if let Some(t) = parse_type(attributes, events) {
-                            elements.push(t);
-                        }
-                    }
-                    "comment" => elements.push(vkxml::DefinitionsElement::Notation(
-                        parse_text_element(events),
-                    )),
-                    _ => panic!("Unexpected element '{:?}'", name),
-                };
+    match_elements!{attributes in events,
+        "type" => {
+            if let Some(t) = parse_type(attributes, events) {
+                elements.push(t);
             }
-
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+        },
+        "comment" => elements.push(vkxml::DefinitionsElement::Notation(parse_text_element(events)))
     }
 
     vkxml::Definitions { notation, elements }
@@ -798,22 +735,9 @@ fn parse_type_typedef<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Typedef {
         basetype: vkxml::Identifier::new(),
     };
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement { ref name, .. } => {
-                if name.local_name.as_str() == "type" {
-                    r.basetype = parse_text_element(events);
-                } else if name.local_name.as_str() == "name" {
-                    r.name = parse_text_element(events);
-                } else {
-                    consume_current_element(events);
-                }
-            }
-
-            XmlEvent::EndElement { .. } => break,
-
-            _ => (),
-        }
+    match_elements!{events,
+        "type" => r.basetype = parse_text_element(events),
+        "name" => r.name = parse_text_element(events)
     }
 
     r
@@ -845,22 +769,9 @@ fn parse_type_bitmask<R: Read>(
         }
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement { ref name, .. } => {
-                if name.local_name.as_str() == "type" {
-                    r.basetype = parse_text_element(events);
-                } else if name.local_name.as_str() == "name" {
-                    r.name = parse_text_element(events);
-                } else {
-                    consume_current_element(events);
-                }
-            }
-
-            XmlEvent::EndElement { .. } => break,
-
-            _ => (),
-        }
+    match_elements!{events,
+        "type" => r.basetype = parse_text_element(events),
+        "name" => r.name = parse_text_element(events)
     }
 
     Some(r)
@@ -884,27 +795,16 @@ fn parse_type_handle<R: Read>(
         "category" => () // handled when deciding what type this is
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement { ref name, .. } => {
-                if name.local_name.as_str() == "type" {
-                    let text = parse_text_element(events);
-                    r.ty = match text.as_str() {
-                        "VK_DEFINE_HANDLE" => vkxml::HandleType::Dispatch,
-                        "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => vkxml::HandleType::NoDispatch,
-                        _ => panic!("Unexpected handle type: {}", text),
-                    };
-                } else if name.local_name.as_str() == "name" {
-                    r.name = parse_text_element(events);
-                } else {
-                    consume_current_element(events);
-                }
-            }
-
-            XmlEvent::EndElement { .. } => break,
-
-            _ => (),
-        }
+    match_elements!{events,
+        "type" => {
+            let text = parse_text_element(events);
+            r.ty = match text.as_str() {
+                "VK_DEFINE_HANDLE" => vkxml::HandleType::Dispatch,
+                "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => vkxml::HandleType::NoDispatch,
+                _ => panic!("Unexpected handle type: {}", text),
+            };
+        },
+        "name" => r.name = parse_text_element(events)
     }
 
     r
@@ -1294,26 +1194,12 @@ fn parse_type_struct<R: Read>(
         "structextends" => r.extends = Some(a.value)
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                if name == "member" {
-                    let member = parse_type_struct_member(attributes, events);
-                    r.elements.push(vkxml::StructElement::Member(member));
-                } else if name == "comment" {
-                    let comment = parse_text_element(events);
-                    r.elements.push(vkxml::StructElement::Notation(comment));
-                } else {
-                    panic!("Unexpected element {:?}", name);
-                }
-            }
-
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+    match_elements!{attributes in events,
+        "member" => {
+            let member = parse_type_struct_member(attributes, events);
+            r.elements.push(vkxml::StructElement::Member(member));
+        },
+        "comment" => r.elements.push(vkxml::StructElement::Notation(parse_text_element(events)))
     }
 
     r
@@ -1335,22 +1221,10 @@ fn parse_type_union<R: Read>(
         "category" => ()
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                if name == "member" {
-                    let member = parse_type_struct_member(attributes, events);
-                    r.elements.push(member);
-                } else {
-                    panic!("Unexpected element {:?}", name);
-                }
-            }
-
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
+    match_elements!{attributes in events,
+        "member" => {
+            let member = parse_type_struct_member(attributes, events);
+            r.elements.push(member);
         }
     }
 
@@ -1517,27 +1391,18 @@ fn parse_enumeration<R: Read>(
         "comment" => r.notation = Some(a.value)
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                let element = match name {
-                    "enum" => {
-                        vkxml::EnumerationElement::Enum(parse_constant(attributes, events).unwrap())
-                    }
-                    "comment" => vkxml::EnumerationElement::Notation(parse_text_element(events)),
-                    "unused" => vkxml::EnumerationElement::UnusedRange(parse_enum_unused(
-                        attributes, events,
-                    )),
-                    _ => panic!("Unexpected element {:?}", name),
-                };
-                r.elements.push(element)
-            }
-
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
+    match_elements!{attributes in events,
+        "enum" => {
+            let constant = parse_constant(attributes, events).unwrap();
+            r.elements.push(vkxml::EnumerationElement::Enum(constant));
+        },
+        "comment" => {
+            let text = parse_text_element(events);
+            r.elements.push(vkxml::EnumerationElement::Notation(text));
+        },
+        "unused" => {
+            let unused_range = parse_enum_unused(attributes, events);
+            r.elements.push(vkxml::EnumerationElement::UnusedRange(unused_range));
         }
     }
 
@@ -1613,21 +1478,11 @@ fn parse_commands<R: Read>(
         "comment" => r.notation = Some(a.value)
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                if name.local_name.as_str() == "command" {
-                    if let Some(cmd) = parse_command(attributes, events) {
-                        r.elements.push(cmd);
-                    }
-                } else {
-                    panic!("Unexpected element {:?}", name.local_name.as_str());
-                }
+    match_elements!{attributes in events,
+        "command" => {
+            if let Some(cmd) = parse_command(attributes, events) {
+                r.elements.push(cmd);
             }
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
         }
     }
 
@@ -1650,29 +1505,17 @@ fn parse_command<R: Read>(
         queues: None,
     };
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "proto" => {
-                        let mut proto = parse_type_struct_member(attributes, events);
-                        r.name = proto.name.take().unwrap();
-                        r.return_type = proto;
-                    }
-                    "param" => r.param.push(parse_type_struct_member(attributes, events)),
-                    "implicitexternsyncparams" => {
-                        for text in ChildrenDataIter::new(events) {
-                            r.external_sync = Some(vkxml::ExternalSync { sync: text })
-                        }
-                    }
-                    _ => panic!("Unexpected element {:?}", name),
-                }
+    match_elements!{attributes in events,
+        "proto" => {
+            let mut proto = parse_type_struct_member(attributes, events);
+            r.name = proto.name.take().unwrap();
+            r.return_type = proto;
+        },
+        "param" => r.param.push(parse_type_struct_member(attributes, events)),
+        "implicitexternsyncparams" => {
+            for text in ChildrenDataIter::new(events) {
+                r.external_sync = Some(vkxml::ExternalSync { sync: text })
             }
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
         }
     }
 
@@ -1725,23 +1568,10 @@ fn parse_feature<R: Read>(
         }
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "require" => r.elements.push(vkxml::FeatureElement::Require(
-                        parse_feature_require(attributes, events),
-                    )),
-                    _ => panic!("Unexpected element {:?}", name),
-                }
-            }
-
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+    match_elements!{attributes in events,
+        "require" => r.elements.push(vkxml::FeatureElement::Require(
+            parse_feature_require(attributes, events),
+        ))
     }
 
     r
@@ -1762,33 +1592,19 @@ fn parse_feature_require<R: Read>(
         "comment" => r.notation = Some(a.value)
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "type" => r.elements
-                        .push(vkxml::FeatureReference::DefinitionReference(
-                            parse_feature_require_ref(attributes, events),
-                        )),
-                    "enum" => r.elements
-                        .push(vkxml::FeatureReference::EnumeratorReference(
-                            parse_feature_require_ref(attributes, events),
-                        )),
-                    "command" => r.elements.push(vkxml::FeatureReference::CommandReference(
-                        parse_feature_require_ref(attributes, events),
-                    )),
-                    "comment" => r.elements.push(vkxml::FeatureReference::Notation(
-                        parse_text_element(events),
-                    )),
-                    _ => panic!("Unexpected element {:?}", name),
-                }
-            }
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+    match_elements!{attributes in events,
+        "type" => r.elements.push(vkxml::FeatureReference::DefinitionReference(
+            parse_feature_require_ref(attributes, events),
+        )),
+        "enum" => r.elements.push(vkxml::FeatureReference::EnumeratorReference(
+            parse_feature_require_ref(attributes, events),
+        )),
+        "command" => r.elements.push(vkxml::FeatureReference::CommandReference(
+            parse_feature_require_ref(attributes, events),
+        )),
+        "comment" => r.elements.push(vkxml::FeatureReference::Notation(
+            parse_text_element(events),
+        ))
     }
 
     r
@@ -1831,20 +1647,8 @@ fn parse_extensions_vkxml<R: Read>(
         "comment" => r.notation = Some(a.value)
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "extension" => r.elements.push(parse_extension_vkxml(attributes, events)),
-                    _ => panic!("Unexpected element {:?}", name),
-                }
-            }
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+    match_elements!{attributes in events,
+        "extension" => r.elements.push(parse_extension_vkxml(attributes, events))
     }
 
     r
@@ -1896,22 +1700,10 @@ fn parse_extension_vkxml<R: Read>(
         "requiresCore" => ()  // mk:TODO Not supported by vkxml.
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "require" => r.elements.push(vkxml::ExtensionElement::Require(
-                        parse_extension_require(attributes, events),
-                    )),
-                    _ => panic!("Unexpected element {:?}", name),
-                }
-            }
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+    match_elements!{attributes in events,
+        "require" => r.elements.push(vkxml::ExtensionElement::Require(
+            parse_extension_require(attributes, events),
+        ))
     }
 
     r
@@ -1934,45 +1726,17 @@ fn parse_extension_require<R: Read>(
         "feature"   => () // mk:TODO Not supported by vkxml.
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "comment" => {
-                        r.elements
-                            .push(vkxml::ExtensionSpecificationElement::Notation(
-                                parse_text_element(events),
-                            ));
-                    }
-
-                    "enum" => {
-                        r.elements
-                            .push(parse_extension_require_enum(attributes, events));
-                    }
-
-                    "command" => {
-                        r.elements
-                            .push(vkxml::ExtensionSpecificationElement::CommandReference(
-                                parse_extension_require_ref(attributes, events),
-                            ));
-                    }
-
-                    "type" => {
-                        r.elements
-                            .push(vkxml::ExtensionSpecificationElement::DefinitionReference(
-                                parse_extension_require_ref(attributes, events),
-                            ));
-                    }
-
-                    _ => panic!("Unexpected element {:?}", name),
-                }
-            }
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+    match_elements!{attributes in events,
+        "comment" => r.elements.push(vkxml::ExtensionSpecificationElement::Notation(
+            parse_text_element(events),
+        )),
+        "enum" => r.elements.push(parse_extension_require_enum(attributes, events)),
+        "command" => r.elements.push(vkxml::ExtensionSpecificationElement::CommandReference(
+            parse_extension_require_ref(attributes, events),
+        )),
+        "type" => r.elements.push(vkxml::ExtensionSpecificationElement::DefinitionReference(
+            parse_extension_require_ref(attributes, events),
+        ))
     }
 
     r
@@ -2181,22 +1945,8 @@ fn parse_extensions<R: Read>(
         "comment" => comment = Some(a.value)
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "extension" => {
-                        items.push(parse_extension(attributes, events));
-                    }
-                    _ => panic!("Unexpected element {:?}", name),
-                }
-            }
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
-        }
+    match_elements!{attributes in events,
+        "extension" => items.push(parse_extension(attributes, events))
     }
 
     RegistryItem::Extensions { comment, items }
@@ -2310,21 +2060,9 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         "supported"    => supported     = Some(a.value)
     }
 
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                match name {
-                    "require" => items.push(parse_require(attributes, events)),
-                    "remove" => items.push(parse_remove(attributes, events)),
-                    _ => panic!("Unexpected element {:?}", name),
-                }
-            }
-            XmlEvent::EndElement { .. } => break,
-            _ => {}
-        }
+    match_elements!{attributes in events,
+        "require" => items.push(parse_require(attributes, events)),
+        "remove" => items.push(parse_remove(attributes, events))
     }
 
     let number = match number {
