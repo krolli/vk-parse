@@ -160,6 +160,20 @@ macro_rules! unwrap_attribute (
     };
 );
 
+macro_rules! match_attributes {
+    ($a:ident in $attributes:expr, $($p:pat => $e:expr),+) => {
+        for $a in $attributes {
+            let n = $a.name.local_name.as_str();
+            match n {
+                $(
+                    $p => $e,
+                )+
+                _ => panic!("Unexpected attribute {:?}", n),
+            }
+        }
+    };
+}
+
 //--------------------------------------------------------------------------------------------------
 fn new_field() -> vkxml::Field {
     vkxml::Field {
@@ -442,12 +456,8 @@ fn parse_vendorids<R: Read>(
     events: &mut XmlEvents<R>,
 ) -> RegistryItem {
     let mut comment = None;
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "comment" => comment = Some(a.value),
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "comment" => comment = Some(a.value)
     }
 
     let mut items = Vec::new();
@@ -476,18 +486,14 @@ fn parse_vendorid<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
     let mut comment = None;
     let mut id = None;
 
-    for a in attributes {
-        let a_name = a.name.local_name.as_str();
-        match a_name {
-            "name" => name = Some(a.value),
-            "comment" => comment = Some(a.value),
-            "id" => {
-                if !a.value.starts_with("0x") {
-                    panic!("Expected hexadecimal integer. Found {:?}", a.value);
-                }
-                id = Some(u32::from_str_radix(&a.value.split_at(2).1, 16).unwrap());
+    match_attributes!{a in attributes,
+        "name" => name = Some(a.value),
+        "comment" => comment = Some(a.value),
+        "id" => {
+            if !a.value.starts_with("0x") {
+                panic!("Expected hexadecimal integer. Found {:?}", a.value);
             }
-            _ => panic!("Unexpected attribute {:?}", a_name),
+            id = Some(u32::from_str_radix(&a.value.split_at(2).1, 16).unwrap());
         }
     }
     consume_current_element(events);
@@ -504,14 +510,10 @@ fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
     let mut comment = None;
     let mut protect = None;
 
-    for a in attributes {
-        let a_name = a.name.local_name.as_str();
-        match a_name {
-            "name" => name = Some(a.value),
-            "comment" => comment = Some(a.value),
-            "protect" => protect = Some(a.value),
-            _ => panic!("Unexpected attribute {:?}", a_name),
-        }
+    match_attributes!{a in attributes,
+        "name"    => name    = Some(a.value),
+        "comment" => comment = Some(a.value),
+        "protect" => protect = Some(a.value)
     }
     consume_current_element(events);
 
@@ -528,12 +530,8 @@ fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
 //--------------------------------------------------------------------------------------------------
 fn parse_tags<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> RegistryItem {
     let mut comment = None;
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "comment" => comment = Some(a.value),
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "comment" => comment = Some(a.value)
     }
 
     let mut items = Vec::new();
@@ -562,14 +560,10 @@ fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) 
     let mut author = None;
     let mut contact = None;
 
-    for a in attributes {
-        let a_name = a.name.local_name.as_str();
-        match a_name {
-            "name" => name = Some(a.value),
-            "author" => author = Some(a.value),
-            "contact" => contact = Some(a.value),
-            _ => panic!("Unexpected attribute {:?}", a_name),
-        }
+    match_attributes!{a in attributes,
+        "name"    => name    = Some(a.value),
+        "author"  => author  = Some(a.value),
+        "contact" => contact = Some(a.value)
     }
     consume_current_element(events);
 
@@ -590,11 +584,9 @@ fn parse_types<R: Read>(
     events: &mut XmlEvents<R>,
 ) -> vkxml::Definitions {
     let mut notation = None;
-    for a in attributes {
-        if a.name.local_name == "comment" {
-            notation = Some(a.value);
-            break;
-        }
+
+    match_attributes!{a in attributes,
+        "comment" => notation = Some(a.value)
     }
 
     let mut elements = Vec::new();
@@ -741,11 +733,9 @@ fn parse_type_include<R: Read>(
         need_ext: false,
     };
 
-    for a in attributes {
-        if a.name.local_name.as_str() == "name" {
-            r.name.clear();
-            r.name.push_str(a.value.as_str());
-        }
+    match_attributes!{a in attributes,
+        "name" => r.name = a.value,
+        "category" => () // handled when deciding what type this is
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -791,17 +781,9 @@ fn parse_type_reference<R: Read>(
         include: None,
     };
 
-    for a in attributes {
-        let name = a.name.local_name;
-        match name.as_str() {
-            "name" => {
-                r.name = a.value;
-            }
-            "requires" => {
-                r.include = Some(a.value);
-            }
-            _ => (),
-        }
+    match_attributes!{a in attributes,
+        "name"     => r.name    = a.value,
+        "requires" => r.include = Some(a.value)
     }
 
     consume_current_element(events);
@@ -848,17 +830,18 @@ fn parse_type_bitmask<R: Read>(
         enumref: None,
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "requires" => r.enumref = Some(a.value),
-            "category" => (), // handled when deciding what type this is
-            "name" | "alias" => {
-                // mk:TODO Not supported by vkxml.
-                consume_current_element(events);
-                return None;
-            }
-            _ => panic!("Unexpected attribute {:?}", name),
+    match_attributes!{a in attributes,
+        "requires" => r.enumref = Some(a.value),
+        "category" => (), // handled when deciding what type this is
+        "name" => {
+            // mk:TODO Not supported by vkxml.
+            consume_current_element(events);
+            return None;
+        },
+        "alias" => {
+            // mk:TODO Not supported by vkxml.
+            consume_current_element(events);
+            return None;
         }
     }
 
@@ -894,11 +877,11 @@ fn parse_type_handle<R: Read>(
         ty: vkxml::HandleType::Dispatch,
     };
 
-    for a in attributes {
-        if a.name.local_name.as_str() == "parent" {
-            r.parent = Some(a.value);
-            break;
-        }
+    match_attributes!{a in attributes,
+        "parent"   => r.parent = Some(a.value),
+        "name"     => (),
+        "alias"    => (),
+        "category" => () // handled when deciding what type this is
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -944,11 +927,9 @@ fn parse_type_define<R: Read>(
     };
 
     // mk:TODO Handle all macro types.
-    for a in attributes {
-        if a.name.local_name.as_str() == "name" {
-            r.name = a.value;
-            break;
-        }
+    match_attributes!{a in attributes,
+        "name"     => r.name = a.value,
+        "category" => ()
     }
 
     let mut code = String::new();
@@ -1210,17 +1191,10 @@ fn parse_type_enumeration<R: Read>(
         notation: None,
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        let value = a.value.as_str();
-        match name {
-            "name" => {
-                r.name.clear();
-                r.name.push_str(value);
-                break;
-            }
-            _ => (),
-        }
+    match_attributes!{a in attributes,
+        "name"     => r.name = a.value,
+        "alias"    => (),
+        "category" => ()
     }
 
     consume_current_element(events);
@@ -1311,15 +1285,13 @@ fn parse_type_struct<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "name" => r.name = a.value,
-            "comment" => r.notation = Some(a.value),
-            "returnedonly" => r.is_return = a.value.as_str() == "true",
-            "structextends" => r.extends = Some(a.value),
-            _ => (),
-        }
+    match_attributes!{a in attributes,
+        "name"          => r.name = a.value,
+        "category"      => (),
+        "alias"         => (),
+        "comment"       => r.notation = Some(a.value),
+        "returnedonly"  => r.is_return = a.value.as_str() == "true",
+        "structextends" => r.extends = Some(a.value)
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -1357,13 +1329,10 @@ fn parse_type_union<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "name" => r.name = a.value,
-            "comment" => r.notation = Some(a.value),
-            _ => (),
-        }
+    match_attributes!{a in attributes,
+        "name"     => r.name     = a.value,
+        "comment"  => r.notation = Some(a.value),
+        "category" => ()
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -1394,34 +1363,29 @@ fn parse_type_struct_member<R: Read>(
 ) -> vkxml::Field {
     let mut r = new_field();
 
-    for a in attributes {
-        let name = a.name.local_name;
-        let value = a.value;
-        match name.as_str() {
-            "len" => {
-                let mut value = value;
-                let null_terminated_part = ",null-terminated";
-                if value.as_str().ends_with(null_terminated_part) {
-                    r.null_terminate = true;
-                    let start = value.len() - null_terminated_part.len();
-                    value.drain(start..);
-                }
-
-                if value.as_str() == "null-terminated" {
-                    r.null_terminate = true;
-                } else {
-                    r.size = Some(value);
-                }
-                r.array = Some(vkxml::ArrayType::Dynamic);
+    match_attributes!{a in attributes,
+        "len" => {
+            let mut value = a.value;
+            let null_terminated_part = ",null-terminated";
+            if value.as_str().ends_with(null_terminated_part) {
+                r.null_terminate = true;
+                let start = value.len() - null_terminated_part.len();
+                value.drain(start..);
             }
-            "altlen" => r.c_size = Some(value),
-            "externsync" => r.sync = Some(value),
-            "optional" => r.optional = Some(value),
-            "noautovalidity" => (),
-            "values" => r.type_enums = Some(value),
-            "validextensionstructs" => (), // mk:TODO Not supported by vkxml.
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+
+            if value.as_str() == "null-terminated" {
+                r.null_terminate = true;
+            } else {
+                r.size = Some(value);
+            }
+            r.array = Some(vkxml::ArrayType::Dynamic);
+        },
+        "altlen"                => r.c_size = Some(a.value),
+        "externsync"            => r.sync = Some(a.value),
+        "optional"              => r.optional = Some(a.value),
+        "noautovalidity"        => (),
+        "values"                => r.type_enums = Some(a.value),
+        "validextensionstructs" => () // mk:TODO Not supported by vkxml.
     }
 
     // mk:TODO Full parsing. (const, reference/pointer, array, ...)
@@ -1511,10 +1475,9 @@ fn parse_constants<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        if a.name.local_name.as_str() == "comment" {
-            r.notation = Some(a.value);
-        }
+    match_attributes!{a in attributes,
+        "name"    => (),
+        "comment" => r.notation = Some(a.value)
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -1544,18 +1507,14 @@ fn parse_enumeration<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "name" => r.name = a.value,
-            "type" => if a.value.as_str() == "bitmask" {
-                r.purpose = Some(vkxml::EnumerationPurpose::Bitmask);
-            } else {
-                assert_eq!(a.value.as_str(), "enum");
-            },
-            "comment" => r.notation = Some(a.value),
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "name" => r.name = a.value,
+        "type" => if a.value.as_str() == "bitmask" {
+            r.purpose = Some(vkxml::EnumerationPurpose::Bitmask);
+        } else {
+            assert_eq!(a.value.as_str(), "enum");
+        },
+        "comment" => r.notation = Some(a.value)
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -1598,28 +1557,23 @@ fn parse_constant<R: Read>(
         c_expression: None,
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "name" => r.name = a.value,
-            "value" => {
-                if let Ok(value) = i32::from_str_radix(&a.value, 10) {
-                    r.number = Some(value);
-                } else if a.value.starts_with("0x") {
-                    r.hex = Some(String::from(a.value.split_at(2).1))
-                } else {
-                    r.c_expression = Some(a.value)
-                }
+    match_attributes!{a in attributes,
+        "name" => r.name = a.value,
+        "value" => {
+            if let Ok(value) = i32::from_str_radix(&a.value, 10) {
+                r.number = Some(value);
+            } else if a.value.starts_with("0x") {
+                r.hex = Some(String::from(a.value.split_at(2).1))
+            } else {
+                r.c_expression = Some(a.value)
             }
-
-            "bitpos" => r.bitpos = Some(u32::from_str_radix(&a.value, 10).unwrap()),
-            "comment" => r.notation = Some(a.value),
-            "alias" => {
-                // mk:TODO Not supported by vkxml.
-                consume_current_element(events);
-                return None;
-            }
-            _ => panic!("Unexpected attribute {:?}", name),
+        },
+        "bitpos" => r.bitpos = Some(u32::from_str_radix(&a.value, 10).unwrap()),
+        "comment" => r.notation = Some(a.value),
+        "alias" => {
+            // mk:TODO Not supported by vkxml.
+            consume_current_element(events);
+            return None;
         }
     }
 
@@ -1636,13 +1590,9 @@ fn parse_enum_unused<R: Read>(
         range_end: None,
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "start" => r.range_start = i32::from_str_radix(&a.value, 10).unwrap(),
-            "end" => r.range_end = Some(i32::from_str_radix(&a.value, 10).unwrap()),
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "start" => r.range_start = i32::from_str_radix(&a.value, 10).unwrap(),
+        "end" => r.range_end = Some(i32::from_str_radix(&a.value, 10).unwrap())
     }
 
     consume_current_element(events);
@@ -1659,10 +1609,8 @@ fn parse_commands<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        if a.name.local_name.as_str() == "comment" {
-            r.notation = Some(a.value);
-        }
+    match_attributes!{a in attributes,
+        "comment" => r.notation = Some(a.value)
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -1728,32 +1676,26 @@ fn parse_command<R: Read>(
         }
     }
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "successcodes" => r.return_type.successcodes = Some(a.value),
-            "errorcodes" => r.return_type.errorcodes = Some(a.value),
-            "queues" => r.queues = Some(a.value),
-            "cmdbufferlevel" => r.cmdbufferlevel = Some(a.value),
-            "comment" => r.notation = Some(a.value),
-            "pipeline" => match a.value.as_str() {
-                "graphics" => r.pipeline = Some(vkxml::Pipeline::Graphics),
-                "compute" => r.pipeline = Some(vkxml::Pipeline::Compute),
-                "transfer" => r.pipeline = Some(vkxml::Pipeline::Transfer),
-                _ => panic!("Unexpected attribute value {:?}", a.value),
-            },
-            "renderpass" => match a.value.as_str() {
-                "both" => r.renderpass = Some(vkxml::Renderpass::Both),
-                "inside" => r.renderpass = Some(vkxml::Renderpass::Inside),
-                "outside" => r.renderpass = Some(vkxml::Renderpass::Outside),
-                _ => panic!("Unexpected attribute value {:?}", a.value),
-            },
-            "name" | "alias" => {
-                // mk:TODO Not supported by vkxml.
-                return None;
-            }
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "successcodes" => r.return_type.successcodes = Some(a.value),
+        "errorcodes" => r.return_type.errorcodes = Some(a.value),
+        "queues" => r.queues = Some(a.value),
+        "cmdbufferlevel" => r.cmdbufferlevel = Some(a.value),
+        "comment" => r.notation = Some(a.value),
+        "pipeline" => match a.value.as_str() {
+            "graphics" => r.pipeline = Some(vkxml::Pipeline::Graphics),
+            "compute" => r.pipeline = Some(vkxml::Pipeline::Compute),
+            "transfer" => r.pipeline = Some(vkxml::Pipeline::Transfer),
+            _ => panic!("Unexpected attribute value {:?}", a.value),
+        },
+        "renderpass" => match a.value.as_str() {
+            "both" => r.renderpass = Some(vkxml::Renderpass::Both),
+            "inside" => r.renderpass = Some(vkxml::Renderpass::Inside),
+            "outside" => r.renderpass = Some(vkxml::Renderpass::Outside),
+            _ => panic!("Unexpected attribute value {:?}", a.value),
+        },
+        "name" => return None, // mk:TODO Not supported by vkxml.
+        "alias" => return None // mk:TODO Not supported by vkxml.
     }
 
     Some(r)
@@ -1773,17 +1715,13 @@ fn parse_feature<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "api" => r.api = a.value,
-            "name" => r.name = a.value,
-            "comment" => r.notation = Some(a.value),
-            "number" => {
-                use std::str::FromStr;
-                r.version = f32::from_str(&a.value).unwrap();
-            }
-            _ => panic!("Unexpected attribute {:?}", name),
+    match_attributes!{a in attributes,
+        "api" => r.api = a.value,
+        "name" => r.name = a.value,
+        "comment" => r.notation = Some(a.value),
+        "number" => {
+            use std::str::FromStr;
+            r.version = f32::from_str(&a.value).unwrap();
         }
     }
 
@@ -1820,12 +1758,8 @@ fn parse_feature_require<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "comment" => r.notation = Some(a.value),
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "comment" => r.notation = Some(a.value)
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -1869,18 +1803,14 @@ fn parse_feature_require_ref<R: Read>(
         notation: None,
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "name" => r.name = a.value,
-            "comment" => r.notation = Some(a.value),
-            "extends" => (),   // mk:TODO Not supported by vkxml.
-            "extnumber" => (), // mk:TODO Not supported by vkxml.
-            "offset" => (),    // mk:TODO Not supported by vkxml.
-            "bitpos" => (),    // mk:TODO Not supported by vkxml.
-            "dir" => (),       // mk:TODO Not supported by vkxml.
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "name"      => r.name     = a.value,
+        "comment"   => r.notation = Some(a.value),
+        "extends"   => (),   // mk:TODO Not supported by vkxml.
+        "extnumber" => (), // mk:TODO Not supported by vkxml.
+        "offset"    => (),    // mk:TODO Not supported by vkxml.
+        "bitpos"    => (),    // mk:TODO Not supported by vkxml.
+        "dir"       => ()        // mk:TODO Not supported by vkxml.
     }
 
     consume_current_element(events);
@@ -1897,12 +1827,8 @@ fn parse_extensions_vkxml<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "comment" => r.notation = Some(a.value),
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "comment" => r.notation = Some(a.value)
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -1942,36 +1868,32 @@ fn parse_extension_vkxml<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "name" => r.name = a.value,
-            "comment" => r.notation = Some(a.value),
-            "number" => {
-                use std::str::FromStr;
-                r.number = i32::from_str(&a.value).unwrap();
-            }
-            "type" => {
-                let ty = a.value.as_str();
-                r.ty = Some(match ty {
-                    "instance" => vkxml::ExtensionType::Instance,
-                    "device" => vkxml::ExtensionType::Device,
-                    _ => panic!("Unexpected attribute value {:?}", ty),
-                });
-            }
-            "author" => r.author = Some(a.value),
-            "contact" => r.contact = Some(a.value),
-            "supported" => if a.value.as_str() == "disabled" {
-                r.disabled = true;
-            } else {
-                r.match_api = Some(a.value);
-            },
-            "requires" => r.requires = Some(a.value),
-            "protect" => r.define = Some(a.value),
-            "platform" => (),     // mk:TODO Not supported by vkxml.
-            "requiresCore" => (), // mk:TODO Not supported by vkxml.
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "name" => r.name = a.value,
+        "comment" => r.notation = Some(a.value),
+        "number" => {
+            use std::str::FromStr;
+            r.number = i32::from_str(&a.value).unwrap();
+        },
+        "type" => {
+            let ty = a.value.as_str();
+            r.ty = Some(match ty {
+                "instance" => vkxml::ExtensionType::Instance,
+                "device" => vkxml::ExtensionType::Device,
+                _ => panic!("Unexpected attribute value {:?}", ty),
+            });
+        },
+        "author" => r.author = Some(a.value),
+        "contact" => r.contact = Some(a.value),
+        "supported" => if a.value.as_str() == "disabled" {
+            r.disabled = true;
+        } else {
+            r.match_api = Some(a.value);
+        },
+        "requires" => r.requires = Some(a.value),
+        "protect" => r.define = Some(a.value),
+        "platform" => (),     // mk:TODO Not supported by vkxml.
+        "requiresCore" => ()  // mk:TODO Not supported by vkxml.
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -2007,13 +1929,9 @@ fn parse_extension_require<R: Read>(
         elements: Vec::new(),
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "extension" => r.extension = Some(a.value),
-            "feature" => (), // mk:TODO Not supported by vkxml.
-            _ => panic!("Unexpected attribute {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "extension" => r.extension = Some(a.value),
+        "feature"   => () // mk:TODO Not supported by vkxml.
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -2163,38 +2081,33 @@ fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
     let mut positive = true;
     let mut alias = None;
 
-    for mut a in attributes {
-        let n = a.name.local_name.as_str();
-        match n {
-            "name" => name = Some(a.value),
-            "comment" => comment = Some(a.value),
-            "type" => {
-                type_suffix = match a.value.as_str() {
-                    "u" => TypeSuffix::U32,
-                    "ull" => TypeSuffix::U64,
-                    _ => panic!("Unexpected attribute value {:?}", a.value.as_str()),
-                }
+    match_attributes!{a in attributes,
+        "name" => name = Some(a.value),
+        "comment" => comment = Some(a.value),
+        "type" => {
+            type_suffix = match a.value.as_str() {
+                "u" => TypeSuffix::U32,
+                "ull" => TypeSuffix::U64,
+                _ => panic!("Unexpected attribute value {:?}", a.value.as_str()),
             }
-            "api" => api = Some(a.value),
-            "extends" => extends = Some(a.value),
-            "value" => value = Some(a.value),
-            "offset" => offset = Some(a.value),
-            "dir" => {
-                if a.value.as_str() == "-" {
-                    positive = false;
-                } else {
-                    panic!(
-                        "Unexpected value of attribute {:?}, expected \"-\", found {:?}",
-                        name, a.value
-                    );
-                }
+        },
+        "api" => api = Some(a.value),
+        "extends" => extends = Some(a.value),
+        "value" => value = Some(a.value),
+        "offset" => offset = Some(a.value),
+        "dir" => {
+            if a.value.as_str() == "-" {
+                positive = false;
+            } else {
+                panic!(
+                    "Unexpected value of attribute {:?}, expected \"-\", found {:?}",
+                    name, a.value
+                );
             }
-            "bitpos" => bitpos = Some(a.value),
-            "extnumber" => extnumber = Some(a.value),
-            "alias" => alias = Some(a.value),
-
-            _ => panic!("Unexpected attributes {:?}", n),
-        }
+        },
+        "bitpos" => bitpos = Some(a.value),
+        "extnumber" => extnumber = Some(a.value),
+        "alias" => alias = Some(a.value)
     }
 
     consume_current_element(events);
@@ -2264,12 +2177,8 @@ fn parse_extensions<R: Read>(
     let mut comment = None;
     let mut items = Vec::new();
 
-    for mut a in attributes {
-        let n = a.name.local_name.as_str();
-        match n {
-            "comment" => comment = Some(a.value),
-            _ => panic!("Unexpected attributes {:?}", n),
-        }
+    match_attributes!{a in attributes,
+        "comment" => comment = Some(a.value)
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -2305,16 +2214,12 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         let mut comment = None;
         let mut items = Vec::new();
 
-        for a in attributes {
-            let name = a.name.local_name.as_str();
-            match name {
-                "api" => api = Some(a.value),
-                "profile" => profile = Some(a.value),
-                "extension" => extension = Some(a.value),
-                "feature" => feature = Some(a.value),
-                "comment" => comment = Some(a.value),
-                _ => panic!("Unexpected attribute {:?}", name),
-            }
+        match_attributes!{a in attributes,
+            "api"       => api       = Some(a.value),
+            "profile"   => profile   = Some(a.value),
+            "extension" => extension = Some(a.value),
+            "feature"   => feature   = Some(a.value),
+            "comment"   => comment   = Some(a.value)
         }
 
         while let Some(Ok(e)) = events.next() {
@@ -2350,14 +2255,10 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         let mut comment = None;
         let mut items = Vec::new();
 
-        for a in attributes {
-            let name = a.name.local_name.as_str();
-            match name {
-                "api" => api = Some(a.value),
-                "profile" => profile = Some(a.value),
-                "comment" => comment = Some(a.value),
-                _ => panic!("Unexpected attribute {:?}", name),
-            }
+        match_attributes!{a in attributes,
+            "api"     => api     = Some(a.value),
+            "profile" => profile = Some(a.value),
+            "comment" => comment = Some(a.value)
         }
 
         while let Some(Ok(e)) = events.next() {
@@ -2395,22 +2296,18 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     let mut supported = None;
     let mut items = Vec::new();
 
-    for a in attributes {
-        let n = a.name.local_name.as_str();
-        match n {
-            "name" => name = Some(a.value),
-            "comment" => comment = Some(a.value),
-            "number" => number = Some(a.value),
-            "protect" => protect = Some(a.value),
-            "platform" => platform = Some(a.value),
-            "author" => author = Some(a.value),
-            "contact" => contact = Some(a.value),
-            "type" => ext_type = Some(a.value),
-            "requires" => requires = Some(a.value),
-            "requiresCore" => requires_core = Some(a.value),
-            "supported" => supported = Some(a.value),
-            _ => panic!("Unexpected attribute {:?}", n),
-        }
+    match_attributes!{a in attributes,
+        "name"         => name          = Some(a.value),
+        "comment"      => comment       = Some(a.value),
+        "number"       => number        = Some(a.value),
+        "protect"      => protect       = Some(a.value),
+        "platform"     => platform      = Some(a.value),
+        "author"       => author        = Some(a.value),
+        "contact"      => contact       = Some(a.value),
+        "type"         => ext_type      = Some(a.value),
+        "requires"     => requires      = Some(a.value),
+        "requiresCore" => requires_core = Some(a.value),
+        "supported"    => supported     = Some(a.value)
     }
 
     while let Some(Ok(e)) = events.next() {
@@ -2515,12 +2412,8 @@ fn parse_extension_require_ref<R: Read>(
         notation: None,
     };
 
-    for a in attributes {
-        let name = a.name.local_name.as_str();
-        match name {
-            "name" => r.name = a.value,
-            _ => panic!("Unexpected attributes {:?}", name),
-        }
+    match_attributes!{a in attributes,
+        "name" => r.name = a.value
     }
 
     consume_current_element(events);
