@@ -33,7 +33,10 @@ pub enum RegistryItem {
     Enums,
     Commands,
     Feature,
-    Extensions,
+    Extensions {
+        comment: Option<String>,
+        items: Vec<Extension>,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -55,6 +58,93 @@ pub struct Tag {
     pub name: String,
     pub author: String,
     pub contact: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Extension {
+    pub name: String,
+    pub comment: Option<String>,
+    pub number: Option<i64>,
+    pub protect: Option<String>,
+    pub platform: Option<String>,
+    pub author: Option<String>,
+    pub contact: Option<String>,
+    pub ext_type: Option<String>,
+    pub requires: Option<String>,
+    pub requires_core: Option<String>,
+    pub supported: Option<String>, // mk:TODO StringGroup?
+    pub items: Vec<ExtensionItem>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum ExtensionItem {
+    Require {
+        api: Option<String>,
+        profile: Option<String>,
+        extension: Option<String>,
+        feature: Option<String>,
+        comment: Option<String>,
+        items: Vec<InterfaceItem>,
+    },
+    Remove {
+        api: Option<String>,
+        profile: Option<String>,
+        comment: Option<String>,
+        items: Vec<InterfaceItem>,
+    },
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum InterfaceItem {
+    Comment(String),
+    Type {
+        name: String,
+        comment: Option<String>,
+    },
+    Enum(Enum),
+    Command {
+        name: String,
+        comment: Option<String>,
+    },
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum TypeSuffix {
+    U32,
+    U64,
+    I32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum EnumSpec {
+    Alias {
+        alias: String,
+        extends: Option<String>,
+    },
+    Offset {
+        offset: i64,
+        extends: String,
+        extnumber: Option<i64>,
+        dir: bool,
+    },
+    Bitpos {
+        bitpos: i64,
+        extends: Option<String>,
+    },
+    Value {
+        value: String, // rnc says this is an Integer, but validates it as text, and that's what it sometimes really is.
+        extends: Option<String>,
+    },
+    None,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Enum {
+    pub name: String,
+    pub comment: Option<String>,
+    pub type_suffix: TypeSuffix,
+    pub api: Option<String>,
+    pub spec: EnumSpec,
 }
 
 macro_rules! unwrap_attribute (
@@ -184,8 +274,7 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
                         registry.0.push(RegistryItem::Feature);
                     }
                     "extensions" => {
-                        consume_current_element(events);
-                        registry.0.push(RegistryItem::Extensions);
+                        registry.0.push(parse_extensions(attributes, events));
                     }
                     _ => panic!("Unexpected element {:?}", name),
                 }
@@ -334,7 +423,7 @@ fn parse_registry_element<R: Read>(
 
         "extensions" => {
             flush_enums(enums, registry_elements);
-            registry_elements.push(vkxml::RegistryElement::Extensions(parse_extensions(
+            registry_elements.push(vkxml::RegistryElement::Extensions(parse_extensions_vkxml(
                 attributes, events,
             )));
         }
@@ -1799,7 +1888,7 @@ fn parse_feature_require_ref<R: Read>(
 }
 
 //--------------------------------------------------------------------------------------------------
-fn parse_extensions<R: Read>(
+fn parse_extensions_vkxml<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> vkxml::Extensions {
@@ -1823,7 +1912,7 @@ fn parse_extensions<R: Read>(
             } => {
                 let name = name.local_name.as_str();
                 match name {
-                    "extension" => r.elements.push(parse_extension(attributes, events)),
+                    "extension" => r.elements.push(parse_extension_vkxml(attributes, events)),
                     _ => panic!("Unexpected element {:?}", name),
                 }
             }
@@ -1835,7 +1924,7 @@ fn parse_extensions<R: Read>(
     r
 }
 
-fn parse_extension<R: Read>(
+fn parse_extension_vkxml<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> vkxml::Extension {
@@ -2058,6 +2147,362 @@ fn parse_extension_require_enum<R: Read>(
             bitpos,
             c_expression,
         })
+    }
+}
+
+fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Enum {
+    let mut name = None;
+    let mut comment = None;
+    let mut type_suffix = TypeSuffix::I32;
+    let mut api = None;
+    let mut extends = None;
+    let mut value = None;
+    let mut bitpos = None;
+    let mut extnumber = None;
+    let mut offset = None;
+    let mut positive = true;
+    let mut alias = None;
+
+    for mut a in attributes {
+        let n = a.name.local_name.as_str();
+        match n {
+            "name" => name = Some(a.value),
+            "comment" => comment = Some(a.value),
+            "type" => {
+                type_suffix = match a.value.as_str() {
+                    "u" => TypeSuffix::U32,
+                    "ull" => TypeSuffix::U64,
+                    _ => panic!("Unexpected attribute value {:?}", a.value.as_str()),
+                }
+            }
+            "api" => api = Some(a.value),
+            "extends" => extends = Some(a.value),
+            "value" => value = Some(a.value),
+            "offset" => offset = Some(a.value),
+            "dir" => {
+                if a.value.as_str() == "-" {
+                    positive = false;
+                } else {
+                    panic!(
+                        "Unexpected value of attribute {:?}, expected \"-\", found {:?}",
+                        name, a.value
+                    );
+                }
+            }
+            "bitpos" => bitpos = Some(a.value),
+            "extnumber" => extnumber = Some(a.value),
+            "alias" => alias = Some(a.value),
+
+            _ => panic!("Unexpected attributes {:?}", n),
+        }
+    }
+
+    consume_current_element(events);
+
+    unwrap_attribute!(enum, name);
+
+    let mut count = 0;
+    if offset.is_some() {
+        count += 1;
+    }
+    if bitpos.is_some() {
+        count += 1;
+    }
+    if value.is_some() {
+        count += 1;
+    }
+    if alias.is_some() {
+        count += 1;
+    }
+    if count > 1 {
+        panic!(
+            "Unable to determine correct specification of enum: {:?}, {:?}, {:?}, {:?}",
+            offset, bitpos, value, alias
+        );
+    }
+
+    let spec = if let Some(alias) = alias {
+        EnumSpec::Alias { alias, extends }
+    } else if let Some(offset) = offset {
+        if let Some(extends) = extends {
+            EnumSpec::Offset {
+                offset: parse_integer(&offset),
+                extends,
+                extnumber: match extnumber {
+                    Some(extnumber) => Some(parse_integer(&extnumber)),
+                    None => None,
+                },
+                dir: positive,
+            }
+        } else {
+            panic!("Missing extends on enum with offset spec.");
+        }
+    } else if let Some(bitpos) = bitpos {
+        EnumSpec::Bitpos {
+            bitpos: parse_integer(&bitpos),
+            extends,
+        }
+    } else if let Some(value) = value {
+        EnumSpec::Value { value, extends }
+    } else {
+        EnumSpec::None
+    };
+
+    Enum {
+        name,
+        comment,
+        type_suffix,
+        api,
+        spec,
+    }
+}
+
+fn parse_extensions<R: Read>(
+    attributes: Vec<XmlAttribute>,
+    events: &mut XmlEvents<R>,
+) -> RegistryItem {
+    let mut comment = None;
+    let mut items = Vec::new();
+
+    for mut a in attributes {
+        let n = a.name.local_name.as_str();
+        match n {
+            "comment" => comment = Some(a.value),
+            _ => panic!("Unexpected attributes {:?}", n),
+        }
+    }
+
+    while let Some(Ok(e)) = events.next() {
+        match e {
+            XmlEvent::StartElement {
+                name, attributes, ..
+            } => {
+                let name = name.local_name.as_str();
+                match name {
+                    "extension" => {
+                        items.push(parse_extension(attributes, events));
+                    }
+                    _ => panic!("Unexpected element {:?}", name),
+                }
+            }
+            XmlEvent::EndElement { .. } => break,
+            _ => (),
+        }
+    }
+
+    RegistryItem::Extensions { comment, items }
+}
+
+fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Extension {
+    fn parse_require<R: Read>(
+        attributes: Vec<XmlAttribute>,
+        events: &mut XmlEvents<R>,
+    ) -> ExtensionItem {
+        let mut api = None;
+        let mut profile = None;
+        let mut extension = None;
+        let mut feature = None;
+        let mut comment = None;
+        let mut items = Vec::new();
+
+        for a in attributes {
+            let name = a.name.local_name.as_str();
+            match name {
+                "api" => api = Some(a.value),
+                "profile" => profile = Some(a.value),
+                "extension" => extension = Some(a.value),
+                "feature" => feature = Some(a.value),
+                "comment" => comment = Some(a.value),
+                _ => panic!("Unexpected attribute {:?}", name),
+            }
+        }
+
+        while let Some(Ok(e)) = events.next() {
+            match e {
+                XmlEvent::StartElement {
+                    name, attributes, ..
+                } => items.push(parse_interface_item(
+                    name.local_name.as_str(),
+                    attributes,
+                    events,
+                )),
+                XmlEvent::EndElement { .. } => break,
+                _ => {}
+            }
+        }
+
+        ExtensionItem::Require {
+            api,
+            profile,
+            extension,
+            feature,
+            comment,
+            items,
+        }
+    }
+
+    fn parse_remove<R: Read>(
+        attributes: Vec<XmlAttribute>,
+        events: &mut XmlEvents<R>,
+    ) -> ExtensionItem {
+        let mut api = None;
+        let mut profile = None;
+        let mut comment = None;
+        let mut items = Vec::new();
+
+        for a in attributes {
+            let name = a.name.local_name.as_str();
+            match name {
+                "api" => api = Some(a.value),
+                "profile" => profile = Some(a.value),
+                "comment" => comment = Some(a.value),
+                _ => panic!("Unexpected attribute {:?}", name),
+            }
+        }
+
+        while let Some(Ok(e)) = events.next() {
+            match e {
+                XmlEvent::StartElement {
+                    name, attributes, ..
+                } => items.push(parse_interface_item(
+                    name.local_name.as_str(),
+                    attributes,
+                    events,
+                )),
+                XmlEvent::EndElement { .. } => break,
+                _ => {}
+            }
+        }
+
+        ExtensionItem::Remove {
+            api,
+            profile,
+            comment,
+            items,
+        }
+    }
+
+    let mut name = None;
+    let mut comment = None;
+    let mut number = None;
+    let mut protect = None;
+    let mut platform = None;
+    let mut author = None;
+    let mut contact = None;
+    let mut ext_type = None;
+    let mut requires = None;
+    let mut requires_core = None;
+    let mut supported = None;
+    let mut items = Vec::new();
+
+    for a in attributes {
+        let n = a.name.local_name.as_str();
+        match n {
+            "name" => name = Some(a.value),
+            "comment" => comment = Some(a.value),
+            "number" => number = Some(a.value),
+            "protect" => protect = Some(a.value),
+            "platform" => platform = Some(a.value),
+            "author" => author = Some(a.value),
+            "contact" => contact = Some(a.value),
+            "type" => ext_type = Some(a.value),
+            "requires" => requires = Some(a.value),
+            "requiresCore" => requires_core = Some(a.value),
+            "supported" => supported = Some(a.value),
+            _ => panic!("Unexpected attribute {:?}", n),
+        }
+    }
+
+    while let Some(Ok(e)) = events.next() {
+        match e {
+            XmlEvent::StartElement {
+                name, attributes, ..
+            } => {
+                let name = name.local_name.as_str();
+                match name {
+                    "require" => items.push(parse_require(attributes, events)),
+                    "remove" => items.push(parse_remove(attributes, events)),
+                    _ => panic!("Unexpected element {:?}", name),
+                }
+            }
+            XmlEvent::EndElement { .. } => break,
+            _ => {}
+        }
+    }
+
+    let number = match number {
+        Some(text) => Some(parse_integer(&text)),
+        None => None,
+    };
+
+    unwrap_attribute!(extension, name);
+    Extension {
+        name,
+        comment,
+        number,
+        protect,
+        platform,
+        author,
+        contact,
+        ext_type,
+        requires,
+        requires_core,
+        supported,
+        items,
+    }
+}
+
+fn parse_interface_item<R: Read>(
+    name: &str,
+    attributes: Vec<XmlAttribute>,
+    events: &mut XmlEvents<R>,
+) -> InterfaceItem {
+    match name {
+        "comment" => InterfaceItem::Comment(parse_text_element(events)),
+        "type" => {
+            let mut name = None;
+            let mut comment = None;
+            for a in attributes {
+                let n = a.name.local_name.as_str();
+                match n {
+                    "name" => name = Some(a.value),
+                    "comment" => comment = Some(a.value),
+                    _ => panic!("Unexpected attribute {:?}", name),
+                }
+            }
+            unwrap_attribute!(type, name);
+            consume_current_element(events);
+            InterfaceItem::Type { name, comment }
+        }
+        "enum" => InterfaceItem::Enum(parse_enum(attributes, events)),
+        "command" => {
+            let mut name = None;
+            let mut comment = None;
+            for a in attributes {
+                let n = a.name.local_name.as_str();
+                match n {
+                    "name" => name = Some(a.value),
+                    "comment" => comment = Some(a.value),
+                    _ => panic!("Unexpected attribute {:?}", n),
+                }
+            }
+            unwrap_attribute!(type, name);
+            consume_current_element(events);
+            InterfaceItem::Command { name, comment }
+        }
+        _ => panic!("Unexpected element {:?}", name),
+    }
+}
+
+fn parse_integer(text: &str) -> i64 {
+    if text.starts_with("0x") {
+        i64::from_str_radix(text.split_at(2).1, 16).unwrap()
+    } else {
+        if let Ok(val) = i64::from_str_radix(text, 10) {
+            val
+        } else {
+            panic!("Couldn't parse integer from {:?}", text);
+        }
     }
 }
 
