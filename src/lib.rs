@@ -5,6 +5,7 @@ extern crate vkxml;
 extern crate xml;
 
 use std::io::Read;
+use std::str::FromStr;
 
 type XmlEvents<R> = xml::reader::Events<R>;
 type XmlAttribute = xml::attribute::OwnedAttribute;
@@ -32,7 +33,14 @@ pub enum RegistryItem {
     Types,
     Enums,
     Commands,
-    Feature,
+    Feature {
+        api: String,
+        name: String,
+        number: f32,
+        protect: Option<String>,
+        comment: Option<String>,
+        items: Vec<ExtensionItem>,
+    },
     Extensions {
         comment: Option<String>,
         items: Vec<Extension>,
@@ -302,8 +310,7 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
             registry.0.push(RegistryItem::Commands);
         },
         "feature" => {
-            consume_current_element(events);
-            registry.0.push(RegistryItem::Feature);
+            registry.0.push(parse_feature(attributes, events));
         },
         "extensions" => registry.0.push(parse_extensions(attributes, events))
     }
@@ -406,7 +413,7 @@ fn parse_registry_as_vkxml<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registr
         "feature" => {
             flush_enums(&mut enums, &mut registry.elements);
             registry.elements.push(vkxml::RegistryElement::Features(vkxml::Features {
-                elements: vec![parse_feature(attributes, events)],
+                elements: vec![parse_feature_vkxml(attributes, events)],
             }));
         },
 
@@ -1545,7 +1552,7 @@ fn parse_command<R: Read>(
 }
 
 //--------------------------------------------------------------------------------------------------
-fn parse_feature<R: Read>(
+fn parse_feature_vkxml<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> vkxml::Feature {
@@ -1934,6 +1941,46 @@ fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
     }
 }
 
+fn parse_feature<R: Read>(
+    attributes: Vec<XmlAttribute>,
+    events: &mut XmlEvents<R>,
+) -> RegistryItem {
+    let mut api = None;
+    let mut name = None;
+    let mut number = None;
+    let mut protect = None;
+    let mut comment = None;
+    let mut items = Vec::new();
+
+    match_attributes!{a in attributes,
+        "api"     => api     = Some(a.value),
+        "name"    => name    = Some(a.value),
+        "number"  => number  = Some(a.value),
+        "protect" => protect = Some(a.value),
+        "comment" => comment = Some(a.value)
+    }
+
+    match_elements!{attributes in events,
+        "require" => items.push(parse_extension_item_require(attributes, events)),
+        "remove"  => items.push(parse_extension_item_remove(attributes, events))
+    }
+
+    unwrap_attribute!(feature, api);
+    unwrap_attribute!(feature, name);
+    unwrap_attribute!(feature, number);
+
+    let number = f32::from_str(&number).unwrap();
+
+    RegistryItem::Feature {
+        api,
+        name,
+        number,
+        protect,
+        comment,
+        items,
+    }
+}
+
 fn parse_extensions<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
@@ -1953,86 +2000,6 @@ fn parse_extensions<R: Read>(
 }
 
 fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Extension {
-    fn parse_require<R: Read>(
-        attributes: Vec<XmlAttribute>,
-        events: &mut XmlEvents<R>,
-    ) -> ExtensionItem {
-        let mut api = None;
-        let mut profile = None;
-        let mut extension = None;
-        let mut feature = None;
-        let mut comment = None;
-        let mut items = Vec::new();
-
-        match_attributes!{a in attributes,
-            "api"       => api       = Some(a.value),
-            "profile"   => profile   = Some(a.value),
-            "extension" => extension = Some(a.value),
-            "feature"   => feature   = Some(a.value),
-            "comment"   => comment   = Some(a.value)
-        }
-
-        while let Some(Ok(e)) = events.next() {
-            match e {
-                XmlEvent::StartElement {
-                    name, attributes, ..
-                } => items.push(parse_interface_item(
-                    name.local_name.as_str(),
-                    attributes,
-                    events,
-                )),
-                XmlEvent::EndElement { .. } => break,
-                _ => {}
-            }
-        }
-
-        ExtensionItem::Require {
-            api,
-            profile,
-            extension,
-            feature,
-            comment,
-            items,
-        }
-    }
-
-    fn parse_remove<R: Read>(
-        attributes: Vec<XmlAttribute>,
-        events: &mut XmlEvents<R>,
-    ) -> ExtensionItem {
-        let mut api = None;
-        let mut profile = None;
-        let mut comment = None;
-        let mut items = Vec::new();
-
-        match_attributes!{a in attributes,
-            "api"     => api     = Some(a.value),
-            "profile" => profile = Some(a.value),
-            "comment" => comment = Some(a.value)
-        }
-
-        while let Some(Ok(e)) = events.next() {
-            match e {
-                XmlEvent::StartElement {
-                    name, attributes, ..
-                } => items.push(parse_interface_item(
-                    name.local_name.as_str(),
-                    attributes,
-                    events,
-                )),
-                XmlEvent::EndElement { .. } => break,
-                _ => {}
-            }
-        }
-
-        ExtensionItem::Remove {
-            api,
-            profile,
-            comment,
-            items,
-        }
-    }
-
     let mut name = None;
     let mut comment = None;
     let mut number = None;
@@ -2061,8 +2028,8 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     }
 
     match_elements!{attributes in events,
-        "require" => items.push(parse_require(attributes, events)),
-        "remove" => items.push(parse_remove(attributes, events))
+        "require" => items.push(parse_extension_item_require(attributes, events)),
+        "remove" => items.push(parse_extension_item_remove(attributes, events))
     }
 
     let number = match number {
@@ -2083,6 +2050,86 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         requires,
         requires_core,
         supported,
+        items,
+    }
+}
+
+fn parse_extension_item_require<R: Read>(
+    attributes: Vec<XmlAttribute>,
+    events: &mut XmlEvents<R>,
+) -> ExtensionItem {
+    let mut api = None;
+    let mut profile = None;
+    let mut extension = None;
+    let mut feature = None;
+    let mut comment = None;
+    let mut items = Vec::new();
+
+    match_attributes!{a in attributes,
+        "api"       => api       = Some(a.value),
+        "profile"   => profile   = Some(a.value),
+        "extension" => extension = Some(a.value),
+        "feature"   => feature   = Some(a.value),
+        "comment"   => comment   = Some(a.value)
+    }
+
+    while let Some(Ok(e)) = events.next() {
+        match e {
+            XmlEvent::StartElement {
+                name, attributes, ..
+            } => items.push(parse_interface_item(
+                name.local_name.as_str(),
+                attributes,
+                events,
+            )),
+            XmlEvent::EndElement { .. } => break,
+            _ => {}
+        }
+    }
+
+    ExtensionItem::Require {
+        api,
+        profile,
+        extension,
+        feature,
+        comment,
+        items,
+    }
+}
+
+fn parse_extension_item_remove<R: Read>(
+    attributes: Vec<XmlAttribute>,
+    events: &mut XmlEvents<R>,
+) -> ExtensionItem {
+    let mut api = None;
+    let mut profile = None;
+    let mut comment = None;
+    let mut items = Vec::new();
+
+    match_attributes!{a in attributes,
+        "api"     => api     = Some(a.value),
+        "profile" => profile = Some(a.value),
+        "comment" => comment = Some(a.value)
+    }
+
+    while let Some(Ok(e)) = events.next() {
+        match e {
+            XmlEvent::StartElement {
+                name, attributes, ..
+            } => items.push(parse_interface_item(
+                name.local_name.as_str(),
+                attributes,
+                events,
+            )),
+            XmlEvent::EndElement { .. } => break,
+            _ => {}
+        }
+    }
+
+    ExtensionItem::Remove {
+        api,
+        profile,
+        comment,
         items,
     }
 }
