@@ -32,7 +32,10 @@ pub enum RegistryItem {
     },
     Types,
     Enums,
-    Commands,
+    Commands {
+        comment: Option<String>,
+        items: Vec<Command>,
+    },
     Feature {
         api: String,
         name: String,
@@ -66,6 +69,41 @@ pub struct Tag {
     pub name: String,
     pub author: String,
     pub contact: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum Command {
+    Alias {
+        name: String,
+        alias: String,
+    },
+    Definition {
+        queues: Option<String>,
+        successcodes: Option<String>,
+        errorcodes: Option<String>,
+        renderpass: Option<String>,
+        cmdbufferlevel: Option<String>,
+        pipeline: Option<String>,
+        comment: Option<String>,
+        proto: NameWithType,
+        params: Vec<CommandParam>,
+        alias: Option<String>,
+        description: Option<String>,
+        implicitexternsyncparams: Vec<String>,
+
+        code: String,
+    },
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CommandParam {
+    pub len: Option<String>,
+    pub altlen: Option<String>,
+    pub externsync: Option<String>,
+    pub optional: Option<String>,
+    pub noautovalidity: Option<String>,
+
+    pub definition: NameWithType,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -153,6 +191,12 @@ pub struct Enum {
     pub type_suffix: TypeSuffix,
     pub api: Option<String>,
     pub spec: EnumSpec,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct NameWithType {
+    pub type_name: Option<String>,
+    pub name: String,
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -265,32 +309,14 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
         "vendorids" => registry.0.push(parse_vendorids(attributes, events)),
         "platforms" => {
             let mut comment = None;
-            for a in attributes {
-                let name = a.name.local_name.as_str();
-                match name {
-                    "comment" => comment = Some(a.value),
-                    _ => panic!("Unexpected attribute {:?}", name),
-                }
+            let mut items = Vec::new();
+
+            match_attributes!{a in attributes,
+                "comment" => comment = Some(a.value)
             }
 
-            let mut items = Vec::new();
-            while let Some(Ok(e)) = events.next() {
-                match e {
-                    XmlEvent::StartElement {
-                        name, attributes, ..
-                    } => {
-                        let name = name.local_name.as_str();
-                        match name {
-                            "platform" => {
-                                items.push(parse_platform(attributes, events))
-                            }
-                            _ => panic!("Unexpected element {:?}", name),
-                        }
-                    }
-
-                    XmlEvent::EndElement { .. } => break,
-                    _ => (),
-                }
+            match_elements!{attributes in events,
+                "platform" => items.push(parse_platform(attributes, events))
             }
 
             registry.0.push(RegistryItem::Platforms { comment, items });
@@ -306,8 +332,18 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
             registry.0.push(RegistryItem::Enums);
         },
         "commands" => {
-            consume_current_element(events);
-            registry.0.push(RegistryItem::Commands);
+            let mut comment = None;
+            let mut items = Vec::new();
+
+            match_attributes!{a in attributes,
+                "comment" => comment = Some(a.value)
+            }
+
+            match_elements!{attributes in events,
+                "command" => items.push(parse_command(attributes, events))
+            }
+
+            registry.0.push(RegistryItem::Commands{comment, items});
         },
         "feature" => {
             registry.0.push(parse_feature(attributes, events));
@@ -405,7 +441,7 @@ fn parse_registry_as_vkxml<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registr
 
         "commands" => {
             flush_enums(&mut enums, &mut registry.elements);
-            registry.elements.push(vkxml::RegistryElement::Commands(parse_commands(
+            registry.elements.push(vkxml::RegistryElement::Commands(parse_commands_vkxml(
                 attributes, events,
             )));
         },
@@ -1472,7 +1508,7 @@ fn parse_enum_unused<R: Read>(
 }
 
 //--------------------------------------------------------------------------------------------------
-fn parse_commands<R: Read>(
+fn parse_commands_vkxml<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> vkxml::Commands {
@@ -1487,7 +1523,7 @@ fn parse_commands<R: Read>(
 
     match_elements!{attributes in events,
         "command" => {
-            if let Some(cmd) = parse_command(attributes, events) {
+            if let Some(cmd) = parse_command_vkxml(attributes, events) {
                 r.elements.push(cmd);
             }
         }
@@ -1496,7 +1532,7 @@ fn parse_commands<R: Read>(
     r
 }
 
-fn parse_command<R: Read>(
+fn parse_command_vkxml<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> Option<vkxml::Command> {
@@ -1836,6 +1872,144 @@ fn parse_extension_require_enum<R: Read>(
             bitpos,
             c_expression,
         })
+    }
+}
+
+fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Command {
+    let mut name = None;
+    let mut alias = None;
+    let mut queues = None;
+    let mut successcodes = None;
+    let mut errorcodes = None;
+    let mut renderpass = None;
+    let mut cmdbufferlevel = None;
+    let mut pipeline = None;
+    let mut comment = None;
+
+    match_attributes!{a in attributes,
+        "name" => name = Some(a.value),
+        "alias" => alias = Some(a.value),
+        "queues" => queues = Some(a.value),
+        "successcodes" => successcodes = Some(a.value),
+        "errorcodes" => errorcodes = Some(a.value),
+        "renderpass" => renderpass = Some(a.value),
+        "cmdbufferlevel" => cmdbufferlevel = Some(a.value),
+        "pipeline" => pipeline = Some(a.value),
+        "comment" => comment = Some(a.value)
+    }
+
+    if let Some(alias) = alias {
+        unwrap_attribute!(command, name);
+        consume_current_element(events);
+        Command::Alias { alias, name }
+    } else {
+        let mut code = String::new();
+        let mut proto = None;
+        let mut params = Vec::new();
+        let mut description = None;
+        let mut implicitexternsyncparams = Vec::new();
+
+        fn parse_name_with_type<R: Read>(
+            buffer: &mut String,
+            events: &mut XmlEvents<R>,
+        ) -> NameWithType {
+            let mut name = None;
+            let mut type_name = None;
+            while let Some(Ok(e)) = events.next() {
+                match e {
+                    XmlEvent::Whitespace(text) => buffer.push_str(&text),
+                    XmlEvent::Characters(text) => buffer.push_str(&text),
+                    XmlEvent::StartElement { name: n, .. } => {
+                        let text = parse_text_element(events);
+                        buffer.push_str(&text);
+                        match n.local_name.as_str() {
+                            "type" => type_name = Some(text),
+                            "name" => name = Some(text),
+                            _ => panic!("Unexpected element {:?}", n),
+                        }
+                    }
+                    XmlEvent::EndElement { .. } => break,
+                    _ => (),
+                }
+            }
+            NameWithType {
+                name: match name {
+                    Some(name) => name,
+                    None => panic!("Missing name element."),
+                },
+                type_name,
+            }
+        }
+
+        match_elements!{attributes in events,
+            "proto" => {
+                proto = Some(parse_name_with_type(&mut code, events));
+                code.push('(');
+            },
+
+            "param" => {
+                let mut len = None;
+                let mut altlen = None;
+                let mut externsync = None;
+                let mut optional = None;
+                let mut noautovalidity = None;
+
+                match_attributes!{a in attributes,
+                    "len"            => len            = Some(a.value),
+                    "altlen"         => altlen         = Some(a.value),
+                    "externsync"     => externsync     = Some(a.value),
+                    "optional"       => optional       = Some(a.value),
+                    "noautovalidity" => noautovalidity = Some(a.value)
+                }
+
+                if params.len() > 0 {
+                    code.push_str(", ");
+                }
+                let definition = parse_name_with_type(&mut code, events);
+                params.push(CommandParam {
+                    len,
+                    altlen,
+                    externsync,
+                    optional,
+                    noautovalidity,
+                    definition,
+                });
+            },
+
+            "alias" => {
+                match_attributes!{a in attributes,
+                    "name" => alias = Some(a.value)
+                }
+                consume_current_element(events);
+            },
+
+            "description" => description = Some(parse_text_element(events)),
+            "implicitexternsyncparams" => {
+                match_elements!{events,
+                    "param" => implicitexternsyncparams.push(parse_text_element(events))
+                }
+            }
+        }
+        code.push_str(");");
+
+        Command::Definition {
+            queues,
+            successcodes,
+            errorcodes,
+            renderpass,
+            cmdbufferlevel,
+            pipeline,
+            comment,
+            proto: match proto {
+                Some(proto) => proto,
+                None => panic!("Missing proto element in command definition."),
+            },
+            params,
+            alias,
+            description,
+            implicitexternsyncparams,
+            code,
+        }
     }
 }
 
@@ -2223,13 +2397,21 @@ fn consume_current_element<R: Read>(events: &mut XmlEvents<R>) {
 }
 
 fn parse_text_element<R: Read>(events: &mut XmlEvents<R>) -> String {
-    let result = if let Some(Ok(XmlEvent::Characters(text))) = events.next() {
-        text
-    } else {
-        String::new()
-    };
-
-    consume_current_element(events);
+    let mut result = String::new();
+    let mut depth = 1;
+    while let Some(Ok(e)) = events.next() {
+        match e {
+            XmlEvent::StartElement { .. } => depth += 1,
+            XmlEvent::Characters(text) => result.push_str(&text),
+            XmlEvent::EndElement { .. } => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            _ => (),
+        }
+    }
     result
 }
 
