@@ -31,7 +31,15 @@ pub enum RegistryItem {
         items: Vec<Tag>,
     },
     Types,
-    Enums,
+    Enums {
+        name: Option<String>,
+        kind: Option<String>,
+        start: Option<i64>,
+        end: Option<i64>,
+        vendor: Option<String>,
+        comment: Option<String>,
+        items: Vec<EnumsItem>,
+    },
     Commands {
         comment: Option<String>,
         items: Vec<Command>,
@@ -152,6 +160,18 @@ pub enum InterfaceItem {
         name: String,
         comment: Option<String>,
     },
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum EnumsItem {
+    Enum(Enum),
+    Unused {
+        start: i64,
+        end: Option<i64>,
+        vendor: Option<String>,
+        comment: Option<String>,
+    },
+    Comment(String),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -328,8 +348,47 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
             registry.0.push(RegistryItem::Types);
         },
         "enums" => {
-            consume_current_element(events);
-            registry.0.push(RegistryItem::Enums);
+            let mut name = None;
+            let mut kind = None;
+            let mut start = None;
+            let mut end = None;
+            let mut vendor = None;
+            let mut comment = None;
+            let mut items = Vec::new();
+            match_attributes!{a in attributes,
+                "name"    => name    = Some(a.value),
+                "type"    => kind    = Some(a.value),
+                "start"   => start   = Some(a.value),
+                "end"     => end     = Some(a.value),
+                "vendor"  => vendor  = Some(a.value),
+                "comment" => comment = Some(a.value)
+            }
+            match_elements!{attributes in events,
+                "enum" => items.push(EnumsItem::Enum(parse_enum(attributes, events))),
+                "unused" => {
+                    let mut start = None;
+                    let mut end = None;
+                    let mut vendor = None;
+                    let mut comment = None;
+                    match_attributes!{a in attributes,
+                        "start"   => start   = Some(a.value),
+                        "end"     => end     = Some(a.value),
+                        "vendor"  => vendor  = Some(a.value),
+                        "comment" => comment = Some(a.value)
+                    }
+                    consume_current_element(events);
+                    unwrap_attribute!(unused, start);
+                    let start = parse_integer(&start);
+                    let end = end.map(|val| parse_integer(&val));
+                    items.push(EnumsItem::Unused{start, end, vendor, comment});
+                },
+                "comment" => items.push(EnumsItem::Comment(parse_text_element(events)))
+            }
+
+            let start = start.map(|val| parse_integer(&val));
+            let end = end.map(|val| parse_integer(&val));
+
+            registry.0.push(RegistryItem::Enums{ name, kind, start, end, vendor, comment, items });
         },
         "commands" => {
             let mut comment = None;
