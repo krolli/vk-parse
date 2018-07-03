@@ -1789,9 +1789,11 @@ fn parse_enum_unused<R: Read>(
         range_end: None,
     };
 
+    println!("{:?}", attributes);
     match_attributes!{a in attributes,
-        "start" => r.range_start = i32::from_str_radix(&a.value, 10).unwrap(),
-        "end" => r.range_end = Some(i32::from_str_radix(&a.value, 10).unwrap())
+        "start" => r.range_start = parse_integer(&a.value) as i32,
+        "end" => r.range_end = Some(parse_integer(&a.value) as i32),
+        "comment" => () // not supported by vkxml
     }
 
     consume_current_element(events);
