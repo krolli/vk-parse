@@ -30,7 +30,10 @@ pub enum RegistryItem {
         comment: Option<String>,
         items: Vec<Tag>,
     },
-    Types,
+    Types {
+        comment: Option<String>,
+        items: Vec<TypeItem>,
+    },
     Enums {
         name: Option<String>,
         kind: Option<String>,
@@ -77,6 +80,64 @@ pub struct Tag {
     pub name: String,
     pub author: String,
     pub contact: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum TypeItem {
+    Type {
+        api: Option<String>,
+        alias: Option<String>,
+        requires: Option<String>,
+        name: Option<String>,
+        category: Option<String>,
+        parent: Option<String>,
+        returnedonly: Option<String>,
+        structextends: Option<String>,
+        comment: Option<String>,
+        contents: TypeContents,
+    },
+    Comment(String),
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum TypeContents {
+    Code {
+        code: String,
+        markup: Vec<TypeCodeMarkup>,
+    },
+    Members(Vec<TypeMember>),
+    None,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum TypeCodeMarkup {
+    Name(String),
+    Type(String),
+    ApiEntry(String),
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum TypeMember {
+    Comment(String),
+    Definition {
+        len: Option<String>,
+        altlen: Option<String>,
+        externsync: Option<String>,
+        optional: Option<String>,
+        noautovalidity: Option<String>,
+        validextensionstructs: Option<String>,
+        values: Option<String>,
+        code: String,
+        markup: Vec<TypeMemberMarkup>,
+    },
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum TypeMemberMarkup {
+    Name(String),
+    Type(String),
+    Enum(String),
+    Comment(String),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -285,6 +346,48 @@ macro_rules! match_elements {
     };
 }
 
+macro_rules! match_elements_combine_text {
+    ( $events:expr, $buffer:ident, $($p:pat => $e:expr),+) => {
+        while let Some(Ok(e)) = $events.next() {
+            match e {
+                XmlEvent::Characters(text) => $buffer.push_str(&text),
+                XmlEvent::Whitespace(text) => $buffer.push_str(&text),
+                XmlEvent::StartElement { name, .. } => {
+                    let name = name.local_name.as_str();
+                    match name {
+                        $(
+                            $p => $e,
+                        )+
+                        _ => panic!("Unexpected element {:?}", name),
+                    }
+                }
+                XmlEvent::EndElement { .. } => break,
+                _ => {}
+            }
+        }
+    };
+
+    ( $attributes:ident in $events:expr, $buffer:ident, $($p:pat => $e:expr),+) => {
+        while let Some(Ok(e)) = $events.next() {
+            match e {
+                XmlEvent::Characters(text) => $buffer.push_str(&text),
+                XmlEvent::Whitespace(text) => $buffer.push_str(&text),
+                XmlEvent::StartElement { name, $attributes, .. } => {
+                    let name = name.local_name.as_str();
+                    match name {
+                        $(
+                            $p => $e,
+                        )+
+                        _ => panic!("Unexpected element {:?}", name),
+                    }
+                }
+                XmlEvent::EndElement { .. } => break,
+                _ => {}
+            }
+        }
+    };
+}
+
 //--------------------------------------------------------------------------------------------------
 fn new_field() -> vkxml::Field {
     vkxml::Field {
@@ -344,8 +447,19 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
 
         "tags" => registry.0.push(parse_tags(attributes, events)),
         "types" => {
-            consume_current_element(events);
-            registry.0.push(RegistryItem::Types);
+            let mut comment = None;
+            let mut items = Vec::new();
+            match_attributes!{a in attributes,
+                "comment" => comment = Some(a.value)
+            }
+            match_elements!{attributes in events,
+                "comment" => items.push(TypeItem::Comment(parse_text_element(events))),
+                "type" => items.push(parse_type(attributes, events))
+            }
+            registry.0.push(RegistryItem::Types{
+                comment,
+                items
+            });
         },
         "enums" => {
             let mut name = None;
@@ -464,7 +578,7 @@ fn parse_registry_as_vkxml<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registr
 
         "types" => {
             flush_enums(&mut enums, &mut registry.elements);
-            registry.elements.push(vkxml::RegistryElement::Definitions(parse_types(
+            registry.elements.push(vkxml::RegistryElement::Definitions(parse_types_vkxml(
                 attributes, events,
             )));
         },
@@ -633,7 +747,125 @@ fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) 
 }
 
 //--------------------------------------------------------------------------------------------------
-fn parse_types<R: Read>(
+fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> TypeItem {
+    let mut api = None;
+    let mut alias = None;
+    let mut requires = None;
+    let mut name = None;
+    let mut category = None;
+    let mut parent = None;
+    let mut returnedonly = None;
+    let mut structextends = None;
+    let mut comment = None;
+
+    let mut code = String::new();
+    let mut markup = Vec::new();
+    let mut members = Vec::new();
+
+    match_attributes!{a in attributes,
+        "api"           => api           = Some(a.value),
+        "alias"         => alias         = Some(a.value),
+        "requires"      => requires      = Some(a.value),
+        "name"          => name          = Some(a.value),
+        "category"      => category      = Some(a.value),
+        "parent"        => parent        = Some(a.value),
+        "returnedonly"  => returnedonly  = Some(a.value),
+        "structextends" => structextends = Some(a.value),
+        "comment"       => comment       = Some(a.value)
+    }
+
+    match_elements_combine_text!{attributes in events, code,
+        "member" => {
+            let mut len = None;
+            let mut altlen = None;
+            let mut externsync = None;
+            let mut optional = None;
+            let mut noautovalidity = None;
+            let mut validextensionstructs = None;
+            let mut values = None;
+            let mut code = String::new();
+            let mut markup = Vec::new();
+            match_attributes!{a in attributes,
+                "len"                   => len                   = Some(a.value),
+                "altlen"                => altlen                = Some(a.value),
+                "externsync"            => externsync            = Some(a.value),
+                "optional"              => optional              = Some(a.value),
+                "noautovalidity"        => noautovalidity        = Some(a.value),
+                "validextensionstructs" => validextensionstructs = Some(a.value),
+                "values"                => values                = Some(a.value)
+            }
+            match_elements_combine_text!{events, code,
+                "type" => {
+                    let text = parse_text_element(events);
+                    code.push_str(&text);
+                    markup.push(TypeMemberMarkup::Type(text));
+                },
+                "name" => {
+                    let text = parse_text_element(events);
+                    code.push_str(&text);
+                    markup.push(TypeMemberMarkup::Name(text));
+                },
+                "enum" => {
+                    let text = parse_text_element(events);
+                    code.push_str(&text);
+                    markup.push(TypeMemberMarkup::Enum(text));
+                },
+                "comment" => {
+                    let text = parse_text_element(events);
+                    markup.push(TypeMemberMarkup::Comment(text));
+                }
+            }
+            members.push(TypeMember::Definition {
+                len,
+                altlen,
+                externsync,
+                optional,
+                noautovalidity,
+                validextensionstructs,
+                values,
+                code,
+                markup,
+            })
+        },
+        "comment" => members.push(TypeMember::Comment(parse_text_element(events))),
+        "name" => {
+            let text = parse_text_element(events);
+            code.push_str(&text);
+            markup.push(TypeCodeMarkup::Name(text));
+        },
+        "type" => {
+            let text = parse_text_element(events);
+            code.push_str(&text);
+            markup.push(TypeCodeMarkup::Type(text));
+        },
+        "apientry" => {
+            let text = parse_text_element(events);
+            code.push_str(&text);
+            markup.push(TypeCodeMarkup::ApiEntry(text));
+        }
+    }
+
+    TypeItem::Type {
+        api,
+        alias,
+        requires,
+        name,
+        category,
+        parent,
+        returnedonly,
+        structextends,
+        comment,
+        contents: if members.len() > 0 {
+            TypeContents::Members(members)
+        } else if code.len() > 0 {
+            TypeContents::Code { code, markup }
+        } else {
+            TypeContents::None
+        },
+    }
+}
+
+fn parse_types_vkxml<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> vkxml::Definitions {
@@ -646,7 +878,7 @@ fn parse_types<R: Read>(
 
     match_elements!{attributes in events,
         "type" => {
-            if let Some(t) = parse_type(attributes, events) {
+            if let Some(t) = parse_type_vkxml(attributes, events) {
                 elements.push(t);
             }
         },
@@ -659,7 +891,7 @@ fn parse_types<R: Read>(
 type ParseTypeFn<R> = for<'r> std::ops::Fn(Vec<XmlAttribute>, &'r mut XmlEvents<R>)
     -> Option<vkxml::DefinitionsElement>;
 
-fn parse_type<R: Read>(
+fn parse_type_vkxml<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> Option<vkxml::DefinitionsElement> {
@@ -1974,21 +2206,16 @@ fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<
         ) -> NameWithType {
             let mut name = None;
             let mut type_name = None;
-            while let Some(Ok(e)) = events.next() {
-                match e {
-                    XmlEvent::Whitespace(text) => buffer.push_str(&text),
-                    XmlEvent::Characters(text) => buffer.push_str(&text),
-                    XmlEvent::StartElement { name: n, .. } => {
-                        let text = parse_text_element(events);
-                        buffer.push_str(&text);
-                        match n.local_name.as_str() {
-                            "type" => type_name = Some(text),
-                            "name" => name = Some(text),
-                            _ => panic!("Unexpected element {:?}", n),
-                        }
-                    }
-                    XmlEvent::EndElement { .. } => break,
-                    _ => (),
+            match_elements_combine_text!{events, buffer,
+                "type" => {
+                    let text = parse_text_element(events);
+                    buffer.push_str(&text);
+                    type_name = Some(text);
+                },
+                "name" => {
+                    let text = parse_text_element(events);
+                    buffer.push_str(&text);
+                    name = Some(text);
                 }
             }
             NameWithType {
