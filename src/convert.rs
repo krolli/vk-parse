@@ -1,3 +1,4 @@
+#![deny(dead_code)]
 extern crate vkxml;
 extern crate xml;
 
@@ -1259,204 +1260,9 @@ fn parse_extensions_vkxml<R: Read>(
     }
 
     match_elements!{attributes in events,
-        "extension" => r.elements.push(parse_extension_vkxml(attributes, events))
+        "extension" => r.elements.push(parse_extension(attributes, events).into())
     }
 
-    r
-}
-
-fn parse_extension_vkxml<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Extension {
-    let mut r = vkxml::Extension {
-        name: vkxml::Identifier::new(),
-        notation: None,
-        number: 0,
-        disabled: false,
-        match_api: None,
-        ty: None,
-        define: None,
-        requires: None,
-        author: None,
-        contact: None,
-        elements: Vec::new(),
-    };
-
-    match_attributes!{a in attributes,
-        "name" => r.name = a.value,
-        "comment" => r.notation = Some(a.value),
-        "number" => {
-            use std::str::FromStr;
-            r.number = i32::from_str(&a.value).unwrap();
-        },
-        "type" => {
-            let ty = a.value.as_str();
-            r.ty = Some(match ty {
-                "instance" => vkxml::ExtensionType::Instance,
-                "device" => vkxml::ExtensionType::Device,
-                _ => panic!("Unexpected attribute value {:?}", ty),
-            });
-        },
-        "author" => r.author = Some(a.value),
-        "contact" => r.contact = Some(a.value),
-        "supported" => if a.value.as_str() == "disabled" {
-            r.disabled = true;
-        } else {
-            r.match_api = Some(a.value);
-        },
-        "requires" => r.requires = Some(a.value),
-        "protect" => r.define = Some(a.value),
-        "platform" => (),     // mk:TODO Not supported by vkxml.
-        "requiresCore" => ()  // mk:TODO Not supported by vkxml.
-    }
-
-    match_elements!{attributes in events,
-        "require" => r.elements.push(vkxml::ExtensionElement::Require(
-            parse_extension_require(attributes, events),
-        ))
-    }
-
-    r
-}
-
-fn parse_extension_require<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::ExtensionSpecification {
-    let mut r = vkxml::ExtensionSpecification {
-        profile: None,
-        notation: None,
-        extension: None,
-        api: None,
-        elements: Vec::new(),
-    };
-
-    match_attributes!{a in attributes,
-        "extension" => r.extension = Some(a.value),
-        "feature"   => () // mk:TODO Not supported by vkxml.
-    }
-
-    match_elements!{attributes in events,
-        "comment" => r.elements.push(vkxml::ExtensionSpecificationElement::Notation(
-            parse_text_element(events),
-        )),
-        "enum" => r.elements.push(parse_extension_require_enum(attributes, events)),
-        "command" => r.elements.push(vkxml::ExtensionSpecificationElement::CommandReference(
-            parse_extension_require_ref(attributes, events),
-        )),
-        "type" => r.elements.push(vkxml::ExtensionSpecificationElement::DefinitionReference(
-            parse_extension_require_ref(attributes, events),
-        ))
-    }
-
-    r
-}
-
-fn parse_extension_require_enum<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::ExtensionSpecificationElement {
-    let mut name = vkxml::Identifier::new();
-    let mut notation = None;
-    let mut offset = None;
-    let mut negate = false;
-    let mut extends = None;
-    let mut number = None;
-    let hex = None;
-    let mut bitpos = None;
-    let c_expression = None;
-    let mut text = None;
-    let mut enumref = None;
-    let mut name_only = true;
-
-    for mut a in attributes {
-        let n = a.name.local_name.as_str();
-        if n != "name" {
-            name_only = false;
-        }
-        match n {
-            "name" => name = a.value,
-            "value" => {
-                if let Ok(val) = i32::from_str_radix(&a.value, 10) {
-                    number = Some(val);
-                } else if a.value.starts_with('"') && a.value.ends_with('"') {
-                    let end = a.value.len() - 1;
-                    a.value.remove(end);
-                    a.value.remove(0);
-                    text = Some(a.value);
-                } else {
-                    enumref = Some(a.value);
-                }
-            }
-            "offset" => offset = Some(usize::from_str_radix(&a.value, 10).unwrap()),
-            "dir" => {
-                if a.value.as_str() != "-" {
-                    panic!(
-                        "Unexpected value of attribute {:?}, expected \"-\", found {:?}",
-                        name, a.value
-                    );
-                }
-                negate = a.value.as_str() == "-";
-            }
-            "extends" => extends = Some(a.value),
-            "comment" => notation = Some(a.value),
-            "bitpos" => bitpos = Some(u32::from_str_radix(&a.value, 10).unwrap()),
-
-            "extnumber" => (), // mk:TODO Not supported by vkxml.
-            "alias" => (),     // mk:TODO Not supported by vkxml.
-
-            _ => panic!("Unexpected attributes {:?}", n),
-        }
-    }
-
-    consume_current_element(events);
-
-    if name_only {
-        vkxml::ExtensionSpecificationElement::EnumeratorReference(vkxml::NamedIdentifier {
-            name,
-            notation,
-        })
-    } else if let Some(extends) = extends {
-        vkxml::ExtensionSpecificationElement::Enum(vkxml::ExtensionEnum {
-            name,
-            number,
-            notation,
-            offset,
-            negate,
-            extends,
-            hex,
-            bitpos,
-            c_expression,
-        })
-    } else {
-        vkxml::ExtensionSpecificationElement::Constant(vkxml::ExtensionConstant {
-            name,
-            notation,
-            text,
-            enumref,
-            number,
-            hex,
-            bitpos,
-            c_expression,
-        })
-    }
-}
-
-fn parse_extension_require_ref<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::NamedIdentifier {
-    let mut r = vkxml::NamedIdentifier {
-        name: vkxml::Identifier::new(),
-        notation: None,
-    };
-
-    match_attributes!{a in attributes,
-        "name" => r.name = a.value
-    }
-
-    consume_current_element(events);
     r
 }
 
@@ -1637,6 +1443,220 @@ impl From<Tag> for vkxml::Tag {
             notation: None,
             author: orig.author,
             contact: orig.contact,
+        }
+    }
+}
+
+impl From<Extension> for vkxml::Extension {
+    fn from(mut orig: Extension) -> Self {
+        let mut disabled = false;
+        let mut match_api = None;
+        let supported = orig.supported.take();
+        match supported {
+            Some(text) => {
+                if text == "disabled" {
+                    disabled = true;
+                } else {
+                    match_api = Some(text);
+                }
+            }
+            None => (),
+        }
+
+        let mut elements = Vec::new();
+        for item in orig.items {
+            elements.push(item.into());
+        }
+
+        vkxml::Extension {
+            name: orig.name,
+            notation: orig.comment,
+            number: match orig.number {
+                Some(val) => val as i32,
+                None => 0,
+            },
+            disabled,
+            match_api,
+            ty: match orig.ext_type {
+                Some(text) => match text.as_str() {
+                    "instance" => Some(vkxml::ExtensionType::Instance),
+                    "device" => Some(vkxml::ExtensionType::Device),
+                    _ => panic!(
+                        "Unexpected value of type attribute on extension: {:?}",
+                        text
+                    ),
+                },
+                None => None,
+            },
+            define: orig.protect,
+            requires: orig.requires,
+            author: orig.author,
+            contact: orig.contact,
+            elements,
+        }
+    }
+}
+
+impl From<ExtensionItem> for vkxml::ExtensionElement {
+    fn from(orig: ExtensionItem) -> Self {
+        match orig {
+            ExtensionItem::Remove {
+                api,
+                profile,
+                comment,
+                items,
+            } => vkxml::ExtensionElement::Remove(vkxml::ExtensionSpecification {
+                profile,
+                notation: comment,
+                extension: None,
+                api,
+                elements: items.into_iter().filter_map(|i| i.into()).collect(),
+            }),
+
+            ExtensionItem::Require {
+                api,
+                profile,
+                extension,
+                comment,
+                items,
+                ..
+            } => vkxml::ExtensionElement::Require(vkxml::ExtensionSpecification {
+                profile,
+                notation: comment,
+                extension,
+                api,
+                elements: items.into_iter().filter_map(|i| i.into()).collect(),
+            }),
+        }
+    }
+}
+
+impl From<InterfaceItem> for Option<vkxml::ExtensionSpecificationElement> {
+    fn from(orig: InterfaceItem) -> Self {
+        match orig {
+            InterfaceItem::Comment(text) => {
+                Some(vkxml::ExtensionSpecificationElement::Notation(text))
+            }
+
+            InterfaceItem::Enum(e) => match e.spec {
+                EnumSpec::Alias { .. } => None,
+
+                EnumSpec::Offset {
+                    offset,
+                    extends,
+                    dir,
+                    ..
+                } => Some(vkxml::ExtensionSpecificationElement::Enum(
+                    vkxml::ExtensionEnum {
+                        name: e.name,
+                        number: None,
+                        notation: e.comment,
+                        offset: Some(offset as usize),
+                        negate: !dir,
+                        extends,
+                        hex: None,
+                        bitpos: None,
+                        c_expression: None,
+                    },
+                )),
+
+                EnumSpec::Bitpos { bitpos, extends } => {
+                    if let Some(extends) = extends {
+                        Some(vkxml::ExtensionSpecificationElement::Enum(
+                            vkxml::ExtensionEnum {
+                                name: e.name,
+                                number: None,
+                                notation: e.comment,
+                                offset: None,
+                                negate: false,
+                                extends,
+                                hex: None,
+                                bitpos: Some(bitpos as u32),
+                                c_expression: None,
+                            },
+                        ))
+                    } else {
+                        Some(vkxml::ExtensionSpecificationElement::Constant(
+                            vkxml::ExtensionConstant {
+                                name: e.name,
+                                notation: e.comment,
+                                text: None,
+                                enumref: None,
+                                number: None,
+                                hex: None,
+                                bitpos: Some(bitpos as u32),
+                                c_expression: None,
+                            },
+                        ))
+                    }
+                }
+
+                EnumSpec::Value { mut value, extends } => {
+                    let mut text = None;
+                    let mut number = None;
+                    let mut enumref = None;
+                    if let Ok(val) = i32::from_str_radix(&value, 10) {
+                        number = Some(val);
+                    } else if value.starts_with('"') && value.ends_with('"') {
+                        let end = value.len() - 1;
+                        value.remove(end);
+                        value.remove(0);
+                        text = Some(value);
+                    } else {
+                        enumref = Some(value);
+                    }
+
+                    if let Some(extends) = extends {
+                        Some(vkxml::ExtensionSpecificationElement::Enum(
+                            vkxml::ExtensionEnum {
+                                name: e.name,
+                                number,
+                                notation: e.comment,
+                                offset: None,
+                                negate: false,
+                                extends,
+                                hex: None,
+                                bitpos: None,
+                                c_expression: None,
+                            },
+                        ))
+                    } else {
+                        Some(vkxml::ExtensionSpecificationElement::Constant(
+                            vkxml::ExtensionConstant {
+                                name: e.name,
+                                notation: e.comment,
+                                text,
+                                enumref,
+                                number,
+                                hex: None,
+                                bitpos: None,
+                                c_expression: None,
+                            },
+                        ))
+                    }
+                }
+
+                EnumSpec::None => Some(vkxml::ExtensionSpecificationElement::EnumeratorReference(
+                    vkxml::NamedIdentifier {
+                        name: e.name,
+                        notation: e.comment,
+                    },
+                )),
+            },
+
+            InterfaceItem::Command { name, comment } => Some(
+                vkxml::ExtensionSpecificationElement::CommandReference(vkxml::NamedIdentifier {
+                    name,
+                    notation: comment,
+                }),
+            ),
+
+            InterfaceItem::Type { name, comment } => Some(
+                vkxml::ExtensionSpecificationElement::DefinitionReference(vkxml::NamedIdentifier {
+                    name,
+                    notation: comment,
+                }),
+            ),
         }
     }
 }

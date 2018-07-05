@@ -746,7 +746,10 @@ fn parse_extensions<R: Read>(
     RegistryItem::Extensions { comment, items }
 }
 
-fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Extension {
+pub fn parse_extension<R: Read>(
+    attributes: Vec<XmlAttribute>,
+    events: &mut XmlEvents<R>,
+) -> Extension {
     let mut name = None;
     let mut comment = None;
     let mut number = None;
@@ -891,13 +894,9 @@ fn parse_interface_item<R: Read>(
         "type" => {
             let mut name = None;
             let mut comment = None;
-            for a in attributes {
-                let n = a.name.local_name.as_str();
-                match n {
-                    "name" => name = Some(a.value),
-                    "comment" => comment = Some(a.value),
-                    _ => panic!("Unexpected attribute {:?}", name),
-                }
+            match_attributes!{a in attributes,
+                "name"    => name    = Some(a.value),
+                "comment" => comment = Some(a.value)
             }
             unwrap_attribute!(type, name);
             consume_current_element(events);
@@ -907,13 +906,9 @@ fn parse_interface_item<R: Read>(
         "command" => {
             let mut name = None;
             let mut comment = None;
-            for a in attributes {
-                let n = a.name.local_name.as_str();
-                match n {
-                    "name" => name = Some(a.value),
-                    "comment" => comment = Some(a.value),
-                    _ => panic!("Unexpected attribute {:?}", n),
-                }
+            match_attributes!{a in attributes,
+                "name"    => name    = Some(a.value),
+                "comment" => comment = Some(a.value)
             }
             unwrap_attribute!(type, name);
             consume_current_element(events);
