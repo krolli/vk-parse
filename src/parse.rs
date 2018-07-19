@@ -688,7 +688,7 @@ fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
     }
 }
 
-fn parse_feature<R: Read>(
+pub fn parse_feature<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> RegistryItem {
@@ -728,7 +728,7 @@ fn parse_feature<R: Read>(
     }
 }
 
-fn parse_extensions<R: Read>(
+pub fn parse_extensions<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> RegistryItem {
@@ -746,10 +746,7 @@ fn parse_extensions<R: Read>(
     RegistryItem::Extensions { comment, items }
 }
 
-pub fn parse_extension<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> Extension {
+fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Extension {
     let mut name = None;
     let mut comment = None;
     let mut number = None;

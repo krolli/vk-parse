@@ -1162,88 +1162,31 @@ fn parse_feature_vkxml<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
 ) -> vkxml::Feature {
-    let mut r = vkxml::Feature {
-        name: vkxml::Identifier::new(),
-        notation: None,
-        api: String::new(),
-        version: 0.0,
-        define: None,
-        elements: Vec::new(),
-    };
-
-    match_attributes!{a in attributes,
-        "api" => r.api = a.value,
-        "name" => r.name = a.value,
-        "comment" => r.notation = Some(a.value),
-        "number" => {
-            use std::str::FromStr;
-            r.version = f32::from_str(&a.value).unwrap();
-        }
+    let feature = parse_feature(attributes, events);
+    match feature {
+        RegistryItem::Feature {
+            api,
+            name,
+            number,
+            protect,
+            comment,
+            items,
+        } => vkxml::Feature {
+            name,
+            notation: comment,
+            api,
+            version: number,
+            define: protect,
+            elements: items
+                .into_iter()
+                .filter_map(|i| match i.into() {
+                    Some(v) => Some(vkxml::FeatureElement::Require(v)),
+                    None => None,
+                })
+                .collect(),
+        },
+        _ => panic!("Unexpected return value from parse_feature()."),
     }
-
-    match_elements!{attributes in events,
-        "require" => r.elements.push(vkxml::FeatureElement::Require(
-            parse_feature_require(attributes, events),
-        ))
-    }
-
-    r
-}
-
-fn parse_feature_require<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::FeatureSpecification {
-    let mut r = vkxml::FeatureSpecification {
-        profile: None,
-        notation: None,
-        extension: None,
-        elements: Vec::new(),
-    };
-
-    match_attributes!{a in attributes,
-        "comment" => r.notation = Some(a.value)
-    }
-
-    match_elements!{attributes in events,
-        "type" => r.elements.push(vkxml::FeatureReference::DefinitionReference(
-            parse_feature_require_ref(attributes, events),
-        )),
-        "enum" => r.elements.push(vkxml::FeatureReference::EnumeratorReference(
-            parse_feature_require_ref(attributes, events),
-        )),
-        "command" => r.elements.push(vkxml::FeatureReference::CommandReference(
-            parse_feature_require_ref(attributes, events),
-        )),
-        "comment" => r.elements.push(vkxml::FeatureReference::Notation(
-            parse_text_element(events),
-        ))
-    }
-
-    r
-}
-
-fn parse_feature_require_ref<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::NamedIdentifier {
-    let mut r = vkxml::NamedIdentifier {
-        name: vkxml::Identifier::new(),
-        notation: None,
-    };
-
-    match_attributes!{a in attributes,
-        "name"      => r.name     = a.value,
-        "comment"   => r.notation = Some(a.value),
-        "extends"   => (),   // mk:TODO Not supported by vkxml.
-        "extnumber" => (), // mk:TODO Not supported by vkxml.
-        "offset"    => (),    // mk:TODO Not supported by vkxml.
-        "bitpos"    => (),    // mk:TODO Not supported by vkxml.
-        "dir"       => ()        // mk:TODO Not supported by vkxml.
-    }
-
-    consume_current_element(events);
-    r
 }
 
 fn parse_extensions_vkxml<R: Read>(
@@ -1255,12 +1198,15 @@ fn parse_extensions_vkxml<R: Read>(
         elements: Vec::new(),
     };
 
-    match_attributes!{a in attributes,
-        "comment" => r.notation = Some(a.value)
-    }
-
-    match_elements!{attributes in events,
-        "extension" => r.elements.push(parse_extension(attributes, events).into())
+    match parse_extensions(attributes, events) {
+        RegistryItem::Extensions { comment, items } => {
+            r.notation = comment;
+            r.elements.reserve(items.len());
+            for item in items {
+                r.elements.push(item.into());
+            }
+        }
+        _ => panic!("Unexpected return value from parse_extensions()."),
     }
 
     r
@@ -1527,6 +1473,52 @@ impl From<ExtensionItem> for vkxml::ExtensionElement {
                 api,
                 elements: items.into_iter().filter_map(|i| i.into()).collect(),
             }),
+        }
+    }
+}
+
+impl From<ExtensionItem> for Option<vkxml::FeatureSpecification> {
+    fn from(orig: ExtensionItem) -> Self {
+        match orig {
+            ExtensionItem::Require {
+                profile,
+                comment,
+                extension,
+                items,
+                ..
+            } => Some(vkxml::FeatureSpecification {
+                profile,
+                notation: comment,
+                extension,
+                elements: items.into_iter().map(|i| i.into()).collect(),
+            }),
+            ExtensionItem::Remove { .. } => None,
+        }
+    }
+}
+
+impl From<InterfaceItem> for vkxml::FeatureReference {
+    fn from(orig: InterfaceItem) -> Self {
+        match orig {
+            InterfaceItem::Comment(v) => vkxml::FeatureReference::Notation(v),
+            InterfaceItem::Type { name, comment } => {
+                vkxml::FeatureReference::DefinitionReference(vkxml::NamedIdentifier {
+                    name,
+                    notation: comment,
+                })
+            }
+            InterfaceItem::Enum(e) => {
+                vkxml::FeatureReference::EnumeratorReference(vkxml::NamedIdentifier {
+                    name: e.name,
+                    notation: e.comment,
+                })
+            }
+            InterfaceItem::Command { name, comment } => {
+                vkxml::FeatureReference::CommandReference(vkxml::NamedIdentifier {
+                    name,
+                    notation: comment,
+                })
+            }
         }
     }
 }
