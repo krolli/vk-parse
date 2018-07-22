@@ -459,7 +459,7 @@ fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
     }
 }
 
-fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Command {
+pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Command {
     let mut name = None;
     let mut alias = None;
     let mut queues = None;

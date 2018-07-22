@@ -120,9 +120,24 @@ fn parse_registry_as_vkxml<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registr
 
         "commands" => {
             flush_enums(&mut enums, &mut registry.elements);
-            registry.elements.push(vkxml::RegistryElement::Commands(parse_commands_vkxml(
-                attributes, events,
-            )));
+            let mut r = vkxml::Commands {
+                notation: None,
+                elements: Vec::new(),
+            };
+
+            match_attributes!{a in attributes,
+                "comment" => r.notation = Some(a.value)
+            }
+
+            match_elements!{attributes in events,
+                "command" => {
+                    if let Some(cmd) = parse_command(attributes, events).into() {
+                        r.elements.push(cmd);
+                    }
+                }
+            }
+
+            registry.elements.push(vkxml::RegistryElement::Commands(r));
         },
 
         "feature" => {
@@ -1079,85 +1094,6 @@ fn parse_enum_unused<R: Read>(
     r
 }
 
-fn parse_commands_vkxml<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Commands {
-    let mut r = vkxml::Commands {
-        notation: None,
-        elements: Vec::new(),
-    };
-
-    match_attributes!{a in attributes,
-        "comment" => r.notation = Some(a.value)
-    }
-
-    match_elements!{attributes in events,
-        "command" => {
-            if let Some(cmd) = parse_command_vkxml(attributes, events) {
-                r.elements.push(cmd);
-            }
-        }
-    }
-
-    r
-}
-
-fn parse_command_vkxml<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> Option<vkxml::Command> {
-    let mut r = vkxml::Command {
-        name: vkxml::Identifier::new(),
-        notation: None,
-        return_type: new_field(),
-        param: Vec::new(),
-        external_sync: None,
-        renderpass: None,
-        cmdbufferlevel: None,
-        pipeline: None,
-        queues: None,
-    };
-
-    match_elements!{attributes in events,
-        "proto" => {
-            let mut proto = parse_type_struct_member(attributes, events);
-            r.name = proto.name.take().unwrap();
-            r.return_type = proto;
-        },
-        "param" => r.param.push(parse_type_struct_member(attributes, events)),
-        "implicitexternsyncparams" => {
-            for text in ChildrenDataIter::new(events) {
-                r.external_sync = Some(vkxml::ExternalSync { sync: text })
-            }
-        }
-    }
-
-    match_attributes!{a in attributes,
-        "successcodes" => r.return_type.successcodes = Some(a.value),
-        "errorcodes" => r.return_type.errorcodes = Some(a.value),
-        "queues" => r.queues = Some(a.value),
-        "cmdbufferlevel" => r.cmdbufferlevel = Some(a.value),
-        "comment" => r.notation = Some(a.value),
-        "pipeline" => match a.value.as_str() {
-            "graphics" => r.pipeline = Some(vkxml::Pipeline::Graphics),
-            "compute" => r.pipeline = Some(vkxml::Pipeline::Compute),
-            "transfer" => r.pipeline = Some(vkxml::Pipeline::Transfer),
-            _ => panic!("Unexpected attribute value {:?}", a.value),
-        },
-        "renderpass" => match a.value.as_str() {
-            "both" => r.renderpass = Some(vkxml::Renderpass::Both),
-            "inside" => r.renderpass = Some(vkxml::Renderpass::Inside),
-            "outside" => r.renderpass = Some(vkxml::Renderpass::Outside),
-            _ => panic!("Unexpected attribute value {:?}", a.value),
-        },
-        "name" => return None, // mk:TODO Not supported by vkxml.
-        "alias" => return None // mk:TODO Not supported by vkxml.
-    }
-
-    Some(r)
-}
-
 fn parse_feature_vkxml<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
@@ -1649,6 +1585,143 @@ impl From<InterfaceItem> for Option<vkxml::ExtensionSpecificationElement> {
                     notation: comment,
                 }),
             ),
+        }
+    }
+}
+
+impl From<Command> for Option<vkxml::Command> {
+    fn from(orig: Command) -> Self {
+        match orig {
+            Command::Alias { .. } => None,
+            Command::Definition {
+                comment,
+                proto,
+                successcodes,
+                errorcodes,
+                implicitexternsyncparams,
+                queues,
+                renderpass,
+                cmdbufferlevel,
+                pipeline,
+                params,
+                code,
+                ..
+            } => {
+                let mut r = vkxml::Command {
+                    name: proto.name,
+                    notation: comment,
+                    return_type: new_field(),
+                    param: Vec::new(),
+                    external_sync: None,
+                    cmdbufferlevel,
+                    pipeline: None,
+                    queues,
+                    renderpass: None,
+                };
+                match proto.type_name {
+                    Some(type_name) => r.return_type.basetype = type_name,
+                    None => (),
+                }
+                r.return_type.successcodes = successcodes;
+                r.return_type.errorcodes = errorcodes;
+                for text in implicitexternsyncparams {
+                    r.external_sync = Some(vkxml::ExternalSync { sync: text })
+                }
+                if let Some(renderpass) = renderpass {
+                    r.renderpass = match renderpass.as_str() {
+                        "both" => Some(vkxml::Renderpass::Both),
+                        "inside" => Some(vkxml::Renderpass::Inside),
+                        "outside" => Some(vkxml::Renderpass::Outside),
+                        _ => panic!("Unexpected renderpass value {:?}", renderpass),
+                    };
+                }
+                if let Some(pipeline) = pipeline {
+                    r.pipeline = match pipeline.as_str() {
+                        "graphics" => Some(vkxml::Pipeline::Graphics),
+                        "compute" => Some(vkxml::Pipeline::Compute),
+                        "transfer" => Some(vkxml::Pipeline::Transfer),
+                        _ => panic!("Unexpected pipeline value {:?}", pipeline),
+                    };
+                }
+
+                r.param.reserve(params.len());
+                for param in params {
+                    let mut p = new_field();
+                    p.name = Some(param.definition.name);
+                    if let Some(v) = param.definition.type_name {
+                        p.basetype = v;
+                    }
+                    p.optional = param.optional;
+                    p.sync = param.externsync;
+                    if let Some(mut value) = param.len {
+                        let null_terminated_part = ",null-terminated";
+                        if value.as_str().ends_with(null_terminated_part) {
+                            p.null_terminate = true;
+                            let start = value.len() - null_terminated_part.len();
+                            value.drain(start..);
+                        }
+
+                        if value.as_str() == "null-terminated" {
+                            p.null_terminate = true;
+                        } else {
+                            p.size = Some(value);
+                        }
+                        p.array = Some(vkxml::ArrayType::Dynamic);
+                    }
+                    r.param.push(p);
+                }
+
+                let mut tokens = CTokenIter::new(&code);
+                while let Some(token) = tokens.next() {
+                    if token == "(" {
+                        break;
+                    }
+                }
+
+                let mut is_array = false;
+                let mut array_size = String::new();
+                let mut param_idx = 0;
+                let mut ptr_count = 0;
+                let mut const_count = 0;
+                while let Some(token) = tokens.next() {
+                    match token {
+                        "," | ")" => {
+                            let p = &mut r.param[param_idx];
+                            if const_count > 0 {
+                                p.is_const = true;
+                            }
+                            if ptr_count == 2 {
+                                if const_count >= 1 {
+                                    p.reference = Some(vkxml::ReferenceType::PointerToConstPointer);
+                                } else {
+                                    p.reference = Some(vkxml::ReferenceType::PointerToPointer);
+                                }
+                            } else if ptr_count == 1 {
+                                p.reference = Some(vkxml::ReferenceType::Pointer);
+                            }
+                            param_idx += 1;
+                            ptr_count = 0;
+                            const_count = 0;
+                        }
+                        "*" => ptr_count += 1,
+                        "const" => const_count += 1,
+                        "struct" => r.param[param_idx].is_struct = true,
+                        "[" => is_array = true,
+                        "]" => {
+                            is_array = false;
+                            let p = &mut r.param[param_idx];
+                            p.array = Some(vkxml::ArrayType::Static);
+                            p.size = Some(array_size);
+                            array_size = String::new();
+                        }
+                        t => if is_array {
+                            array_size.push_str(t);
+                        },
+                    }
+                }
+
+                Some(r)
+            }
         }
     }
 }
