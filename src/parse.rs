@@ -341,7 +341,7 @@ fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) 
     }
 }
 
-fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> TypeItem {
+pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> TypeItem {
     let mut api = None;
     let mut alias = None;
     let mut requires = None;
