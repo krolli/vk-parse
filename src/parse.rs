@@ -774,7 +774,10 @@ pub fn parse_extension<R: Read>(
         "type"         => ext_type      = Some(a.value),
         "requires"     => requires      = Some(a.value),
         "requiresCore" => requires_core = Some(a.value),
-        "supported"    => supported     = Some(a.value)
+        "supported"    => supported     = Some(a.value),
+        "deprecatedby" => (),
+        "promotedto"   => (),
+        "obsoletedby"  => ()
     }
 
     match_elements!{attributes in events,
