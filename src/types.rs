@@ -174,6 +174,9 @@ pub struct Extension {
     pub requires: Option<String>,
     pub requires_core: Option<String>,
     pub supported: Option<String>, // mk:TODO StringGroup?
+    pub deprecatedby: Option<String>,
+    pub promotedto: Option<String>,
+    pub obsoletedby: Option<String>,
     pub items: Vec<ExtensionItem>,
 }
 

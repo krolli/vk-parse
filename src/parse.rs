@@ -762,6 +762,9 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     let mut requires = None;
     let mut requires_core = None;
     let mut supported = None;
+    let mut deprecatedby = None;
+    let mut promotedto = None;
+    let mut obsoletedby = None;
     let mut items = Vec::new();
 
     match_attributes!{a in attributes,
@@ -776,9 +779,9 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         "requires"     => requires      = Some(a.value),
         "requiresCore" => requires_core = Some(a.value),
         "supported"    => supported     = Some(a.value),
-        "deprecatedby" => (),
-        "promotedto"   => (),
-        "obsoletedby"  => ()
+        "deprecatedby" => deprecatedby  = Some(a.value),
+        "promotedto"   => promotedto    = Some(a.value),
+        "obsoletedby"  => obsoletedby   = Some(a.value)
     }
 
     match_elements!{attributes in events,
@@ -804,6 +807,9 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         requires,
         requires_core,
         supported,
+        deprecatedby,
+        promotedto,
+        obsoletedby,
         items,
     }
 }
