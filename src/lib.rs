@@ -6,6 +6,7 @@ extern crate xml;
 
 #[macro_use]
 mod parse;
+mod c;
 mod convert;
 mod types;
 

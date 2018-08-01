@@ -83,6 +83,7 @@ macro_rules! match_elements_combine_text {
                 XmlEvent::Characters(text) => $buffer.push_str(&text),
                 XmlEvent::Whitespace(text) => $buffer.push_str(&text),
                 XmlEvent::StartElement { name, .. } => {
+                    $buffer.push(' ');
                     let name = name.local_name.as_str();
                     match name {
                         $(
@@ -91,7 +92,10 @@ macro_rules! match_elements_combine_text {
                         _ => panic!("Unexpected element {:?}", name),
                     }
                 }
-                XmlEvent::EndElement { .. } => break,
+                XmlEvent::EndElement { .. } => {
+                    $buffer.push(' ');
+                    break;
+                },
                 _ => {}
             }
         }

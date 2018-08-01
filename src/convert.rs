@@ -1,10 +1,11 @@
-#![deny(dead_code)]
+#![allow(dead_code)]
 extern crate vkxml;
 extern crate xml;
 
 type XmlEvents<R> = xml::reader::Events<R>;
 type XmlAttribute = xml::attribute::OwnedAttribute;
 
+use c;
 use parse::*;
 use std;
 use std::io::Read;
@@ -197,6 +198,8 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                 contents,
                 alias,
                 parent,
+                returnedonly,
+                structextends,
                 ..
             } => {
                 let category = match category {
@@ -213,14 +216,36 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
 
                 match category.as_str() {
                     "include" => {
-                        let name = name.unwrap_or(String::new());
-                        let need_ext = !name.ends_with(".h");
-                        return Some(vkxml::DefinitionsElement::Include(vkxml::Include {
-                            name,
+                        let mut include = vkxml::Include {
+                            name: name.unwrap_or(String::new()),
                             notation: comment,
                             style: vkxml::IncludeStyle::Quote,
-                            need_ext,
-                        }));
+                            need_ext: false,
+                        };
+
+                        match contents {
+                            TypeContents::Code { code, markup } => {
+                                let mut iter = code.split_whitespace();
+                                let token = iter.next().unwrap();
+                                if token != "#include" {
+                                    panic!("Unexpected token {:?}", token);
+                                }
+                                let token = iter.next().unwrap();
+                                if token.starts_with('<') {
+                                    include.style = vkxml::IncludeStyle::Bracket;
+                                }
+                                for tag in markup {
+                                    match tag {
+                                        TypeCodeMarkup::Name(name) => include.name = name,
+                                        _ => (),
+                                    }
+                                }
+                            }
+                            _ => (),
+                        }
+
+                        include.need_ext = !include.name.ends_with(".h");
+                        return Some(vkxml::DefinitionsElement::Include(include));
                     }
 
                     "define" => {
@@ -339,35 +364,130 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                         ));
                     }
 
-                    "struct" => {
-                        return Some(vkxml::DefinitionsElement::Struct(vkxml::Struct {
-                            name: vkxml::Identifier::new(),
-                            notation: comment,
-                            is_return: false,
-                            extends: None,
-                            elements: Vec::new(),
-                        }))
-                    }
-
-                    "union" => {
-                        return Some(vkxml::DefinitionsElement::Union(vkxml::Union {
-                            name: vkxml::Identifier::new(),
-                            notation: comment,
-                            elements: Vec::new(),
-                        }))
-                    }
-
                     "funcpointer" => {
-                        return Some(vkxml::DefinitionsElement::FuncPtr(vkxml::FunctionPointer {
+                        let mut fnptr = vkxml::FunctionPointer {
                             name: vkxml::Identifier::new(),
                             notation: comment,
                             return_type: new_field(),
                             param: Vec::new(),
-                        }))
+                        };
+                        let code = match contents {
+                            TypeContents::Code { code, .. } => code,
+                            _ => panic!("Unexpected contents of handle {:?}", contents),
+                        };
+
+                        parse_type_funcptr(&mut fnptr, &code);
+                        return Some(vkxml::DefinitionsElement::FuncPtr(fnptr));
+                    }
+
+                    "struct" => {
+                        if alias.is_some() {
+                            return None;
+                        }
+                        let mut s = vkxml::Struct {
+                            name: name.unwrap_or(String::new()),
+                            notation: comment,
+                            is_return: returnedonly.unwrap_or(String::new()).as_str() == "true",
+                            extends: structextends,
+                            elements: Vec::new(),
+                        };
+                        match contents {
+                            TypeContents::Members(members) => for member in members {
+                                s.elements.push(member.into());
+                            },
+                            _ => {
+                                panic!("Unexpected contents of struct {:?}: {:?}", s.name, contents)
+                            }
+                        }
+
+                        return Some(vkxml::DefinitionsElement::Struct(s));
+                    }
+
+                    "union" => {
+                        let mut u = vkxml::Union {
+                            name: name.unwrap_or(String::new()),
+                            notation: comment,
+                            elements: Vec::new(),
+                        };
+                        match contents {
+                            TypeContents::Members(members) => for member in members {
+                                match member {
+                                    TypeMember::Comment(..) => (),
+                                    TypeMember::Definition { code, .. } => {
+                                        let mut iter = code.split_whitespace()
+                                            .flat_map(|s| c::TokenIter::new(s))
+                                            .peekable();
+
+                                        let mut field = parse_c_field(&mut iter).unwrap();
+                                        u.elements.push(field);
+                                    }
+                                }
+                            },
+                            _ => {
+                                panic!("Unexpected contents of union {:?}: {:?}", u.name, contents)
+                            }
+                        }
+
+                        return Some(vkxml::DefinitionsElement::Union(u));
                     }
 
                     _ => panic!("Unexpected category of type {:?}", category),
                 }
+            }
+        }
+    }
+}
+
+impl From<TypeMember> for vkxml::StructElement {
+    fn from(orig: TypeMember) -> Self {
+        match orig {
+            TypeMember::Comment(comment) => vkxml::StructElement::Notation(comment),
+            TypeMember::Definition {
+                len,
+                altlen,
+                externsync,
+                optional,
+                values,
+                code,
+                markup,
+                ..
+            } => {
+                let mut iter = code.split_whitespace()
+                    .flat_map(|s| c::TokenIter::new(s))
+                    .peekable();
+
+                let mut field = parse_c_field(&mut iter).unwrap();
+                field.c_size = altlen;
+                field.sync = externsync;
+                field.optional = optional;
+                field.type_enums = values;
+                match len {
+                    Some(mut value) => {
+                        let null_terminated_part = ",null-terminated";
+                        if value.as_str().ends_with(null_terminated_part) {
+                            field.null_terminate = true;
+                            let start = value.len() - null_terminated_part.len();
+                            value.drain(start..);
+                        }
+
+                        if value.as_str() == "null-terminated" {
+                            field.null_terminate = true;
+                        } else {
+                            field.size = Some(value);
+                        }
+                        field.array = Some(vkxml::ArrayType::Dynamic);
+                    }
+                    None => (),
+                }
+                for tag in markup {
+                    match tag {
+                        TypeMemberMarkup::Enum(value) => field.size_enumref = Some(value),
+                        TypeMemberMarkup::Comment(comment) => field.notation = Some(comment),
+                        _ => (),
+                    }
+                }
+
+                vkxml::StructElement::Member(field)
             }
         }
     }
@@ -504,7 +624,7 @@ fn process_define_code(r: &mut vkxml::Define, code: String) {
 
                     let mut name_len = 0;
                     while let Some(c) = current {
-                        if !CTokenIter::is_c_identifier_char(c) {
+                        if !c::is_c_identifier_char(c) {
                             break;
                         }
                         name_len += 1;
@@ -542,7 +662,7 @@ fn process_define_code(r: &mut vkxml::Define, code: String) {
 
                         let mut name_len = 0;
                         while let Some(c) = current {
-                            if !CTokenIter::is_c_identifier_char(c) {
+                            if !c::is_c_identifier_char(c) {
                                 break;
                             }
                             current = chars.next();
@@ -595,25 +715,9 @@ fn process_define_code(r: &mut vkxml::Define, code: String) {
     }
 }
 
-/*
-fn parse_type_funcptr<R: Read>(events: &mut XmlEvents<R>) -> vkxml::FunctionPointer {
-    // mk:TODO Full parsing.
-
-    let mut r = vkxml::FunctionPointer {
-        name: vkxml::Identifier::new(),
-        notation: None,
-        return_type: new_field(),
-        param: Vec::new(),
-    };
-
-    let mut buffer = String::new();
-    for text in ChildrenDataIter::new(events) {
-        buffer.push_str(&text);
-    }
-
-    let mut iter = buffer
-        .split_whitespace()
-        .flat_map(|s| CTokenIter::new(s))
+fn parse_type_funcptr(r: &mut vkxml::FunctionPointer, code: &str) {
+    let mut iter = code.split_whitespace()
+        .flat_map(|s| c::TokenIter::new(s))
         .peekable();
     let token = iter.next().unwrap();
     if token != "typedef" {
@@ -663,8 +767,6 @@ fn parse_type_funcptr<R: Read>(events: &mut XmlEvents<R>) -> vkxml::FunctionPoin
 
         r.param.push(field);
     }
-
-    r
 }
 
 fn parse_type_struct<R: Read>(
@@ -777,7 +879,7 @@ fn parse_type_struct_member<R: Read>(
             }
 
             XmlEvent::Characters(mut text) => {
-                let mut iter = text.split_whitespace().flat_map(|s| CTokenIter::new(s));
+                let mut iter = text.split_whitespace().flat_map(|s| c::TokenIter::new(s));
 
                 let mut array_start_curr = false;
                 for token in iter {
@@ -832,7 +934,6 @@ fn parse_type_struct_member<R: Read>(
     }
     r
 }
-*/
 
 fn parse_constants<R: Read>(
     attributes: Vec<XmlAttribute>,
@@ -1014,21 +1115,30 @@ fn parse_extensions_vkxml<R: Read>(
     r
 }
 
-/*
 fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
     iter: &mut std::iter::Peekable<I>,
 ) -> Option<vkxml::Field> {
     match iter.peek() {
         Some(&")") => return None,
+        None => return None,
         _ => (),
     }
 
     let mut r = new_field();
 
     let mut token = iter.next().unwrap();
-    if token == "const" {
-        r.is_const = true;
-        token = iter.next().unwrap();
+    loop {
+        match token {
+            "const" => {
+                r.is_const = true;
+                token = iter.next().unwrap();
+            }
+            "struct" => {
+                r.is_struct = true;
+                token = iter.next().unwrap();
+            }
+            _ => break,
+        }
     }
 
     r.basetype = String::from(token);
@@ -1036,8 +1146,31 @@ fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
     while let Some(&token) = iter.peek() {
         match token {
             "," | ")" | "(" | ";" => break,
-            "*" => r.reference = Some(vkxml::ReferenceType::Pointer),
-            _ => r.name = Some(String::from(token)),
+            "*" => match r.reference {
+                None => r.reference = Some(vkxml::ReferenceType::Pointer),
+                _ => (),
+            },
+            "const" => r.reference = Some(vkxml::ReferenceType::PointerToConstPointer),
+            "[" => {
+                r.array = Some(vkxml::ArrayType::Static);
+            }
+            "]" => {
+                break;
+            }
+            t => if r.array.is_some() {
+                let mut is_number = true;
+                for c in t.chars() {
+                    if c < '0' || '9' < c {
+                        is_number = false;
+                        break;
+                    }
+                }
+                if is_number {
+                    r.size = Some(String::from(t));
+                }
+            } else {
+                r.name = Some(String::from(token))
+            },
         }
         iter.next().unwrap();
     }
@@ -1045,6 +1178,7 @@ fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
     Some(r)
 }
 
+/*
 //--------------------------------------------------------------------------------------------------
 struct ChildrenDataIter<'a, R: Read + 'a> {
     events: &'a mut XmlEvents<R>,
@@ -1081,69 +1215,6 @@ impl<'a, R: Read> Iterator for ChildrenDataIter<'a, R> {
     }
 }
 */
-
-//--------------------------------------------------------------------------------------------------
-struct CTokenIter<'a> {
-    src: &'a str,
-}
-
-impl<'a> CTokenIter<'a> {
-    fn new(src: &'a str) -> Self {
-        Self { src }
-    }
-
-    fn is_c_identifier_char(c: char) -> bool {
-        if '0' <= c && c <= '9' {
-            true
-        } else if 'a' <= c && c <= 'z' {
-            true
-        } else if 'A' <= c && c <= 'Z' {
-            true
-        } else if c == '_' {
-            true
-        } else {
-            false
-        }
-    }
-
-    #[allow(dead_code)]
-    fn is_c_identifier(s: &str) -> bool {
-        for c in s.chars() {
-            if !CTokenIter::is_c_identifier_char(c) {
-                return false;
-            }
-        }
-        true
-    }
-}
-
-impl<'a> Iterator for CTokenIter<'a> {
-    type Item = &'a str;
-    fn next(&mut self) -> Option<&'a str> {
-        let mut iter = self.src.char_indices();
-        if let Some((_, c)) = iter.next() {
-            if CTokenIter::is_c_identifier_char(c) {
-                for (end_idx, c) in iter {
-                    if !CTokenIter::is_c_identifier_char(c) {
-                        let split = self.src.split_at(end_idx);
-                        self.src = split.1;
-                        return Some(split.0);
-                    }
-                }
-
-                let res = self.src;
-                self.src = "";
-                return Some(res);
-            } else {
-                let split = self.src.split_at(1);
-                self.src = split.1;
-                return Some(split.0);
-            }
-        }
-
-        None
-    }
-}
 
 //--------------------------------------------------------------------------------------------------
 impl From<RegistryItem> for vkxml::RegistryElement {
@@ -1539,7 +1610,7 @@ impl From<Command> for Option<vkxml::Command> {
                     r.param.push(p);
                 }
 
-                let mut tokens = CTokenIter::new(&code);
+                let mut tokens = c::TokenIter::new(&code);
                 while let Some(token) = tokens.next() {
                     if token == "(" {
                         break;
