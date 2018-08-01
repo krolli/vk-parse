@@ -1,7 +1,7 @@
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Registry(pub Vec<RegistryItem>);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RegistryItem {
     Comment(String),
     VendorIds {
@@ -47,28 +47,28 @@ pub enum RegistryItem {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VendorId {
     pub name: String,
     pub comment: Option<String>,
     pub id: u32,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Platform {
     pub name: String,
     pub comment: Option<String>,
     pub protect: String,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tag {
     pub name: String,
     pub author: String,
     pub contact: String,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TypeItem {
     Type {
         api: Option<String>,
@@ -85,7 +85,7 @@ pub enum TypeItem {
     Comment(String),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TypeContents {
     Code {
         code: String,
@@ -95,14 +95,14 @@ pub enum TypeContents {
     None,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TypeCodeMarkup {
     Name(String),
     Type(String),
     ApiEntry(String),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TypeMember {
     Comment(String),
     Definition {
@@ -118,14 +118,15 @@ pub enum TypeMember {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TypeMemberMarkup {
     Name(String),
     Type(String),
     Enum(String),
     Comment(String),
 }
-#[derive(Clone, Serialize, Deserialize)]
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     Alias {
         name: String,
@@ -149,7 +150,7 @@ pub enum Command {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommandParam {
     pub len: Option<String>,
     pub altlen: Option<String>,
@@ -160,7 +161,7 @@ pub struct CommandParam {
     pub definition: NameWithType,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Extension {
     pub name: String,
     pub comment: Option<String>,
@@ -176,7 +177,7 @@ pub struct Extension {
     pub items: Vec<ExtensionItem>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExtensionItem {
     Require {
         api: Option<String>,
@@ -194,7 +195,7 @@ pub enum ExtensionItem {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InterfaceItem {
     Comment(String),
     Type {
@@ -208,7 +209,7 @@ pub enum InterfaceItem {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EnumsItem {
     Enum(Enum),
     Unused {
@@ -220,7 +221,7 @@ pub enum EnumsItem {
     Comment(String),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EnumSpec {
     Alias {
         alias: String,
@@ -243,7 +244,7 @@ pub enum EnumSpec {
     None,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {
     pub name: String,
     pub comment: Option<String>,
@@ -252,7 +253,7 @@ pub struct Enum {
     pub spec: EnumSpec,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NameWithType {
     pub type_name: Option<String>,
     pub name: String,
