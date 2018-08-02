@@ -123,6 +123,8 @@ macro_rules! match_elements_combine_text {
 }
 
 //--------------------------------------------------------------------------------------------------
+
+/// Parses the Vulkan XML file into a Rust object.
 pub fn parse_file(path: &std::path::Path) -> Registry {
     let file = std::io::BufReader::new(std::fs::File::open(path).unwrap());
     let parser = xml::reader::ParserConfig::new().create_reader(file);
