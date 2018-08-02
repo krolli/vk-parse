@@ -203,7 +203,7 @@ pub struct CommandParam {
     pub len: Option<String>,
     /// Alternate description of the length of this parameter.
     pub altlen: Option<String>,
-    /// Whether tihs parameter must be externally synchronised by the app.
+    /// Whether this parameter must be externally synchronised by the app.
     pub externsync: Option<String>,
     /// Whether this parameter must have a non-null value.
     pub optional: Option<String>,
