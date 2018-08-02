@@ -1,6 +1,5 @@
 extern crate clap;
 extern crate ron;
-extern crate serde_xml_rs;
 extern crate vk_parse;
 extern crate vkxml;
 extern crate xml;

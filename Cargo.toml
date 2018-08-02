@@ -4,13 +4,9 @@ version = "0.1.0"
 authors = ["krolli <kroslakma@gmail.com>"]
 
 [dependencies]
-vkxml = {git = "https://github.com/terrybrashaw/vkxml"}
-xml-rs = "*"
-ron = "*"
-serde-xml-rs = {git = "https://github.com/RReverser/serde-xml-rs.git"}
-clap = "*"
-serde = "*"
-serde_derive = "*"
-
-[dev-dependencies]
-reqwest = "*"
+vkxml = "0.3"
+xml-rs = "0.8"
+ron = "0.3"
+clap = "2"
+serde = "1"
+serde_derive = "1"
