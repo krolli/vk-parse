@@ -12,3 +12,7 @@ This crate consists of a
 ```sh
 cargo run --release 'vulkan.xml' -o 'generated-file.ron'
 ```
+
+## License
+
+This software is dual-licensed under Apache-2.0/MIT, same as Rust itself.
