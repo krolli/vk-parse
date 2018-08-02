@@ -2,6 +2,11 @@
 name = "vk-parse"
 version = "0.1.0"
 authors = ["krolli <kroslakma@gmail.com>"]
+description = "Vulkan specification parser"
+readme = "README.md"
+license = "Apache-2.0/MIT"
+keywords = ["vulkan", "parser"]
+categories = ["parser-implementations", "rendering::graphics-api"]
 
 [dependencies]
 vkxml = {git = "https://github.com/terrybrashaw/vkxml"}
@@ -14,3 +19,7 @@ serde_derive = "*"
 
 [dev-dependencies]
 reqwest = "*"
+
+[badges]
+is-it-maintained-issue-resolution = { repository = "https://github.com/krolli/vk-parse/" }
+is-it-maintained-open-issues = { repository = "https://github.com/krolli/vk-parse/" }
