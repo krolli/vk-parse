@@ -35,6 +35,9 @@ fn new_field() -> vkxml::Field {
     }
 }
 
+/// Parses an file which must be the Vulkan registry XML in its standard format.
+///
+/// Returns a Rust representation of the registry.
 pub fn parse_file_as_vkxml(path: &std::path::Path) -> vkxml::Registry {
     let file = std::io::BufReader::new(std::fs::File::open(path).unwrap());
     let parser = xml::reader::ParserConfig::new().create_reader(file);
