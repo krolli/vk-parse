@@ -173,10 +173,7 @@ pub enum TypeMemberMarkup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     /// Indicates this function is an alias for another one.
-    Alias {
-        name: String,
-        alias: String,
-    },
+    Alias { name: String, alias: String },
     /// Defines a new Vulkan function.
     Definition {
         queues: Option<String>,
