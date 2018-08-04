@@ -417,7 +417,8 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                                 match member {
                                     TypeMember::Comment(..) => (),
                                     TypeMember::Definition { code, .. } => {
-                                        let mut iter = code.split_whitespace()
+                                        let mut iter = code
+                                            .split_whitespace()
                                             .flat_map(|s| c::TokenIter::new(s))
                                             .peekable();
 
@@ -455,7 +456,8 @@ impl From<TypeMember> for vkxml::StructElement {
                 markup,
                 ..
             } => {
-                let mut iter = code.split_whitespace()
+                let mut iter = code
+                    .split_whitespace()
                     .flat_map(|s| c::TokenIter::new(s))
                     .peekable();
 
@@ -719,7 +721,8 @@ fn process_define_code(r: &mut vkxml::Define, code: String) {
 }
 
 fn parse_type_funcptr(r: &mut vkxml::FunctionPointer, code: &str) {
-    let mut iter = code.split_whitespace()
+    let mut iter = code
+        .split_whitespace()
         .flat_map(|s| c::TokenIter::new(s))
         .peekable();
     let token = iter.next().unwrap();
