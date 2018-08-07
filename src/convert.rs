@@ -50,6 +50,20 @@ pub fn parse_file_as_vkxml(path: &std::path::Path) -> vkxml::Registry {
     panic!("Couldn't find 'registry' element in file {:?}", path);
 }
 
+/// Parses data from stream which must be the Vulkan registry XML in its standard format.
+///
+/// Returns a Rust representation of the registry.
+pub fn parse_stream_as_vkxml<T: std::io::Read>(stream: T) -> vkxml::Registry {
+    let parser = xml::reader::ParserConfig::new().create_reader(stream);
+
+    let mut events = parser.into_iter();
+    match_elements!{events,
+        "registry" => return parse_registry_as_vkxml(&mut events)
+    }
+
+    panic!("Couldn't find 'registry' element in stream");
+}
+
 fn parse_registry_as_vkxml<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registry {
     fn flush_enums(
         enums: &mut Option<vkxml::Enums>,

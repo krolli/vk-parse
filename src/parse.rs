@@ -137,6 +137,18 @@ pub fn parse_file(path: &std::path::Path) -> Registry {
     panic!("Couldn't find 'registry' element in file {:?}", path);
 }
 
+/// Parses the Vulkan XML file from stream into a Rust object.
+pub fn parse_stream<T: std::io::Read>(stream: T) -> Registry {
+    let parser = xml::reader::ParserConfig::new().create_reader(stream);
+
+    let mut events = parser.into_iter();
+    match_elements!{events,
+        "registry" => return parse_registry(&mut events)
+    }
+
+    panic!("Couldn't find 'registry' element in stream");
+}
+
 fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
     let mut registry = Registry(Vec::new());
 

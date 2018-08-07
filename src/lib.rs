@@ -17,5 +17,7 @@ mod convert;
 mod types;
 
 pub use convert::parse_file_as_vkxml;
+pub use convert::parse_stream_as_vkxml;
 pub use parse::parse_file;
+pub use parse::parse_stream;
 pub use types::*;
