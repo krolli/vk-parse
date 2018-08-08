@@ -14,3 +14,10 @@ matrix:
   fast_finish: true
 
 cache: cargo
+
+notifications:
+  email:
+    recipients:
+      - kroslakma@gmail.com
+    on_success: change
+    on_failure: always
