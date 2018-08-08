@@ -1,5 +1,4 @@
-
+/.hg
 /target
-**/*.rs.bk
-/test-data/*
+/test-data
 *.sublime-workspace
