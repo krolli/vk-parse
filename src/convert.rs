@@ -1,16 +1,9 @@
-#![allow(dead_code)]
 extern crate vkxml;
-extern crate xml;
-
-type XmlEvents<R> = xml::reader::Events<R>;
-type XmlAttribute = xml::attribute::OwnedAttribute;
 
 use c;
 use parse::*;
 use std;
-use std::io::Read;
 use types::*;
-use xml::reader::XmlEvent;
 
 //--------------------------------------------------------------------------------------------------
 fn new_field() -> vkxml::Field {
@@ -39,168 +32,196 @@ fn new_field() -> vkxml::Field {
 ///
 /// Returns a Rust representation of the registry.
 pub fn parse_file_as_vkxml(path: &std::path::Path) -> vkxml::Registry {
-    let file = std::io::BufReader::new(std::fs::File::open(path).unwrap());
-    let parser = xml::reader::ParserConfig::new().create_reader(file);
-
-    let mut events = parser.into_iter();
-    match_elements!{events,
-        "registry" => return parse_registry_as_vkxml(&mut events)
-    }
-
-    panic!("Couldn't find 'registry' element in file {:?}", path);
+    parse_file(path).into()
 }
 
 /// Parses data from stream which must be the Vulkan registry XML in its standard format.
 ///
 /// Returns a Rust representation of the registry.
 pub fn parse_stream_as_vkxml<T: std::io::Read>(stream: T) -> vkxml::Registry {
-    let parser = xml::reader::ParserConfig::new().create_reader(stream);
-
-    let mut events = parser.into_iter();
-    match_elements!{events,
-        "registry" => return parse_registry_as_vkxml(&mut events)
-    }
-
-    panic!("Couldn't find 'registry' element in stream");
+    parse_stream(stream).into()
 }
 
-fn parse_registry_as_vkxml<R: Read>(events: &mut XmlEvents<R>) -> vkxml::Registry {
-    fn flush_enums(
-        enums: &mut Option<vkxml::Enums>,
-        registry_elements: &mut Vec<vkxml::RegistryElement>,
-    ) {
-        if let Some(value) = enums.take() {
-            registry_elements.push(vkxml::RegistryElement::Enums(value));
+impl From<Registry> for vkxml::Registry {
+    fn from(orig: Registry) -> vkxml::Registry {
+        fn flush_enums(
+            enums: &mut Option<vkxml::Enums>,
+            registry_elements: &mut Vec<vkxml::RegistryElement>,
+        ) {
+            if let Some(value) = enums.take() {
+                registry_elements.push(vkxml::RegistryElement::Enums(value));
+            }
         }
-    }
 
-    let mut registry = vkxml::Registry {
-        elements: Vec::new(),
-    };
+        let mut registry = vkxml::Registry {
+            elements: Vec::new(),
+        };
 
-    let mut enums: Option<vkxml::Enums> = None;
+        let mut enums: Option<vkxml::Enums> = None;
 
-    match_elements!{attributes in events,
-        "comment" => {
-            let notation = parse_text_element(events);
-            if let Some(ref mut enums) = enums {
-                enums.elements.push(vkxml::EnumsElement::Notation(notation));
-            } else {
-                registry.elements.push(vkxml::RegistryElement::Notation(notation));
-            }
-        },
-
-        "vendorids" => {
-            flush_enums(&mut enums, &mut registry.elements);
-            registry.elements.push(parse_vendorids(attributes, events).into());
-        },
-
-        "tags" => {
-            flush_enums(&mut enums, &mut registry.elements);
-            registry.elements.push(parse_tags(attributes, events).into());
-        },
-
-        "types" => {
-            flush_enums(&mut enums, &mut registry.elements);
-            registry.elements.push(vkxml::RegistryElement::Definitions(parse_types_vkxml(
-                attributes, events,
-            )));
-        },
-
-        "enums" => {
-            let mut is_constant = true;
-            for a in attributes.iter() {
-                if a.name.local_name.as_str() == "type" {
-                    is_constant = false;
-                    break;
-                }
-            }
-
-            if is_constant {
-                flush_enums(&mut enums, &mut registry.elements);
-                registry.elements.push(vkxml::RegistryElement::Constants(parse_constants(
-                    attributes, events,
-                )));
-            } else {
-                let enumeration = parse_enumeration(attributes, events);
-                if let Some(ref mut enums) = enums {
-                    enums
-                        .elements
-                        .push(vkxml::EnumsElement::Enumeration(enumeration));
-                } else {
-                    enums = Some(vkxml::Enums {
-                        notation: None,
-                        elements: vec![vkxml::EnumsElement::Enumeration(enumeration)],
-                    });
-                }
-            }
-        },
-
-        "commands" => {
-            flush_enums(&mut enums, &mut registry.elements);
-            let mut r = vkxml::Commands {
-                notation: None,
-                elements: Vec::new(),
-            };
-
-            match_attributes!{a in attributes,
-                "comment" => r.notation = Some(a.value)
-            }
-
-            match_elements!{attributes in events,
-                "command" => {
-                    if let Some(cmd) = parse_command(attributes, events).into() {
-                        r.elements.push(cmd);
+        for item in orig.0 {
+            match item {
+                RegistryItem::Comment(comment) => {
+                    if let Some(ref mut enums) = enums {
+                        enums.elements.push(vkxml::EnumsElement::Notation(comment));
+                    } else {
+                        registry
+                            .elements
+                            .push(vkxml::RegistryElement::Notation(comment));
                     }
                 }
-            }
 
-            registry.elements.push(vkxml::RegistryElement::Commands(r));
-        },
+                RegistryItem::VendorIds { comment, items } => {
+                    flush_enums(&mut enums, &mut registry.elements);
+                    registry
+                        .elements
+                        .push(RegistryItem::VendorIds { comment, items }.into());
+                }
 
-        "feature" => {
-            flush_enums(&mut enums, &mut registry.elements);
-            registry.elements.push(vkxml::RegistryElement::Features(vkxml::Features {
-                elements: vec![parse_feature_vkxml(attributes, events)],
-            }));
-        },
+                RegistryItem::Tags { comment, items } => {
+                    flush_enums(&mut enums, &mut registry.elements);
+                    registry
+                        .elements
+                        .push(RegistryItem::Tags { comment, items }.into());
+                }
 
-        "extensions" => {
-            flush_enums(&mut enums, &mut registry.elements);
-            registry.elements.push(vkxml::RegistryElement::Extensions(parse_extensions_vkxml(
-                attributes, events,
-            )));
-        },
+                RegistryItem::Types { comment, items } => {
+                    flush_enums(&mut enums, &mut registry.elements);
+                    let mut elements = Vec::with_capacity(items.len());
+                    for item in items {
+                        if let Some(t) = item.into() {
+                            elements.push(t);
+                        }
+                    }
+                    registry.elements.push(vkxml::RegistryElement::Definitions(
+                        vkxml::Definitions {
+                            notation: comment,
+                            elements,
+                        },
+                    ));
+                }
 
-        "platforms" => consume_current_element(events) // mk:TODO Not supported by vkxml.
-    }
+                RegistryItem::Enums {
+                    name,
+                    kind,
+                    comment,
+                    items,
+                    ..
+                } => {
+                    match kind {
+                        None => {
+                            flush_enums(&mut enums, &mut registry.elements);
+                            let mut constants = vkxml::Constants {
+                                notation: comment,
+                                elements: Vec::with_capacity(items.len()),
+                            };
+                            for item in items {
+                                if let Some(e) = item.into() {
+                                    constants.elements.push(e);
+                                }
+                            }
+                            registry
+                                .elements
+                                .push(vkxml::RegistryElement::Constants(constants));
+                        }
+                        Some(kind) => {
+                            let enumeration = vkxml::Enumeration {
+                                name: name.unwrap_or(String::new()),
+                                notation: comment,
+                                purpose: if kind.as_str() == "bitmask" {
+                                    Some(vkxml::EnumerationPurpose::Bitmask)
+                                } else {
+                                    None
+                                },
+                                elements: {
+                                    let mut elements = Vec::with_capacity(items.len());
+                                    for item in items {
+                                        if let Some(val) = item.into() {
+                                            elements.push(val);
+                                        }
+                                    }
+                                    elements
+                                },
+                            };
+                            if let Some(ref mut enums) = enums {
+                                enums
+                                    .elements
+                                    .push(vkxml::EnumsElement::Enumeration(enumeration));
+                            } else {
+                                enums = Some(vkxml::Enums {
+                                    notation: None,
+                                    elements: vec![vkxml::EnumsElement::Enumeration(enumeration)],
+                                });
+                            }
+                        }
+                    }
+                }
 
-    registry
-}
+                RegistryItem::Commands { comment, items } => {
+                    flush_enums(&mut enums, &mut registry.elements);
+                    let mut r = vkxml::Commands {
+                        notation: comment,
+                        elements: Vec::with_capacity(items.len()),
+                    };
+                    for item in items {
+                        if let Some(cmd) = item.into() {
+                            r.elements.push(cmd);
+                        }
+                    }
+                    registry.elements.push(vkxml::RegistryElement::Commands(r));
+                }
 
-fn parse_types_vkxml<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Definitions {
-    let mut notation = None;
-    let mut elements = Vec::new();
+                RegistryItem::Feature {
+                    api,
+                    name,
+                    number,
+                    protect,
+                    comment,
+                    items,
+                } => {
+                    flush_enums(&mut enums, &mut registry.elements);
+                    registry
+                        .elements
+                        .push(vkxml::RegistryElement::Features(vkxml::Features {
+                            elements: vec![vkxml::Feature {
+                                name,
+                                notation: comment,
+                                api,
+                                version: number,
+                                define: protect,
+                                elements: items
+                                    .into_iter()
+                                    .filter_map(|i| match i.into() {
+                                        Some(v) => Some(vkxml::FeatureElement::Require(v)),
+                                        None => None,
+                                    })
+                                    .collect(),
+                            }],
+                        }));
+                }
 
-    match_attributes!{a in attributes,
-        "comment" => notation = Some(a.value)
-    }
+                RegistryItem::Extensions { comment, items } => {
+                    flush_enums(&mut enums, &mut registry.elements);
+                    registry
+                        .elements
+                        .push(vkxml::RegistryElement::Extensions(vkxml::Extensions {
+                            notation: comment,
+                            elements: {
+                                let mut elements = Vec::with_capacity(items.len());
+                                for item in items {
+                                    elements.push(item.into());
+                                }
+                                elements
+                            },
+                        }));
+                }
 
-    match_elements!{attributes in events,
-        "comment" => elements.push(vkxml::DefinitionsElement::Notation(parse_text_element(events))),
-        "type" => {
-            use parse::parse_type;
-            let t = parse_type(attributes, events);
-            if let Some(t) = t.into() {
-                elements.push(t);
+                RegistryItem::Platforms { .. } => (),
             }
         }
-    }
 
-    vkxml::Definitions { notation, elements }
+        registry
+    }
 }
 
 impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
@@ -789,184 +810,68 @@ fn parse_type_funcptr(r: &mut vkxml::FunctionPointer, code: &str) {
     }
 }
 
-fn parse_constants<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Constants {
-    let mut r = vkxml::Constants {
-        notation: None,
-        elements: Vec::new(),
-    };
-
-    match_attributes!{a in attributes,
-        "name"    => (),
-        "comment" => r.notation = Some(a.value)
-    }
-
-    while let Some(Ok(e)) = events.next() {
-        match e {
-            XmlEvent::StartElement { attributes, .. } => {
-                if let Some(c) = parse_constant(attributes, events) {
-                    r.elements.push(c);
-                }
-            }
-
-            XmlEvent::EndElement { .. } => break,
-            _ => (),
+impl From<EnumsItem> for Option<vkxml::Constant> {
+    fn from(orig: EnumsItem) -> Self {
+        match orig {
+            EnumsItem::Enum(e) => e.into(),
+            _ => None,
         }
     }
-
-    r
 }
 
-fn parse_enumeration<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Enumeration {
-    let mut r = vkxml::Enumeration {
-        name: String::new(),
-        notation: None,
-        purpose: None,
-        elements: Vec::new(),
-    };
-
-    match_attributes!{a in attributes,
-        "name" => r.name = a.value,
-        "type" => if a.value.as_str() == "bitmask" {
-            r.purpose = Some(vkxml::EnumerationPurpose::Bitmask);
-        } else {
-            assert_eq!(a.value.as_str(), "enum");
-        },
-        "comment" => r.notation = Some(a.value)
-    }
-
-    match_elements!{attributes in events,
-        "enum" => {
-            let constant = parse_constant(attributes, events).unwrap();
-            r.elements.push(vkxml::EnumerationElement::Enum(constant));
-        },
-        "comment" => {
-            let text = parse_text_element(events);
-            r.elements.push(vkxml::EnumerationElement::Notation(text));
-        },
-        "unused" => {
-            let unused_range = parse_enum_unused(attributes, events);
-            r.elements.push(vkxml::EnumerationElement::UnusedRange(unused_range));
-        }
-    }
-
-    r
-}
-
-fn parse_constant<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> Option<vkxml::Constant> {
-    let mut r = vkxml::Constant {
-        name: String::new(),
-        notation: None,
-        number: None,
-        hex: None,
-        bitpos: None,
-        c_expression: None,
-    };
-
-    match_attributes!{a in attributes,
-        "name" => r.name = a.value,
-        "value" => {
-            if let Ok(value) = i32::from_str_radix(&a.value, 10) {
-                r.number = Some(value);
-            } else if a.value.starts_with("0x") {
-                r.hex = Some(String::from(a.value.split_at(2).1))
+impl From<EnumsItem> for Option<vkxml::EnumerationElement> {
+    fn from(orig: EnumsItem) -> Self {
+        match orig {
+            EnumsItem::Enum(e) => if let Some(constant) = e.into() {
+                Some(vkxml::EnumerationElement::Enum(constant))
             } else {
-                r.c_expression = Some(a.value)
-            }
-        },
-        "bitpos" => r.bitpos = Some(u32::from_str_radix(&a.value, 10).unwrap()),
-        "comment" => r.notation = Some(a.value),
-        "alias" => {
-            // mk:TODO Not supported by vkxml.
-            consume_current_element(events);
-            return None;
+                None
+            },
+            EnumsItem::Unused {
+                start,
+                end,
+                ..
+            } => Some(vkxml::EnumerationElement::UnusedRange(vkxml::Range {
+                range_start: start as i32,
+                range_end: end.map(|v| v as i32),
+            })),
+            EnumsItem::Comment(comment) => Some(vkxml::EnumerationElement::Notation(comment)),
         }
     }
-
-    consume_current_element(events);
-    Some(r)
 }
 
-fn parse_enum_unused<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Range {
-    let mut r = vkxml::Range {
-        range_start: 0,
-        range_end: None,
-    };
-
-    println!("{:?}", attributes);
-    match_attributes!{a in attributes,
-        "start" => r.range_start = parse_integer(&a.value) as i32,
-        "end" => r.range_end = Some(parse_integer(&a.value) as i32),
-        "comment" => () // not supported by vkxml
-    }
-
-    consume_current_element(events);
-    r
-}
-
-fn parse_feature_vkxml<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Feature {
-    let feature = parse_feature(attributes, events);
-    match feature {
-        RegistryItem::Feature {
-            api,
-            name,
-            number,
-            protect,
-            comment,
-            items,
-        } => vkxml::Feature {
-            name,
-            notation: comment,
-            api,
-            version: number,
-            define: protect,
-            elements: items
-                .into_iter()
-                .filter_map(|i| match i.into() {
-                    Some(v) => Some(vkxml::FeatureElement::Require(v)),
-                    None => None,
-                })
-                .collect(),
-        },
-        _ => panic!("Unexpected return value from parse_feature()."),
-    }
-}
-
-fn parse_extensions_vkxml<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> vkxml::Extensions {
-    let mut r = vkxml::Extensions {
-        notation: None,
-        elements: Vec::new(),
-    };
-
-    match parse_extensions(attributes, events) {
-        RegistryItem::Extensions { comment, items } => {
-            r.notation = comment;
-            r.elements.reserve(items.len());
-            for item in items {
-                r.elements.push(item.into());
+impl From<Enum> for Option<vkxml::Constant> {
+    fn from(orig: Enum) -> Self {
+        match orig.spec {
+            EnumSpec::Bitpos { bitpos, .. } => Some(vkxml::Constant {
+                name: orig.name,
+                notation: orig.comment,
+                number: None,
+                hex: None,
+                bitpos: Some(bitpos as u32),
+                c_expression: None,
+            }),
+            EnumSpec::Value { value, .. } => {
+                let mut r = vkxml::Constant {
+                    name: orig.name,
+                    notation: orig.comment,
+                    number: None,
+                    hex: None,
+                    bitpos: None,
+                    c_expression: None,
+                };
+                if let Ok(value) = i32::from_str_radix(&value, 10) {
+                    r.number = Some(value);
+                } else if value.starts_with("0x") {
+                    r.hex = Some(String::from(value.split_at(2).1))
+                } else {
+                    r.c_expression = Some(value)
+                }
+                Some(r)
             }
+            _ => None,
         }
-        _ => panic!("Unexpected return value from parse_extensions()."),
     }
-
-    r
 }
 
 fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
@@ -1031,44 +936,6 @@ fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
 
     Some(r)
 }
-
-/*
-//--------------------------------------------------------------------------------------------------
-struct ChildrenDataIter<'a, R: Read + 'a> {
-    events: &'a mut XmlEvents<R>,
-    depth: usize,
-}
-
-impl<'a, R: Read> ChildrenDataIter<'a, R> {
-    fn new(events: &'a mut XmlEvents<R>) -> Self {
-        Self { events, depth: 1 }
-    }
-}
-
-impl<'a, R: Read> Iterator for ChildrenDataIter<'a, R> {
-    type Item = String;
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(Ok(e)) = self.events.next() {
-            match e {
-                XmlEvent::StartElement { .. } => self.depth += 1,
-                XmlEvent::EndElement { .. } => {
-                    self.depth -= 1;
-                    if self.depth == 0 {
-                        break;
-                    }
-                }
-
-                XmlEvent::Characters(text) => return Some(text),
-                XmlEvent::Whitespace(..) => (),
-
-                _ => panic!("Unexpected xml event {:?}", e),
-            }
-        }
-
-        None
-    }
-}
-*/
 
 //--------------------------------------------------------------------------------------------------
 impl From<RegistryItem> for vkxml::RegistryElement {
