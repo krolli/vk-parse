@@ -107,55 +107,53 @@ impl From<Registry> for vkxml::Registry {
                     comment,
                     items,
                     ..
-                } => {
-                    match kind {
-                        None => {
-                            flush_enums(&mut enums, &mut registry.elements);
-                            let mut constants = vkxml::Constants {
-                                notation: comment,
-                                elements: Vec::with_capacity(items.len()),
-                            };
-                            for item in items {
-                                if let Some(e) = item.into() {
-                                    constants.elements.push(e);
-                                }
+                } => match kind {
+                    None => {
+                        flush_enums(&mut enums, &mut registry.elements);
+                        let mut constants = vkxml::Constants {
+                            notation: comment,
+                            elements: Vec::with_capacity(items.len()),
+                        };
+                        for item in items {
+                            if let Some(e) = item.into() {
+                                constants.elements.push(e);
                             }
-                            registry
-                                .elements
-                                .push(vkxml::RegistryElement::Constants(constants));
                         }
-                        Some(kind) => {
-                            let enumeration = vkxml::Enumeration {
-                                name: name.unwrap_or(String::new()),
-                                notation: comment,
-                                purpose: if kind.as_str() == "bitmask" {
-                                    Some(vkxml::EnumerationPurpose::Bitmask)
-                                } else {
-                                    None
-                                },
-                                elements: {
-                                    let mut elements = Vec::with_capacity(items.len());
-                                    for item in items {
-                                        if let Some(val) = item.into() {
-                                            elements.push(val);
-                                        }
-                                    }
-                                    elements
-                                },
-                            };
-                            if let Some(ref mut enums) = enums {
-                                enums
-                                    .elements
-                                    .push(vkxml::EnumsElement::Enumeration(enumeration));
+                        registry
+                            .elements
+                            .push(vkxml::RegistryElement::Constants(constants));
+                    }
+                    Some(kind) => {
+                        let enumeration = vkxml::Enumeration {
+                            name: name.unwrap_or(String::new()),
+                            notation: comment,
+                            purpose: if kind.as_str() == "bitmask" {
+                                Some(vkxml::EnumerationPurpose::Bitmask)
                             } else {
-                                enums = Some(vkxml::Enums {
-                                    notation: None,
-                                    elements: vec![vkxml::EnumsElement::Enumeration(enumeration)],
-                                });
-                            }
+                                None
+                            },
+                            elements: {
+                                let mut elements = Vec::with_capacity(items.len());
+                                for item in items {
+                                    if let Some(val) = item.into() {
+                                        elements.push(val);
+                                    }
+                                }
+                                elements
+                            },
+                        };
+                        if let Some(ref mut enums) = enums {
+                            enums
+                                .elements
+                                .push(vkxml::EnumsElement::Enumeration(enumeration));
+                        } else {
+                            enums = Some(vkxml::Enums {
+                                notation: None,
+                                elements: vec![vkxml::EnumsElement::Enumeration(enumeration)],
+                            });
                         }
                     }
-                }
+                },
 
                 RegistryItem::Commands { comment, items } => {
                     flush_enums(&mut enums, &mut registry.elements);
@@ -827,14 +825,12 @@ impl From<EnumsItem> for Option<vkxml::EnumerationElement> {
             } else {
                 None
             },
-            EnumsItem::Unused {
-                start,
-                end,
-                ..
-            } => Some(vkxml::EnumerationElement::UnusedRange(vkxml::Range {
-                range_start: start as i32,
-                range_end: end.map(|v| v as i32),
-            })),
+            EnumsItem::Unused { start, end, .. } => {
+                Some(vkxml::EnumerationElement::UnusedRange(vkxml::Range {
+                    range_start: start as i32,
+                    range_end: end.map(|v| v as i32),
+                }))
+            }
             EnumsItem::Comment(comment) => Some(vkxml::EnumerationElement::Notation(comment)),
         }
     }
