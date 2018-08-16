@@ -3,65 +3,34 @@
 /// The registry contains all the information contained in a certain version
 /// of the Vulkan specification, stored within a programmer-accessible format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Registry(pub Vec<RegistryItem>);
+pub struct Registry(pub Vec<RegistryChild>);
 
 /// An element of the Vulkan registry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RegistryItem {
+pub enum RegistryChild {
     /// Comments are human-readable strings which contain registry meta-data.
     Comment(String),
     /// IDs of all known Vulkan vendors.
-    VendorIds {
-        comment: Option<String>,
-        items: Vec<VendorId>,
-    },
+    VendorIds(VendorIds),
     /// List of supported Vulkan platforms.
-    Platforms {
-        comment: Option<String>,
-        items: Vec<Platform>,
-    },
+    Platforms(Platforms),
     /// Known extension tags.
-    Tags {
-        comment: Option<String>,
-        items: Vec<Tag>,
-    },
+    Tags(Tags),
     /// Type definitions.
     ///
     /// Unlike OpenGL, Vulkan is a strongly-typed API.
-    Types {
-        comment: Option<String>,
-        items: Vec<TypeItem>,
-    },
+    Types(Types),
     /// Enum definitions.
-    Enums {
-        name: Option<String>,
-        kind: Option<String>,
-        start: Option<i64>,
-        end: Option<i64>,
-        vendor: Option<String>,
-        comment: Option<String>,
-        items: Vec<EnumsItem>,
-    },
+    Enums(Enums),
     /// Commands are the Vulkan API's name for functions.
-    Commands {
-        comment: Option<String>,
-        items: Vec<Command>,
-    },
+    Commands(Commands),
     /// Feature level of the API, such as Vulkan 1.0 or 1.1
-    Feature {
-        api: String,
-        name: String,
-        number: f32,
-        protect: Option<String>,
-        comment: Option<String>,
-        items: Vec<ExtensionItem>,
-    },
+    Feature(Feature),
     /// Container for all published Vulkan specification extensions.
-    Extensions {
-        comment: Option<String>,
-        items: Vec<Extension>,
-    },
+    Extensions(Extensions),
 }
+
+pub type VendorIds = CommentedChildren<VendorId>;
 
 /// Unique identifier for a Vulkan vendor.
 ///
@@ -77,6 +46,8 @@ pub struct VendorId {
     pub id: u32,
 }
 
+pub type Platforms = CommentedChildren<Platform>;
+
 /// A platform refers to a windowing system which Vulkan can use.
 ///
 /// Most operating systems will have only one corresponding platform,
@@ -90,6 +61,8 @@ pub struct Platform {
     /// C macro name which is used to guard platform-specific definitions.
     pub protect: String,
 }
+
+pub type Tags = CommentedChildren<Tag>;
 
 /// Tags are the little suffixes attached to extension names or items, indicating the author.
 ///
@@ -106,33 +79,41 @@ pub struct Tag {
     pub contact: String,
 }
 
+pub type Types = CommentedChildren<TypesChild>;
+
 /// An item making up a type definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TypeItem {
-    Type {
-        api: Option<String>,
-        alias: Option<String>,
-        requires: Option<String>,
-        name: Option<String>,
-        category: Option<String>,
-        parent: Option<String>,
-        returnedonly: Option<String>,
-        structextends: Option<String>,
-        comment: Option<String>,
-        contents: TypeContents,
-    },
+pub enum TypesChild {
+    Type(Type),
     Comment(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Type {
+    pub name: Option<String>,
+    pub alias: Option<String>,
+    pub api: Option<String>,
+    pub requires: Option<String>,
+    pub category: Option<String>,
+    pub comment: Option<String>,
+    pub parent: Option<String>,
+    pub returnedonly: Option<String>,
+    pub structextends: Option<String>,
+    pub spec: TypeSpec,
 }
 
 /// The contents of a type definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TypeContents {
-    Code {
-        code: String,
-        markup: Vec<TypeCodeMarkup>,
-    },
+pub enum TypeSpec {
+    Code(TypeCode),
     Members(Vec<TypeMember>),
     None,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypeCode {
+    pub code: String,
+    pub markup: Vec<TypeCodeMarkup>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,17 +129,20 @@ pub enum TypeMember {
     /// Human-readable comment.
     Comment(String),
     /// A structure field definition.
-    Definition {
-        len: Option<String>,
-        altlen: Option<String>,
-        externsync: Option<String>,
-        optional: Option<String>,
-        noautovalidity: Option<String>,
-        validextensionstructs: Option<String>,
-        values: Option<String>,
-        code: String,
-        markup: Vec<TypeMemberMarkup>,
-    },
+    Definition(TypeMemberDefinition),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypeMemberDefinition {
+    pub len: Option<String>,
+    pub altlen: Option<String>,
+    pub externsync: Option<String>,
+    pub optional: Option<String>,
+    pub noautovalidity: Option<String>,
+    pub validextensionstructs: Option<String>,
+    pub values: Option<String>,
+    pub code: String,
+    pub markup: Vec<TypeMemberMarkup>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,28 +153,110 @@ pub enum TypeMemberMarkup {
     Comment(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Enums {
+    pub name: Option<String>,
+    pub kind: Option<String>,
+    pub start: Option<i64>,
+    pub end: Option<i64>,
+    pub vendor: Option<String>,
+    pub comment: Option<String>,
+    pub children: Vec<EnumsChild>,
+}
+
+/// An item which forms an enum.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EnumsChild {
+    /// Actual named enum.
+    Enum(Enum),
+    /// An unused range of enum values.
+    Unused(Unused),
+    /// Human-readable comment.
+    Comment(String),
+}
+
+/// An unused range of enum values.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Unused {
+    /// Beginning of the range.
+    pub start: i64,
+    /// Ending value of the range, if any.
+    pub end: Option<i64>,
+    /// Vendor who reserved this range.
+    pub vendor: Option<String>,
+    /// Human-readable description.
+    pub comment: Option<String>,
+}
+
+/// An item of an enumeration type.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Enum {
+    /// Name of this enum.
+    pub name: String,
+    /// Human-readable description.
+    pub comment: Option<String>,
+    pub type_suffix: Option<String>,
+    pub api: Option<String>,
+    pub spec: EnumSpec,
+}
+
+/// An enum specifier, which assigns a value to the enum.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EnumSpec {
+    Alias {
+        alias: String,
+        extends: Option<String>,
+    },
+    Offset {
+        offset: i64,
+        extends: String,
+        extnumber: Option<i64>,
+        dir: bool,
+    },
+    /// Indicates an enum which is a bit flag.
+    Bitpos {
+        /// The bit to be set.
+        bitpos: i64,
+        /// Which structure this enum extends.
+        extends: Option<String>,
+    },
+    /// An enum value.
+    Value {
+        /// Hard coded value for an enum.
+        value: String, // rnc says this is an Integer, but validates it as text, and that's what it sometimes really is.
+        /// Which structure this enum extends.
+        extends: Option<String>,
+    },
+    None,
+}
+
+pub type Commands = CommentedChildren<Command>;
+
 /// A command is just a Vulkan function.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     /// Indicates this function is an alias for another one.
     Alias { name: String, alias: String },
     /// Defines a new Vulkan function.
-    Definition {
-        queues: Option<String>,
-        successcodes: Option<String>,
-        errorcodes: Option<String>,
-        renderpass: Option<String>,
-        cmdbufferlevel: Option<String>,
-        pipeline: Option<String>,
-        comment: Option<String>,
-        proto: NameWithType,
-        params: Vec<CommandParam>,
-        alias: Option<String>,
-        description: Option<String>,
-        implicitexternsyncparams: Vec<String>,
+    Definition(CommandDefinition),
+}
 
-        code: String,
-    },
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandDefinition {
+    pub queues: Option<String>,
+    pub successcodes: Option<String>,
+    pub errorcodes: Option<String>,
+    pub renderpass: Option<String>,
+    pub cmdbufferlevel: Option<String>,
+    pub pipeline: Option<String>,
+    pub comment: Option<String>,
+    pub proto: NameWithType,
+    pub params: Vec<CommandParam>,
+    pub alias: Option<String>,
+    pub description: Option<String>,
+    pub implicitexternsyncparams: Vec<String>,
+
+    pub code: String,
 }
 
 /// Parameter for this Vulkan function.
@@ -210,6 +276,20 @@ pub struct CommandParam {
     /// The definition of this parameter.
     pub definition: NameWithType,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Feature {
+    pub api: String,
+    pub name: String,
+    pub number: f32,
+    pub protect: Option<String>,
+    pub comment: Option<String>,
+    pub children: Vec<FeatureChild>,
+}
+
+pub type FeatureChild = ExtensionChild;
+
+pub type Extensions = CommentedChildren<Extension>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Extension {
@@ -236,14 +316,14 @@ pub struct Extension {
     pub promotedto: Option<String>,
     pub obsoletedby: Option<String>,
     /// The items which make up this extension.
-    pub items: Vec<ExtensionItem>,
+    pub children: Vec<ExtensionChild>,
 }
 
 /// A part of an extension declaration.
 ///
 /// Extensions either include functionality from the spec, or remove some functionality.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ExtensionItem {
+pub enum ExtensionChild {
     /// Indicates the items which this extension requires to work.
     Require {
         api: Option<String>,
@@ -281,70 +361,14 @@ pub enum InterfaceItem {
     },
 }
 
-/// An item which forms an enum.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum EnumsItem {
-    /// Actual named enum.
-    Enum(Enum),
-    /// An unused range of enum values.
-    Unused {
-        /// Beginning of the range.
-        start: i64,
-        /// Ending value of the range, if any.
-        end: Option<i64>,
-        /// Vendor who reserved this range.
-        vendor: Option<String>,
-        /// Human-readable description.
-        comment: Option<String>,
-    },
-    /// Human-readable comment.
-    Comment(String),
-}
-
-/// An enum specifier, which assigns a value to the enum.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum EnumSpec {
-    Alias {
-        alias: String,
-        extends: Option<String>,
-    },
-    Offset {
-        offset: i64,
-        extends: String,
-        extnumber: Option<i64>,
-        dir: bool,
-    },
-    /// Indicates an enum which is a bit flag.
-    Bitpos {
-        /// The bit to be set.
-        bitpos: i64,
-        /// Which structure this enum extends.
-        extends: Option<String>,
-    },
-    /// An enum value.
-    Value {
-        /// Hard coded value for an enum.
-        value: String, // rnc says this is an Integer, but validates it as text, and that's what it sometimes really is.
-        /// Which structure this enum extends.
-        extends: Option<String>,
-    },
-    None,
-}
-
-/// An item of an enumeration type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Enum {
-    /// Name of this enum.
-    pub name: String,
-    /// Human-readable description.
-    pub comment: Option<String>,
-    pub type_suffix: Option<String>,
-    pub api: Option<String>,
-    pub spec: EnumSpec,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NameWithType {
     pub type_name: Option<String>,
     pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommentedChildren<T> {
+    pub comment: Option<String>,
+    pub children: Vec<T>,
 }

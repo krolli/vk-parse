@@ -153,38 +153,38 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
     let mut registry = Registry(Vec::new());
 
     match_elements!{attributes in events,
-        "comment" => registry.0.push(RegistryItem::Comment(parse_text_element(events))),
+        "comment" => registry.0.push(RegistryChild::Comment(parse_text_element(events))),
         "vendorids" => registry.0.push(parse_vendorids(attributes, events)),
         "platforms" => {
             let mut comment = None;
-            let mut items = Vec::new();
+            let mut children = Vec::new();
 
             match_attributes!{a in attributes,
                 "comment" => comment = Some(a.value)
             }
 
             match_elements!{attributes in events,
-                "platform" => items.push(parse_platform(attributes, events))
+                "platform" => children.push(parse_platform(attributes, events))
             }
 
-            registry.0.push(RegistryItem::Platforms { comment, items });
+            registry.0.push(RegistryChild::Platforms(Platforms { comment, children }));
         },
 
         "tags" => registry.0.push(parse_tags(attributes, events)),
         "types" => {
             let mut comment = None;
-            let mut items = Vec::new();
+            let mut children = Vec::new();
             match_attributes!{a in attributes,
                 "comment" => comment = Some(a.value)
             }
             match_elements!{attributes in events,
-                "comment" => items.push(TypeItem::Comment(parse_text_element(events))),
-                "type" => items.push(parse_type(attributes, events))
+                "comment" => children.push(TypesChild::Comment(parse_text_element(events))),
+                "type" => children.push(parse_type(attributes, events))
             }
-            registry.0.push(RegistryItem::Types{
+            registry.0.push(RegistryChild::Types(Types{
                 comment,
-                items
-            });
+                children
+            }));
         },
         "enums" => {
             let mut name = None;
@@ -193,7 +193,7 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
             let mut end = None;
             let mut vendor = None;
             let mut comment = None;
-            let mut items = Vec::new();
+            let mut children = Vec::new();
             match_attributes!{a in attributes,
                 "name"    => name    = Some(a.value),
                 "type"    => kind    = Some(a.value),
@@ -203,7 +203,7 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
                 "comment" => comment = Some(a.value)
             }
             match_elements!{attributes in events,
-                "enum" => items.push(EnumsItem::Enum(parse_enum(attributes, events))),
+                "enum" => children.push(EnumsChild::Enum(parse_enum(attributes, events))),
                 "unused" => {
                     let mut start = None;
                     let mut end = None;
@@ -219,29 +219,29 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
                     unwrap_attribute!(unused, start);
                     let start = parse_integer(&start);
                     let end = end.map(|val| parse_integer(&val));
-                    items.push(EnumsItem::Unused{start, end, vendor, comment});
+                    children.push(EnumsChild::Unused(Unused{start, end, vendor, comment}));
                 },
-                "comment" => items.push(EnumsItem::Comment(parse_text_element(events)))
+                "comment" => children.push(EnumsChild::Comment(parse_text_element(events)))
             }
 
             let start = start.map(|val| parse_integer(&val));
             let end = end.map(|val| parse_integer(&val));
 
-            registry.0.push(RegistryItem::Enums{ name, kind, start, end, vendor, comment, items });
+            registry.0.push(RegistryChild::Enums(Enums{ name, kind, start, end, vendor, comment, children }));
         },
         "commands" => {
             let mut comment = None;
-            let mut items = Vec::new();
+            let mut children = Vec::new();
 
             match_attributes!{a in attributes,
                 "comment" => comment = Some(a.value)
             }
 
             match_elements!{attributes in events,
-                "command" => items.push(parse_command(attributes, events))
+                "command" => children.push(parse_command(attributes, events))
             }
 
-            registry.0.push(RegistryItem::Commands{comment, items});
+            registry.0.push(RegistryChild::Commands(Commands{comment, children}));
         },
         "feature" => {
             registry.0.push(parse_feature(attributes, events));
@@ -255,19 +255,19 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
 pub fn parse_vendorids<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> RegistryItem {
+) -> RegistryChild {
     let mut comment = None;
-    let mut items = Vec::new();
+    let mut children = Vec::new();
 
     match_attributes!{a in attributes,
         "comment" => comment = Some(a.value)
     }
 
     match_elements!{attributes in events,
-        "vendorid" => items.push(parse_vendorid(attributes, events))
+        "vendorid" => children.push(parse_vendorid(attributes, events))
     }
 
-    RegistryItem::VendorIds { comment, items }
+    RegistryChild::VendorIds(VendorIds { comment, children })
 }
 
 fn parse_vendorid<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> VendorId {
@@ -320,19 +320,19 @@ fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
 pub fn parse_tags<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> RegistryItem {
+) -> RegistryChild {
     let mut comment = None;
-    let mut items = Vec::new();
+    let mut children = Vec::new();
 
     match_attributes!{a in attributes,
         "comment" => comment = Some(a.value)
     }
 
     match_elements!{attributes in events,
-        "tag" => items.push(parse_tag(attributes, events))
+        "tag" => children.push(parse_tag(attributes, events))
     }
 
-    RegistryItem::Tags { comment, items }
+    RegistryChild::Tags(Tags { comment, children })
 }
 
 fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Tag {
@@ -359,7 +359,7 @@ fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) 
     }
 }
 
-pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> TypeItem {
+pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> TypesChild {
     let mut api = None;
     let mut alias = None;
     let mut requires = None;
@@ -427,7 +427,7 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
                     markup.push(TypeMemberMarkup::Comment(text));
                 }
             }
-            members.push(TypeMember::Definition {
+            members.push(TypeMember::Definition(TypeMemberDefinition {
                 len,
                 altlen,
                 externsync,
@@ -437,7 +437,7 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
                 values,
                 code,
                 markup,
-            })
+            }))
         },
         "comment" => members.push(TypeMember::Comment(parse_text_element(events))),
         "name" => {
@@ -457,7 +457,7 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
         }
     }
 
-    TypeItem::Type {
+    TypesChild::Type(Type {
         api,
         alias,
         requires,
@@ -467,14 +467,14 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
         returnedonly,
         structextends,
         comment,
-        contents: if members.len() > 0 {
-            TypeContents::Members(members)
+        spec: if members.len() > 0 {
+            TypeSpec::Members(members)
         } else if code.len() > 0 {
-            TypeContents::Code { code, markup }
+            TypeSpec::Code(TypeCode { code, markup })
         } else {
-            TypeContents::None
+            TypeSpec::None
         },
-    }
+    })
 }
 
 pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Command {
@@ -589,7 +589,7 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
         }
         code.push_str(");");
 
-        Command::Definition {
+        Command::Definition(CommandDefinition {
             queues,
             successcodes,
             errorcodes,
@@ -606,7 +606,7 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
             description,
             implicitexternsyncparams,
             code,
-        }
+        })
     }
 }
 
@@ -709,13 +709,13 @@ fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
 pub fn parse_feature<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> RegistryItem {
+) -> RegistryChild {
     let mut api = None;
     let mut name = None;
     let mut number = None;
     let mut protect = None;
     let mut comment = None;
-    let mut items = Vec::new();
+    let mut children = Vec::new();
 
     match_attributes!{a in attributes,
         "api"     => api     = Some(a.value),
@@ -726,8 +726,8 @@ pub fn parse_feature<R: Read>(
     }
 
     match_elements!{attributes in events,
-        "require" => items.push(parse_extension_item_require(attributes, events)),
-        "remove"  => items.push(parse_extension_item_remove(attributes, events))
+        "require" => children.push(parse_extension_item_require(attributes, events)),
+        "remove"  => children.push(parse_extension_item_remove(attributes, events))
     }
 
     unwrap_attribute!(feature, api);
@@ -736,32 +736,32 @@ pub fn parse_feature<R: Read>(
 
     let number = f32::from_str(&number).unwrap();
 
-    RegistryItem::Feature {
+    RegistryChild::Feature(Feature {
         api,
         name,
         number,
         protect,
         comment,
-        items,
-    }
+        children,
+    })
 }
 
 pub fn parse_extensions<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> RegistryItem {
+) -> RegistryChild {
     let mut comment = None;
-    let mut items = Vec::new();
+    let mut children = Vec::new();
 
     match_attributes!{a in attributes,
         "comment" => comment = Some(a.value)
     }
 
     match_elements!{attributes in events,
-        "extension" => items.push(parse_extension(attributes, events))
+        "extension" => children.push(parse_extension(attributes, events))
     }
 
-    RegistryItem::Extensions { comment, items }
+    RegistryChild::Extensions(Extensions { comment, children })
 }
 
 fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Extension {
@@ -779,7 +779,7 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     let mut deprecatedby = None;
     let mut promotedto = None;
     let mut obsoletedby = None;
-    let mut items = Vec::new();
+    let mut children = Vec::new();
 
     match_attributes!{a in attributes,
         "name"         => name          = Some(a.value),
@@ -799,8 +799,8 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     }
 
     match_elements!{attributes in events,
-        "require" => items.push(parse_extension_item_require(attributes, events)),
-        "remove" => items.push(parse_extension_item_remove(attributes, events))
+        "require" => children.push(parse_extension_item_require(attributes, events)),
+        "remove" => children.push(parse_extension_item_remove(attributes, events))
     }
 
     let number = match number {
@@ -824,14 +824,14 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         deprecatedby,
         promotedto,
         obsoletedby,
-        items,
+        children,
     }
 }
 
 fn parse_extension_item_require<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> ExtensionItem {
+) -> ExtensionChild {
     let mut api = None;
     let mut profile = None;
     let mut extension = None;
@@ -861,7 +861,7 @@ fn parse_extension_item_require<R: Read>(
         }
     }
 
-    ExtensionItem::Require {
+    ExtensionChild::Require {
         api,
         profile,
         extension,
@@ -874,7 +874,7 @@ fn parse_extension_item_require<R: Read>(
 fn parse_extension_item_remove<R: Read>(
     attributes: Vec<XmlAttribute>,
     events: &mut XmlEvents<R>,
-) -> ExtensionItem {
+) -> ExtensionChild {
     let mut api = None;
     let mut profile = None;
     let mut comment = None;
@@ -900,7 +900,7 @@ fn parse_extension_item_remove<R: Read>(
         }
     }
 
-    ExtensionItem::Remove {
+    ExtensionChild::Remove {
         api,
         profile,
         comment,

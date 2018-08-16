@@ -61,7 +61,7 @@ impl From<Registry> for vkxml::Registry {
 
         for item in orig.0 {
             match item {
-                RegistryItem::Comment(comment) => {
+                RegistryChild::Comment(comment) => {
                     if let Some(ref mut enums) = enums {
                         enums.elements.push(vkxml::EnumsElement::Notation(comment));
                     } else {
@@ -71,50 +71,35 @@ impl From<Registry> for vkxml::Registry {
                     }
                 }
 
-                RegistryItem::VendorIds { comment, items } => {
+                RegistryChild::VendorIds(ids) => {
                     flush_enums(&mut enums, &mut registry.elements);
                     registry
                         .elements
-                        .push(RegistryItem::VendorIds { comment, items }.into());
+                        .push(vkxml::RegistryElement::VendorIds(ids.into()));
                 }
 
-                RegistryItem::Tags { comment, items } => {
+                RegistryChild::Tags(tags) => {
                     flush_enums(&mut enums, &mut registry.elements);
                     registry
                         .elements
-                        .push(RegistryItem::Tags { comment, items }.into());
+                        .push(vkxml::RegistryElement::Tags(tags.into()));
                 }
 
-                RegistryItem::Types { comment, items } => {
+                RegistryChild::Types(types) => {
                     flush_enums(&mut enums, &mut registry.elements);
-                    let mut elements = Vec::with_capacity(items.len());
-                    for item in items {
-                        if let Some(t) = item.into() {
-                            elements.push(t);
-                        }
-                    }
-                    registry.elements.push(vkxml::RegistryElement::Definitions(
-                        vkxml::Definitions {
-                            notation: comment,
-                            elements,
-                        },
-                    ));
+                    registry
+                        .elements
+                        .push(vkxml::RegistryElement::Definitions(types.into()));
                 }
 
-                RegistryItem::Enums {
-                    name,
-                    kind,
-                    comment,
-                    items,
-                    ..
-                } => match kind {
+                RegistryChild::Enums(e) => match e.kind {
                     None => {
                         flush_enums(&mut enums, &mut registry.elements);
                         let mut constants = vkxml::Constants {
-                            notation: comment,
-                            elements: Vec::with_capacity(items.len()),
+                            notation: e.comment,
+                            elements: Vec::with_capacity(e.children.len()),
                         };
-                        for item in items {
+                        for item in e.children {
                             if let Some(e) = item.into() {
                                 constants.elements.push(e);
                             }
@@ -125,16 +110,16 @@ impl From<Registry> for vkxml::Registry {
                     }
                     Some(kind) => {
                         let enumeration = vkxml::Enumeration {
-                            name: name.unwrap_or(String::new()),
-                            notation: comment,
+                            name: e.name.unwrap_or(String::new()),
+                            notation: e.comment,
                             purpose: if kind.as_str() == "bitmask" {
                                 Some(vkxml::EnumerationPurpose::Bitmask)
                             } else {
                                 None
                             },
                             elements: {
-                                let mut elements = Vec::with_capacity(items.len());
-                                for item in items {
+                                let mut elements = Vec::with_capacity(e.children.len());
+                                for item in e.children {
                                     if let Some(val) = item.into() {
                                         elements.push(val);
                                     }
@@ -155,66 +140,30 @@ impl From<Registry> for vkxml::Registry {
                     }
                 },
 
-                RegistryItem::Commands { comment, items } => {
+                RegistryChild::Commands(commands) => {
                     flush_enums(&mut enums, &mut registry.elements);
-                    let mut r = vkxml::Commands {
-                        notation: comment,
-                        elements: Vec::with_capacity(items.len()),
-                    };
-                    for item in items {
-                        if let Some(cmd) = item.into() {
-                            r.elements.push(cmd);
-                        }
-                    }
-                    registry.elements.push(vkxml::RegistryElement::Commands(r));
+                    registry
+                        .elements
+                        .push(vkxml::RegistryElement::Commands(commands.into()));
                 }
 
-                RegistryItem::Feature {
-                    api,
-                    name,
-                    number,
-                    protect,
-                    comment,
-                    items,
-                } => {
+                RegistryChild::Feature(f) => {
                     flush_enums(&mut enums, &mut registry.elements);
                     registry
                         .elements
                         .push(vkxml::RegistryElement::Features(vkxml::Features {
-                            elements: vec![vkxml::Feature {
-                                name,
-                                notation: comment,
-                                api,
-                                version: number,
-                                define: protect,
-                                elements: items
-                                    .into_iter()
-                                    .filter_map(|i| match i.into() {
-                                        Some(v) => Some(vkxml::FeatureElement::Require(v)),
-                                        None => None,
-                                    })
-                                    .collect(),
-                            }],
+                            elements: vec![f.into()],
                         }));
                 }
 
-                RegistryItem::Extensions { comment, items } => {
+                RegistryChild::Extensions(e) => {
                     flush_enums(&mut enums, &mut registry.elements);
                     registry
                         .elements
-                        .push(vkxml::RegistryElement::Extensions(vkxml::Extensions {
-                            notation: comment,
-                            elements: {
-                                let mut elements = Vec::with_capacity(items.len());
-                                for item in items {
-                                    elements.push(item.into());
-                                }
-                                elements
-                            },
-                        }));
+                        .push(vkxml::RegistryElement::Extensions(e.into()));
                 }
 
-                RegistryItem::Platforms { .. } => (),
+                RegistryChild::Platforms { .. } => (),
             }
         }
 
@@ -222,30 +171,19 @@ impl From<Registry> for vkxml::Registry {
     }
 }
 
-impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
-    fn from(orig: TypeItem) -> Self {
+impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
+    fn from(orig: TypesChild) -> Self {
         match orig {
-            TypeItem::Comment(text) => Some(vkxml::DefinitionsElement::Notation(text)),
-            TypeItem::Type {
-                comment,
-                category,
-                name,
-                requires,
-                contents,
-                alias,
-                parent,
-                returnedonly,
-                structextends,
-                ..
-            } => {
-                let category = match category {
+            TypesChild::Comment(text) => Some(vkxml::DefinitionsElement::Notation(text)),
+            TypesChild::Type(t) => {
+                let category = match t.category {
                     Some(c) => c,
                     None => {
-                        let name = name.unwrap_or(String::new());
+                        let name = t.name.unwrap_or(String::new());
                         return Some(vkxml::DefinitionsElement::Reference(vkxml::Reference {
                             name,
-                            notation: comment,
-                            include: requires,
+                            notation: t.comment,
+                            include: t.requires,
                         }));
                     }
                 };
@@ -253,14 +191,14 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                 match category.as_str() {
                     "include" => {
                         let mut include = vkxml::Include {
-                            name: name.unwrap_or(String::new()),
-                            notation: comment,
+                            name: t.name.unwrap_or(String::new()),
+                            notation: t.comment,
                             style: vkxml::IncludeStyle::Quote,
                             need_ext: false,
                         };
 
-                        match contents {
-                            TypeContents::Code { code, markup } => {
+                        match t.spec {
+                            TypeSpec::Code(TypeCode { code, markup }) => {
                                 let mut iter = code.split_whitespace();
                                 let token = iter.next().unwrap();
                                 if token != "#include" {
@@ -286,8 +224,8 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
 
                     "define" => {
                         let mut define = vkxml::Define {
-                            name: name.unwrap_or(String::new()),
-                            notation: comment,
+                            name: t.name.unwrap_or(String::new()),
+                            notation: t.comment,
                             is_disabled: true,
                             comment: None,
                             replace: false,
@@ -296,8 +234,8 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                             c_expression: None,
                             value: None,
                         };
-                        match contents {
-                            TypeContents::Code { code, markup } => {
+                        match t.spec {
+                            TypeSpec::Code(TypeCode { code, markup }) => {
                                 for tag in markup {
                                     match tag {
                                         TypeCodeMarkup::Type(val) => define.defref.push(val),
@@ -307,7 +245,7 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                                 }
                                 process_define_code(&mut define, code);
                             }
-                            _ => panic!("Unexpected contents of define {:?}", contents),
+                            _ => panic!("Unexpected contents of define {:?}", t.spec),
                         }
                         return Some(vkxml::DefinitionsElement::Define(define));
                     }
@@ -315,12 +253,12 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                     "basetype" => {
                         let mut typedef = vkxml::Typedef {
                             name: String::new(),
-                            notation: comment,
+                            notation: t.comment,
                             basetype: String::new(),
                         };
-                        let markup = match contents {
-                            TypeContents::Code { markup, .. } => markup,
-                            _ => panic!("Unexpected contents of typedef {:?}", contents),
+                        let markup = match t.spec {
+                            TypeSpec::Code(TypeCode { markup, .. }) => markup,
+                            _ => panic!("Unexpected contents of typedef {:?}", t.spec),
                         };
                         for tag in markup {
                             match tag {
@@ -333,18 +271,18 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                     }
 
                     "bitmask" => {
-                        if name.is_some() || alias.is_some() {
+                        if t.name.is_some() || t.alias.is_some() {
                             return None;
                         }
                         let mut bitmask = vkxml::Bitmask {
                             name: vkxml::Identifier::new(),
-                            notation: comment,
+                            notation: t.comment,
                             basetype: vkxml::Identifier::new(),
-                            enumref: requires,
+                            enumref: t.requires,
                         };
-                        let markup = match contents {
-                            TypeContents::Code { markup, .. } => markup,
-                            _ => panic!("Unexpected contents of bitmaks {:?}", contents),
+                        let markup = match t.spec {
+                            TypeSpec::Code(TypeCode { markup, .. }) => markup,
+                            _ => panic!("Unexpected contents of bitmaks {:?}", t.spec),
                         };
                         for tag in markup {
                             match tag {
@@ -357,18 +295,18 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                     }
 
                     "handle" => {
-                        if name.is_some() || alias.is_some() {
+                        if t.name.is_some() || t.alias.is_some() {
                             return None;
                         }
                         let mut handle = vkxml::Handle {
                             name: String::new(),
-                            notation: comment,
-                            parent,
+                            notation: t.comment,
+                            parent: t.parent,
                             ty: vkxml::HandleType::Dispatch,
                         };
-                        let markup = match contents {
-                            TypeContents::Code { markup, .. } => markup,
-                            _ => panic!("Unexpected contents of handle {:?}", contents),
+                        let markup = match t.spec {
+                            TypeSpec::Code(TypeCode { markup, .. }) => markup,
+                            _ => panic!("Unexpected contents of handle {:?}", t.spec),
                         };
                         for tag in markup {
                             match tag {
@@ -394,8 +332,8 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                         // }
                         return Some(vkxml::DefinitionsElement::Enumeration(
                             vkxml::EnumerationDeclaration {
-                                name: name.unwrap_or(String::new()),
-                                notation: comment,
+                                name: t.name.unwrap_or(String::new()),
+                                notation: t.comment,
                             },
                         ));
                     }
@@ -403,13 +341,13 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                     "funcpointer" => {
                         let mut fnptr = vkxml::FunctionPointer {
                             name: vkxml::Identifier::new(),
-                            notation: comment,
+                            notation: t.comment,
                             return_type: new_field(),
                             param: Vec::new(),
                         };
-                        let code = match contents {
-                            TypeContents::Code { code, .. } => code,
-                            _ => panic!("Unexpected contents of handle {:?}", contents),
+                        let code = match t.spec {
+                            TypeSpec::Code(TypeCode { code, .. }) => code,
+                            _ => panic!("Unexpected contents of handle {:?}", t.spec),
                         };
 
                         parse_type_funcptr(&mut fnptr, &code);
@@ -417,23 +355,21 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                     }
 
                     "struct" => {
-                        if alias.is_some() {
+                        if t.alias.is_some() {
                             return None;
                         }
                         let mut s = vkxml::Struct {
-                            name: name.unwrap_or(String::new()),
-                            notation: comment,
-                            is_return: returnedonly.unwrap_or(String::new()).as_str() == "true",
-                            extends: structextends,
+                            name: t.name.unwrap_or(String::new()),
+                            notation: t.comment,
+                            is_return: t.returnedonly.unwrap_or(String::new()).as_str() == "true",
+                            extends: t.structextends,
                             elements: Vec::new(),
                         };
-                        match contents {
-                            TypeContents::Members(members) => for member in members {
+                        match t.spec {
+                            TypeSpec::Members(members) => for member in members {
                                 s.elements.push(member.into());
                             },
-                            _ => {
-                                panic!("Unexpected contents of struct {:?}: {:?}", s.name, contents)
-                            }
+                            _ => panic!("Unexpected contents of struct {:?}: {:?}", s.name, t.spec),
                         }
 
                         return Some(vkxml::DefinitionsElement::Struct(s));
@@ -441,16 +377,17 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
 
                     "union" => {
                         let mut u = vkxml::Union {
-                            name: name.unwrap_or(String::new()),
-                            notation: comment,
+                            name: t.name.unwrap_or(String::new()),
+                            notation: t.comment,
                             elements: Vec::new(),
                         };
-                        match contents {
-                            TypeContents::Members(members) => for member in members {
+                        match t.spec {
+                            TypeSpec::Members(members) => for member in members {
                                 match member {
                                     TypeMember::Comment(..) => (),
-                                    TypeMember::Definition { code, .. } => {
-                                        let mut iter = code
+                                    TypeMember::Definition(def) => {
+                                        let mut iter = def
+                                            .code
                                             .split_whitespace()
                                             .flat_map(|s| c::TokenIter::new(s))
                                             .peekable();
@@ -460,9 +397,7 @@ impl From<TypeItem> for Option<vkxml::DefinitionsElement> {
                                     }
                                 }
                             },
-                            _ => {
-                                panic!("Unexpected contents of union {:?}: {:?}", u.name, contents)
-                            }
+                            _ => panic!("Unexpected contents of union {:?}: {:?}", u.name, t.spec),
                         }
 
                         return Some(vkxml::DefinitionsElement::Union(u));
@@ -479,27 +414,19 @@ impl From<TypeMember> for vkxml::StructElement {
     fn from(orig: TypeMember) -> Self {
         match orig {
             TypeMember::Comment(comment) => vkxml::StructElement::Notation(comment),
-            TypeMember::Definition {
-                len,
-                altlen,
-                externsync,
-                optional,
-                values,
-                code,
-                markup,
-                ..
-            } => {
-                let mut iter = code
+            TypeMember::Definition(def) => {
+                let mut iter = def
+                    .code
                     .split_whitespace()
                     .flat_map(|s| c::TokenIter::new(s))
                     .peekable();
 
                 let mut field = parse_c_field(&mut iter).unwrap();
-                field.c_size = altlen;
-                field.sync = externsync;
-                field.optional = optional;
-                field.type_enums = values;
-                match len {
+                field.c_size = def.altlen;
+                field.sync = def.externsync;
+                field.optional = def.optional;
+                field.type_enums = def.values;
+                match def.len {
                     Some(mut value) => {
                         let null_terminated_part = ",null-terminated";
                         if value.as_str().ends_with(null_terminated_part) {
@@ -517,7 +444,7 @@ impl From<TypeMember> for vkxml::StructElement {
                     }
                     None => (),
                 }
-                for tag in markup {
+                for tag in def.markup {
                     match tag {
                         TypeMemberMarkup::Enum(value) => field.size_enumref = Some(value),
                         TypeMemberMarkup::Comment(comment) => field.notation = Some(comment),
@@ -808,30 +735,30 @@ fn parse_type_funcptr(r: &mut vkxml::FunctionPointer, code: &str) {
     }
 }
 
-impl From<EnumsItem> for Option<vkxml::Constant> {
-    fn from(orig: EnumsItem) -> Self {
+impl From<EnumsChild> for Option<vkxml::Constant> {
+    fn from(orig: EnumsChild) -> Self {
         match orig {
-            EnumsItem::Enum(e) => e.into(),
+            EnumsChild::Enum(e) => e.into(),
             _ => None,
         }
     }
 }
 
-impl From<EnumsItem> for Option<vkxml::EnumerationElement> {
-    fn from(orig: EnumsItem) -> Self {
+impl From<EnumsChild> for Option<vkxml::EnumerationElement> {
+    fn from(orig: EnumsChild) -> Self {
         match orig {
-            EnumsItem::Enum(e) => if let Some(constant) = e.into() {
+            EnumsChild::Enum(e) => if let Some(constant) = e.into() {
                 Some(vkxml::EnumerationElement::Enum(constant))
             } else {
                 None
             },
-            EnumsItem::Unused { start, end, .. } => {
+            EnumsChild::Unused(unused) => {
                 Some(vkxml::EnumerationElement::UnusedRange(vkxml::Range {
-                    range_start: start as i32,
-                    range_end: end.map(|v| v as i32),
+                    range_start: unused.start as i32,
+                    range_end: unused.end.map(|v| v as i32),
                 }))
             }
-            EnumsItem::Comment(comment) => Some(vkxml::EnumerationElement::Notation(comment)),
+            EnumsChild::Comment(comment) => Some(vkxml::EnumerationElement::Notation(comment)),
         }
     }
 }
@@ -934,32 +861,19 @@ fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
 }
 
 //--------------------------------------------------------------------------------------------------
-impl From<RegistryItem> for vkxml::RegistryElement {
-    fn from(orig: RegistryItem) -> Self {
-        match orig {
-            RegistryItem::Comment(..) => {
-                panic!("Cannot convert using from as it affects enums state.")
-            }
+fn items_to_elements<T, U: From<T>>(items: Vec<T>) -> Vec<U> {
+    let mut elements = Vec::with_capacity(items.len());
+    for item in items {
+        elements.push(item.into());
+    }
+    elements
+}
 
-            RegistryItem::VendorIds { comment, mut items } => {
-                vkxml::RegistryElement::VendorIds(vkxml::VendorIds {
-                    notation: comment,
-                    elements: items.drain(..).map(|i| i.into()).collect(),
-                })
-            }
-
-            RegistryItem::Platforms { .. } => {
-                panic!("Not supported by vkxml (cannot be converted 1:1).")
-            }
-
-            RegistryItem::Tags { comment, mut items } => {
-                vkxml::RegistryElement::Tags(vkxml::Tags {
-                    notation: comment,
-                    elements: items.drain(..).map(|i| i.into()).collect(),
-                })
-            }
-
-            _ => panic!("Missing implementation"),
+impl From<VendorIds> for vkxml::VendorIds {
+    fn from(orig: VendorIds) -> Self {
+        Self {
+            notation: orig.comment,
+            elements: items_to_elements(orig.children),
         }
     }
 }
@@ -974,6 +888,15 @@ impl From<VendorId> for vkxml::VendorId {
     }
 }
 
+impl From<Tags> for vkxml::Tags {
+    fn from(orig: Tags) -> Self {
+        Self {
+            notation: orig.comment,
+            elements: items_to_elements(orig.children),
+        }
+    }
+}
+
 impl From<Tag> for vkxml::Tag {
     fn from(orig: Tag) -> Self {
         Self {
@@ -981,6 +904,32 @@ impl From<Tag> for vkxml::Tag {
             notation: None,
             author: orig.author,
             contact: orig.contact,
+        }
+    }
+}
+
+impl From<Types> for vkxml::Definitions {
+    fn from(orig: Types) -> Self {
+        Self {
+            notation: orig.comment,
+            elements: {
+                let mut elements = Vec::with_capacity(orig.children.len());
+                for item in orig.children {
+                    if let Some(t) = item.into() {
+                        elements.push(t);
+                    }
+                }
+                elements
+            },
+        }
+    }
+}
+
+impl From<Extensions> for vkxml::Extensions {
+    fn from(orig: Extensions) -> Self {
+        Self {
+            notation: orig.comment,
+            elements: items_to_elements(orig.children),
         }
     }
 }
@@ -1002,7 +951,7 @@ impl From<Extension> for vkxml::Extension {
         }
 
         let mut elements = Vec::new();
-        for item in orig.items {
+        for item in orig.children {
             elements.push(item.into());
         }
 
@@ -1035,10 +984,10 @@ impl From<Extension> for vkxml::Extension {
     }
 }
 
-impl From<ExtensionItem> for vkxml::ExtensionElement {
-    fn from(orig: ExtensionItem) -> Self {
+impl From<ExtensionChild> for vkxml::ExtensionElement {
+    fn from(orig: ExtensionChild) -> Self {
         match orig {
-            ExtensionItem::Remove {
+            ExtensionChild::Remove {
                 api,
                 profile,
                 comment,
@@ -1051,7 +1000,7 @@ impl From<ExtensionItem> for vkxml::ExtensionElement {
                 elements: items.into_iter().filter_map(|i| i.into()).collect(),
             }),
 
-            ExtensionItem::Require {
+            ExtensionChild::Require {
                 api,
                 profile,
                 extension,
@@ -1069,10 +1018,10 @@ impl From<ExtensionItem> for vkxml::ExtensionElement {
     }
 }
 
-impl From<ExtensionItem> for Option<vkxml::FeatureSpecification> {
-    fn from(orig: ExtensionItem) -> Self {
+impl From<ExtensionChild> for Option<vkxml::FeatureSpecification> {
+    fn from(orig: ExtensionChild) -> Self {
         match orig {
-            ExtensionItem::Require {
+            ExtensionChild::Require {
                 profile,
                 comment,
                 extension,
@@ -1084,7 +1033,7 @@ impl From<ExtensionItem> for Option<vkxml::FeatureSpecification> {
                 extension,
                 elements: items.into_iter().map(|i| i.into()).collect(),
             }),
-            ExtensionItem::Remove { .. } => None,
+            ExtensionChild::Remove { .. } => None,
         }
     }
 }
@@ -1245,45 +1194,49 @@ impl From<InterfaceItem> for Option<vkxml::ExtensionSpecificationElement> {
     }
 }
 
+impl From<Commands> for vkxml::Commands {
+    fn from(orig: Commands) -> Self {
+        Self {
+            notation: orig.comment,
+            elements: {
+                let mut elements = Vec::with_capacity(orig.children.len());
+                for item in orig.children {
+                    if let Some(cmd) = item.into() {
+                        elements.push(cmd);
+                    }
+                }
+                elements
+            },
+        }
+    }
+}
+
 impl From<Command> for Option<vkxml::Command> {
     fn from(orig: Command) -> Self {
         match orig {
             Command::Alias { .. } => None,
-            Command::Definition {
-                comment,
-                proto,
-                successcodes,
-                errorcodes,
-                implicitexternsyncparams,
-                queues,
-                renderpass,
-                cmdbufferlevel,
-                pipeline,
-                params,
-                code,
-                ..
-            } => {
+            Command::Definition(def) => {
                 let mut r = vkxml::Command {
-                    name: proto.name,
-                    notation: comment,
+                    name: def.proto.name,
+                    notation: def.comment,
                     return_type: new_field(),
                     param: Vec::new(),
                     external_sync: None,
-                    cmdbufferlevel,
+                    cmdbufferlevel: def.cmdbufferlevel,
                     pipeline: None,
-                    queues,
+                    queues: def.queues,
                     renderpass: None,
                 };
-                match proto.type_name {
+                match def.proto.type_name {
                     Some(type_name) => r.return_type.basetype = type_name,
                     None => (),
                 }
-                r.return_type.successcodes = successcodes;
-                r.return_type.errorcodes = errorcodes;
-                for text in implicitexternsyncparams {
+                r.return_type.successcodes = def.successcodes;
+                r.return_type.errorcodes = def.errorcodes;
+                for text in def.implicitexternsyncparams {
                     r.external_sync = Some(vkxml::ExternalSync { sync: text })
                 }
-                if let Some(renderpass) = renderpass {
+                if let Some(renderpass) = def.renderpass {
                     r.renderpass = match renderpass.as_str() {
                         "both" => Some(vkxml::Renderpass::Both),
                         "inside" => Some(vkxml::Renderpass::Inside),
@@ -1291,7 +1244,7 @@ impl From<Command> for Option<vkxml::Command> {
                         _ => panic!("Unexpected renderpass value {:?}", renderpass),
                     };
                 }
-                if let Some(pipeline) = pipeline {
+                if let Some(pipeline) = def.pipeline {
                     r.pipeline = match pipeline.as_str() {
                         "graphics" => Some(vkxml::Pipeline::Graphics),
                         "compute" => Some(vkxml::Pipeline::Compute),
@@ -1300,8 +1253,8 @@ impl From<Command> for Option<vkxml::Command> {
                     };
                 }
 
-                r.param.reserve(params.len());
-                for param in params {
+                r.param.reserve(def.params.len());
+                for param in def.params {
                     let mut p = new_field();
                     p.name = Some(param.definition.name);
                     if let Some(v) = param.definition.type_name {
@@ -1327,7 +1280,7 @@ impl From<Command> for Option<vkxml::Command> {
                     r.param.push(p);
                 }
 
-                let mut tokens = c::TokenIter::new(&code);
+                let mut tokens = c::TokenIter::new(&def.code);
                 while let Some(token) = tokens.next() {
                     if token == "(" {
                         break;
@@ -1378,6 +1331,27 @@ impl From<Command> for Option<vkxml::Command> {
 
                 Some(r)
             }
+        }
+    }
+}
+
+impl From<Feature> for vkxml::Feature {
+    fn from(orig: Feature) -> Self {
+        Self {
+            name: orig.name,
+            notation: orig.comment,
+            api: orig.api,
+            version: orig.number,
+            define: orig.protect,
+            elements: {
+                let mut elements = Vec::with_capacity(orig.children.len());
+                for item in orig.children {
+                    if let Some(v) = item.into() {
+                        elements.push(vkxml::FeatureElement::Require(v));
+                    }
+                }
+                elements
+            },
         }
     }
 }
