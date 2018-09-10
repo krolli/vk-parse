@@ -1,6 +1,6 @@
 [package]
 name = "vk-parse"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["krolli <kroslakma@gmail.com>"]
 description = "Vulkan specification parser"
 readme = "README.md"
@@ -23,5 +23,3 @@ reqwest = "*"
 serde-xml-rs = {git = "https://github.com/RReverser/serde-xml-rs.git"}
 
 [badges]
-is-it-maintained-issue-resolution = { repository = "https://github.com/krolli/vk-parse/" }
-is-it-maintained-open-issues = { repository = "https://github.com/krolli/vk-parse/" }
