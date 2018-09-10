@@ -3,7 +3,6 @@ extern crate reqwest;
 
 extern crate ron;
 extern crate serde;
-extern crate serde_xml_rs;
 extern crate vk_parse;
 extern crate vkxml;
 extern crate xml;
@@ -113,52 +112,6 @@ fn download_spec(ranges: &[VkXmlSourceRange], download_dir: &str) {
     }
 }
 
-fn generate_references(ranges: &[VkXmlSourceRange], download_dir: &str) {
-    for range in ranges.iter() {
-        for patch in range.patches.clone() {
-            println!("Generating reference {}{}", range.version, patch);
-
-            let dir_ref_gen = "c:/Users/Melesie/Downloads/New-Vulkan-XML-Format-master";
-
-            let vk_xml = format!("{}/{}{}.vk.xml", download_dir, range.version, patch);
-            let vk_ron = format!("{}/{}{}.vk.ron", download_dir, range.version, patch);
-
-            let final_copy_src = format!("{}/vk_new.xml", dir_ref_gen);
-            let final_copy_dst = PathBuf::from(format!(
-                "{}/{}{}.vk_new.xml",
-                download_dir, range.version, patch
-            ));
-            let setup_copy_src = &vk_xml;
-            let setup_copy_dst = format!("{}/src/vk.xml", dir_ref_gen);
-
-            println!("\tGenerating reference {:?}", vk_ron);
-
-            println!("\t\tCopying {:?} -> {:?}", setup_copy_src, setup_copy_dst);
-            std::fs::copy(setup_copy_src, setup_copy_dst).unwrap();
-
-            println!("\t\tRunning ConvertToNewFmt.lua");
-            let return_code = std::process::Command::new("lua53.exe")
-                .arg("ConvertToNewFmt.lua")
-                .current_dir(dir_ref_gen)
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap();
-
-            if return_code.success() {
-                println!("\t\tRenaming {:?} -> {:?}", final_copy_src, final_copy_dst);
-                std::fs::rename(final_copy_src, &final_copy_dst).unwrap();
-
-                let file = std::io::BufReader::new(std::fs::File::open(&final_copy_dst).unwrap());
-                let result = serde_xml_rs::from_reader(file);
-                let registry: vkxml::Registry = result.unwrap();
-                println!("\t\tSaving reference version to {:?}", vk_ron);
-                save_registry_ron(&registry, Path::new(&vk_ron));
-            }
-        }
-    }
-}
-
 const _RANGES: &[VkXmlSourceRange] = &[
     VkXmlSourceRange {
         version: "v1.0.",
@@ -216,9 +169,6 @@ fn test_vkxml() {
     let ranges = RANGES;
     let download_dir = "test-data";
     download_spec(ranges, download_dir);
-    if false {
-        generate_references(ranges, download_dir);
-    }
     for range in ranges.iter() {
         for patch in range.patches.clone() {
             println!("Processing {}{}", range.version, patch);
@@ -239,9 +189,6 @@ fn test() {
     let ranges = RANGES;
     let download_dir = "test-data";
     download_spec(ranges, download_dir);
-    if false {
-        generate_references(ranges, download_dir);
-    }
     for range in ranges.iter() {
         for patch in range.patches.clone() {
             println!("Processing {}{}", range.version, patch);
@@ -262,9 +209,6 @@ fn test_ir_debug() {
     let ranges = RANGES;
     let download_dir = "test-data";
     download_spec(ranges, download_dir);
-    if false {
-        generate_references(ranges, download_dir);
-    }
     for range in ranges.iter() {
         for patch in range.patches.clone() {
             println!("Processing {}{}", range.version, patch);
