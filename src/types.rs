@@ -315,6 +315,9 @@ pub struct Extension {
     /// Whether this extension was promoted to core, and in which version.
     pub promotedto: Option<String>,
     pub obsoletedby: Option<String>,
+
+    /// 'true' if this extension is released provisionally
+    pub provisional: bool,
     /// The items which make up this extension.
     pub children: Vec<ExtensionChild>,
 }

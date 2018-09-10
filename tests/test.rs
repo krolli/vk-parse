@@ -183,7 +183,7 @@ const _RANGES: &[VkXmlSourceRange] = &[
     VkXmlSourceRange {
         version: "v1.1.",
         url_suffix: "/xml",
-        patches: 72..83,
+        patches: 72..85,
     },
 ];
 
@@ -191,7 +191,7 @@ const RANGES: &[VkXmlSourceRange] = &[
     VkXmlSourceRange {
         version: "v1.1.",
         url_suffix: "/xml",
-        patches: 82..83,
+        patches: 82..85,
     },
     VkXmlSourceRange {
         version: "v1.1.",
@@ -364,3 +364,5 @@ test_version!{test_v1_1_79, 1, 1, 79, "/xml"}
 test_version!{test_v1_1_80, 1, 1, 80, "/xml"}
 test_version!{test_v1_1_81, 1, 1, 81, "/xml"}
 test_version!{test_v1_1_82, 1, 1, 82, "/xml"}
+test_version!{test_v1_1_83, 1, 1, 83, "/xml"}
+test_version!{test_v1_1_84, 1, 1, 84, "/xml"}
