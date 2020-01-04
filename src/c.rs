@@ -177,6 +177,7 @@ impl<'a> Iterator for IterPhase3a<'a> {
 /// Simplified tokens for easier dealing with most C code we care about. Not precisely according to
 /// C/C++ standards, as those are not as easy to deal with and make more sense when combined with
 /// preprocessor.
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum Token {
     PpDirective(PpDirective),
     Punctuation,
@@ -187,6 +188,7 @@ enum Token {
     NewLine,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum PpDirective {
     Define,
     Undef,
@@ -202,16 +204,44 @@ enum PpDirective {
     Pragma,
 }
 
+impl PpDirective {
+    fn from_str(s: &str) -> PpDirective {
+        match s {
+            "define" => PpDirective::Define,
+            "undef" => PpDirective::Undef,
+            "include" => PpDirective::Include,
+            "if" => PpDirective::If,
+            "ifdef" => PpDirective::Ifdef,
+            "ifndef" => PpDirective::Ifndef,
+            "else" => PpDirective::Else,
+            "elif" => PpDirective::Elif,
+            "endif" => PpDirective::Endif,
+            "line" => PpDirective::Line,
+            "error" => PpDirective::Error,
+            "pragma" => PpDirective::Pragma,
+            _ => panic!("Unrecognized postprocessor directive {:?}", s),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum LineState {
+    /// Right after newline.
     Start,
+    /// When first thing encountered on the line is '#'
+    PpStart,
+    /// First identifier after '#'
     PpDirective,
+    /// Contents of postprocessor directive.
     PpDirectiveBody,
+    /// Reached newline but not reported yet.
+    PpDirectiveEnd,
+    /// Normal line tokens.
     Normal,
 }
 
 struct IterToken<'a> {
     src: IterPhase3a<'a>,
-    buf: String,
     peek: Option<char>,
     line: LineState,
 }
@@ -222,41 +252,135 @@ impl<'a> IterToken<'a> {
         let peek = src.next();
         Self {
             src,
-            buf: String::new(),
             peek,
             line: LineState::Start,
         }
     }
 }
-/*
+
 impl<'a> Iterator for IterToken<'a> {
-    type Item = PpToken;
-    fn next(&mut self) -> Option<PpToken> {
+    type Item = Token;
+    fn next(&mut self) -> Option<Token> {
+        let mut buf = String::new();
         loop {
             let c = if let Some(c) = self.peek {
                 c
             } else {
                 return None;
             };
-            self.peek = self.src.next();
-            match c {
-                ' ' => (),
-                '\n' => {
-                    let line = self.line;
-                    self.line = Line::Start;
-                    if let LineState::PpLine = line {
-                        return Some(PpToken::NewLine);
+            match (self.line, c) {
+                (LineState::Start, ' ') => self.peek = self.src.next(),
+                (LineState::Start, '\n') => self.peek = self.src.next(),
+                (LineState::Start, '#') => {
+                    self.line = LineState::PpStart;
+                    self.peek = self.src.next();
+                }
+                (LineState::Start, c) => {
+                    buf.push(c);
+                    self.line = LineState::Normal;
+                    self.peek = self.src.next();
+                }
+
+                (LineState::PpStart, ' ') => self.peek = self.src.next(),
+                (LineState::PpStart, '\n') => panic!(
+                    "Unexpected combination ({:?}, {:?})",
+                    LineState::PpStart,
+                    '\n'
+                ),
+                (LineState::PpStart, c) => {
+                    buf.push(c);
+                    self.line = LineState::PpDirective;
+                    self.peek = self.src.next();
+                }
+
+                (LineState::PpDirective, ' ') => {
+                    self.line = LineState::PpDirectiveBody;
+                    self.peek = self.src.next();
+                    return Some(Token::PpDirective(PpDirective::from_str(buf.as_str())));
+                }
+                (LineState::PpDirective, '\n') => {
+                    self.line = LineState::PpDirectiveEnd;
+                    return Some(Token::PpDirective(PpDirective::from_str(buf.as_str())));
+                }
+                (LineState::PpDirective, c) => {
+                    buf.push(c);
+                    self.peek = self.src.next();
+                }
+
+                (LineState::PpDirectiveBody, ' ') => {
+                    self.peek = self.src.next();
+                    return Some(Token::Identifier(buf));
+                }
+                (LineState::PpDirectiveBody, '\n') => {
+                    self.line = LineState::PpDirectiveEnd;
+                    return Some(Token::Identifier(buf));
+                }
+                (LineState::PpDirectiveBody, c) => {
+                    buf.push(c);
+                    self.peek = self.src.next();
+                }
+
+                (LineState::PpDirectiveEnd, '\n') => {
+                    self.peek = self.src.next();
+                    self.line = LineState::Start;
+                    return Some(Token::NewLine);
+                }
+                (LineState::PpDirectiveEnd, c) => panic!(
+                    "Unexpected combination ({:?}, {:?})",
+                    LineState::PpDirectiveEnd,
+                    c
+                ),
+
+                (LineState::Normal, ' ') => {
+                    self.peek = self.src.next();
+                    return Some(Token::Identifier(buf));
+                }
+                (LineState::Normal, '\n') => {
+                    self.peek = self.src.next();
+                    self.line = LineState::Start;
+                    if buf.len() > 0 {
+                        return Some(Token::Identifier(buf));
                     }
                 }
-                '#' => match self.line {
-                    LineState::Pp => expr,
-                    None => expr,
-                },
-                _ => panic!("{:?}", c),
+                (LineState::Normal, ';') => {
+                    if buf.len() > 0 {
+                        return Some(Token::Identifier(buf));
+                    } else {
+                        self.peek = self.src.next();
+                        return Some(Token::Punctuation);
+                    }
+                }
+                (LineState::Normal, c) => {
+                    buf.push(c);
+                    self.peek = self.src.next();
+                }
             }
         }
     }
-}*/
+}
+
+fn is_number_start(c: char) -> bool {
+    '0' <= c && c <= '9'
+}
+
+fn is_number_part(c: char) -> bool {
+    c == '.'
+        || c == '+'
+        || c == '-'
+        || c == 'x'
+        || c == 'X'
+        || ('0' <= c && c <= '9')
+        || ('a' <= c && c <= 'f')
+        || ('A' <= c && c <= 'F')
+}
+
+fn is_identifier_start(c: char) -> bool {
+    c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
+}
+
+fn is_identifier_part(c: char) -> bool {
+    c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9')
+}
 
 //--------------------------------------------------------------------------------------------------
 pub struct TokenIter<'a> {
@@ -349,6 +473,24 @@ mod test {
             let code = "// DEPRECATED: This define has been removed. Specific version defines (e.g. VK_API_VERSION_1_0), or the VK_MAKE_VERSION macro, should be used instead.\n//#define VK_API_VERSION VK_MAKE_VERSION(1, 0, 0) // Patch version should always be set to 0";
             let post_phase_3: String = IterPhase3a::new(code).collect();
             assert_eq!(&post_phase_3, " \n ");
+        }
+
+        {
+            let code = "#define x y\n //some comment here\n class Something;\n";
+            let tokenized: Vec<_> = IterToken::new(code).collect();
+            use std::str::FromStr;
+            assert_eq!(
+                &tokenized,
+                &[
+                    Token::PpDirective(PpDirective::Define),
+                    Token::Identifier(String::from_str("x").unwrap()),
+                    Token::Identifier(String::from_str("y").unwrap()),
+                    Token::NewLine,
+                    Token::Identifier(String::from_str("class").unwrap()),
+                    Token::Identifier(String::from_str("Something").unwrap()),
+                    Token::Punctuation,
+                ]
+            );
         }
     }
 
