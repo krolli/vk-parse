@@ -317,6 +317,7 @@ pub struct Extension {
     pub obsoletedby: Option<String>,
 
     /// 'true' if this extension is released provisionally
+    #[serde(default, skip_serializing_if = "is_default")]
     pub provisional: bool,
     /// The items which make up this extension.
     pub children: Vec<ExtensionChild>,
@@ -374,4 +375,8 @@ pub struct NameWithType {
 pub struct CommentedChildren<T> {
     pub comment: Option<String>,
     pub children: Vec<T>,
+}
+
+fn is_default<T: Default + Eq>(v: &T) -> bool {
+    v.eq(&T::default())
 }
