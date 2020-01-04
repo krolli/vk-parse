@@ -9,15 +9,33 @@
 
 `vk-parse` is a Rust crate which parses the Vulkan API registry XML and converts it to a Rust representation.
 
-This crate consists of a
+This crate provides a library which parses the Vulkan registry XML and either provides its own lossless representation of the registry, or converts it to structures from [vkxml](https://github.com/terrybrashaw/vkxml).
 
-- library which does the actual parsing of the Vulkan registry
-- command line tool which parses Vulkan XML and serializes it to a [RON](https://github.com/ron-rs/ron) file.
+## Usage
 
-## Command Line Tool usage
+To get started, you'll need `vk.xml` file which is used for generating Vulkan header files and is stored in [Vulkan-Docs](https://github.com/KhronosGroup/Vulkan-Docs) repository.
 
-```sh
-cargo run --release 'vulkan.xml' -o 'generated-file.ron'
+After that, in your Rust project:
+
+`Cargo.toml`
+```toml
+[dependencies]
+vk-parse = "0.2"
+vkxml = "0.3"
+```
+
+`main.rs`
+```rust
+extern crate vk_parse;
+extern crate vkxml;
+use std::path::Path;
+
+fn main() {
+    let registry_ir = vk_parse::parse_file(Path::new("vk.xml"));
+    println!("{:?}", registry_ir);
+    let registry_vkxml: vkxml::Registry = registry_ir.into();
+    println!("{:?}", registry_vkxml);
+}
 ```
 
 ## License

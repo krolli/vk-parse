@@ -13,12 +13,11 @@ categories = ["parser-implementations", "rendering::graphics-api"]
 [dependencies]
 vkxml = "0.3"
 xml-rs = "0.8"
-ron = "0.4"
-clap = "2"
 serde = "1"
 serde_derive = "1"
 
 [dev-dependencies]
+ron = "0.4"
 reqwest = "0.8"
 
 [badges]
