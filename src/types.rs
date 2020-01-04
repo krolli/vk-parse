@@ -281,7 +281,7 @@ pub struct CommandParam {
 pub struct Feature {
     pub api: String,
     pub name: String,
-    pub number: f32,
+    pub number: String,
     pub protect: Option<String>,
     pub comment: Option<String>,
     pub children: Vec<FeatureChild>,

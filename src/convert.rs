@@ -1337,11 +1337,12 @@ impl From<Command> for Option<vkxml::Command> {
 
 impl From<Feature> for vkxml::Feature {
     fn from(orig: Feature) -> Self {
+        use std::str::FromStr;
         Self {
             name: orig.name,
             notation: orig.comment,
             api: orig.api,
-            version: orig.number,
+            version: f32::from_str(&orig.number).unwrap(),
             define: orig.protect,
             elements: {
                 let mut elements = Vec::with_capacity(orig.children.len());

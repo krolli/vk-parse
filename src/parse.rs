@@ -2,7 +2,6 @@ extern crate xml;
 
 use std;
 use std::io::Read;
-use std::str::FromStr;
 use xml::reader::XmlEvent;
 
 use types::*;
@@ -733,8 +732,6 @@ pub fn parse_feature<R: Read>(
     unwrap_attribute!(feature, api);
     unwrap_attribute!(feature, name);
     unwrap_attribute!(feature, number);
-
-    let number = f32::from_str(&number).unwrap();
 
     RegistryChild::Feature(Feature {
         api,
