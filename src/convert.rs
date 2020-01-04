@@ -395,7 +395,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                                                 .flat_map(|s| c::TokenIter::new(s))
                                                 .peekable();
 
-                                            let mut field = parse_c_field(&mut iter).unwrap();
+                                            let field = parse_c_field(&mut iter).unwrap();
                                             u.elements.push(field);
                                         }
                                     }
