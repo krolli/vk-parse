@@ -9,5 +9,14 @@
 			"name": "vk-parse",
 			"path": "."
 		}
+	],
+	"build_systems":
+	[
+		{
+			"name": "Run tests",
+			"cmd": ["cargo", "test" ],
+			"working_dir": "${project_path}",
+			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
+		},
 	]
 }
