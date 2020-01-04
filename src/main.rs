@@ -15,7 +15,8 @@ fn save_registry_ron(registry: &vkxml::Registry, path: &std::path::Path) {
             separate_tuple_members: false,
             enumerate_arrays: false,
         },
-    ).unwrap();
+    )
+    .unwrap();
 
     let mut file = std::fs::File::create(path).unwrap();
     file.write_all(text.as_bytes()).unwrap();

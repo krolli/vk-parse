@@ -366,9 +366,11 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             elements: Vec::new(),
                         };
                         match t.spec {
-                            TypeSpec::Members(members) => for member in members {
-                                s.elements.push(member.into());
-                            },
+                            TypeSpec::Members(members) => {
+                                for member in members {
+                                    s.elements.push(member.into());
+                                }
+                            }
                             _ => panic!("Unexpected contents of struct {:?}: {:?}", s.name, t.spec),
                         }
 
@@ -382,21 +384,23 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             elements: Vec::new(),
                         };
                         match t.spec {
-                            TypeSpec::Members(members) => for member in members {
-                                match member {
-                                    TypeMember::Comment(..) => (),
-                                    TypeMember::Definition(def) => {
-                                        let mut iter = def
-                                            .code
-                                            .split_whitespace()
-                                            .flat_map(|s| c::TokenIter::new(s))
-                                            .peekable();
+                            TypeSpec::Members(members) => {
+                                for member in members {
+                                    match member {
+                                        TypeMember::Comment(..) => (),
+                                        TypeMember::Definition(def) => {
+                                            let mut iter = def
+                                                .code
+                                                .split_whitespace()
+                                                .flat_map(|s| c::TokenIter::new(s))
+                                                .peekable();
 
-                                        let mut field = parse_c_field(&mut iter).unwrap();
-                                        u.elements.push(field);
+                                            let mut field = parse_c_field(&mut iter).unwrap();
+                                            u.elements.push(field);
+                                        }
                                     }
                                 }
-                            },
+                            }
                             _ => panic!("Unexpected contents of union {:?}: {:?}", u.name, t.spec),
                         }
 
@@ -603,11 +607,13 @@ fn process_define_code(r: &mut vkxml::Define, code: String) {
 
                     match current {
                         Some('(') => state = State::DefineArgs,
-                        Some(c) => if c.is_whitespace() {
-                            state = State::DefineValue;
-                        } else {
-                            panic!("Unexpected char after #define name: {:?}", c);
-                        },
+                        Some(c) => {
+                            if c.is_whitespace() {
+                                state = State::DefineValue;
+                            } else {
+                                panic!("Unexpected char after #define name: {:?}", c);
+                            }
+                        }
                         None => break,
                     }
                 }
@@ -747,11 +753,13 @@ impl From<EnumsChild> for Option<vkxml::Constant> {
 impl From<EnumsChild> for Option<vkxml::EnumerationElement> {
     fn from(orig: EnumsChild) -> Self {
         match orig {
-            EnumsChild::Enum(e) => if let Some(constant) = e.into() {
-                Some(vkxml::EnumerationElement::Enum(constant))
-            } else {
-                None
-            },
+            EnumsChild::Enum(e) => {
+                if let Some(constant) = e.into() {
+                    Some(vkxml::EnumerationElement::Enum(constant))
+                } else {
+                    None
+                }
+            }
             EnumsChild::Unused(unused) => {
                 Some(vkxml::EnumerationElement::UnusedRange(vkxml::Range {
                     range_start: unused.start as i32,
@@ -839,20 +847,22 @@ fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
             "]" => {
                 break;
             }
-            t => if r.array.is_some() {
-                let mut is_number = true;
-                for c in t.chars() {
-                    if c < '0' || '9' < c {
-                        is_number = false;
-                        break;
+            t => {
+                if r.array.is_some() {
+                    let mut is_number = true;
+                    for c in t.chars() {
+                        if c < '0' || '9' < c {
+                            is_number = false;
+                            break;
+                        }
                     }
+                    if is_number {
+                        r.size = Some(String::from(t));
+                    }
+                } else {
+                    r.name = Some(String::from(token))
                 }
-                if is_number {
-                    r.size = Some(String::from(t));
-                }
-            } else {
-                r.name = Some(String::from(token))
-            },
+            }
         }
         iter.next().unwrap();
     }
@@ -1323,9 +1333,11 @@ impl From<Command> for Option<vkxml::Command> {
                             p.size = Some(array_size);
                             array_size = String::new();
                         }
-                        t => if is_array {
-                            array_size.push_str(t);
-                        },
+                        t => {
+                            if is_array {
+                                array_size.push_str(t);
+                            }
+                        }
                     }
                 }
 

@@ -129,7 +129,7 @@ pub fn parse_file(path: &std::path::Path) -> Registry {
     let parser = xml::reader::ParserConfig::new().create_reader(file);
 
     let mut events = parser.into_iter();
-    match_elements!{events,
+    match_elements! {events,
         "registry" => return parse_registry(&mut events)
     }
 
@@ -141,7 +141,7 @@ pub fn parse_stream<T: std::io::Read>(stream: T) -> Registry {
     let parser = xml::reader::ParserConfig::new().create_reader(stream);
 
     let mut events = parser.into_iter();
-    match_elements!{events,
+    match_elements! {events,
         "registry" => return parse_registry(&mut events)
     }
 
@@ -151,7 +151,7 @@ pub fn parse_stream<T: std::io::Read>(stream: T) -> Registry {
 fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
     let mut registry = Registry(Vec::new());
 
-    match_elements!{attributes in events,
+    match_elements! {attributes in events,
         "comment" => registry.0.push(RegistryChild::Comment(parse_text_element(events))),
         "vendorids" => registry.0.push(parse_vendorids(attributes, events)),
         "platforms" => {
@@ -258,11 +258,11 @@ pub fn parse_vendorids<R: Read>(
     let mut comment = None;
     let mut children = Vec::new();
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "comment" => comment = Some(a.value)
     }
 
-    match_elements!{attributes in events,
+    match_elements! {attributes in events,
         "vendorid" => children.push(parse_vendorid(attributes, events))
     }
 
@@ -274,7 +274,7 @@ fn parse_vendorid<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
     let mut comment = None;
     let mut id = None;
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "name" => name = Some(a.value),
         "comment" => comment = Some(a.value),
         "id" => {
@@ -298,7 +298,7 @@ fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
     let mut comment = None;
     let mut protect = None;
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "name"    => name    = Some(a.value),
         "comment" => comment = Some(a.value),
         "protect" => protect = Some(a.value)
@@ -323,11 +323,11 @@ pub fn parse_tags<R: Read>(
     let mut comment = None;
     let mut children = Vec::new();
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "comment" => comment = Some(a.value)
     }
 
-    match_elements!{attributes in events,
+    match_elements! {attributes in events,
         "tag" => children.push(parse_tag(attributes, events))
     }
 
@@ -339,7 +339,7 @@ fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) 
     let mut author = None;
     let mut contact = None;
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "name"    => name    = Some(a.value),
         "author"  => author  = Some(a.value),
         "contact" => contact = Some(a.value)
@@ -373,7 +373,7 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
     let mut markup = Vec::new();
     let mut members = Vec::new();
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "api"           => api           = Some(a.value),
         "alias"         => alias         = Some(a.value),
         "requires"      => requires      = Some(a.value),
@@ -385,7 +385,7 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
         "comment"       => comment       = Some(a.value)
     }
 
-    match_elements_combine_text!{attributes in events, code,
+    match_elements_combine_text! {attributes in events, code,
         "member" => {
             let mut len = None;
             let mut altlen = None;
@@ -487,7 +487,7 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
     let mut pipeline = None;
     let mut comment = None;
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "name" => name = Some(a.value),
         "alias" => alias = Some(a.value),
         "queues" => queues = Some(a.value),
@@ -516,7 +516,7 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
         ) -> NameWithType {
             let mut name = None;
             let mut type_name = None;
-            match_elements_combine_text!{events, buffer,
+            match_elements_combine_text! {events, buffer,
                 "type" => {
                     let text = parse_text_element(events);
                     buffer.push_str(&text);
@@ -537,7 +537,7 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
             }
         }
 
-        match_elements!{attributes in events,
+        match_elements! {attributes in events,
             "proto" => {
                 proto = Some(parse_name_with_type(&mut code, events));
                 code.push('(');
@@ -622,7 +622,7 @@ fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
     let mut positive = true;
     let mut alias = None;
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "name" => name = Some(a.value),
         "comment" => comment = Some(a.value),
         "type" => type_suffix = Some(a.value),
@@ -716,7 +716,7 @@ pub fn parse_feature<R: Read>(
     let mut comment = None;
     let mut children = Vec::new();
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "api"     => api     = Some(a.value),
         "name"    => name    = Some(a.value),
         "number"  => number  = Some(a.value),
@@ -724,7 +724,7 @@ pub fn parse_feature<R: Read>(
         "comment" => comment = Some(a.value)
     }
 
-    match_elements!{attributes in events,
+    match_elements! {attributes in events,
         "require" => children.push(parse_extension_item_require(attributes, events)),
         "remove"  => children.push(parse_extension_item_remove(attributes, events))
     }
@@ -750,11 +750,11 @@ pub fn parse_extensions<R: Read>(
     let mut comment = None;
     let mut children = Vec::new();
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "comment" => comment = Some(a.value)
     }
 
-    match_elements!{attributes in events,
+    match_elements! {attributes in events,
         "extension" => children.push(parse_extension(attributes, events))
     }
 
@@ -779,7 +779,7 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     let mut provisional = None;
     let mut children = Vec::new();
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "name"         => name          = Some(a.value),
         "comment"      => comment       = Some(a.value),
         "number"       => number        = Some(a.value),
@@ -797,7 +797,7 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         "obsoletedby"  => obsoletedby   = Some(a.value)
     }
 
-    match_elements!{attributes in events,
+    match_elements! {attributes in events,
         "require" => children.push(parse_extension_item_require(attributes, events)),
         "remove" => children.push(parse_extension_item_remove(attributes, events))
     }
@@ -808,11 +808,13 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     };
 
     let provisional = match provisional {
-        Some(value) => if value == "true" {
-            true
-        } else {
-            panic!("Unexpected value of 'provisional' attribute: {:?}", value);
-        },
+        Some(value) => {
+            if value == "true" {
+                true
+            } else {
+                panic!("Unexpected value of 'provisional' attribute: {:?}", value);
+            }
+        }
         None => false,
     };
 
@@ -848,7 +850,7 @@ fn parse_extension_item_require<R: Read>(
     let mut comment = None;
     let mut items = Vec::new();
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "api"       => api       = Some(a.value),
         "profile"   => profile   = Some(a.value),
         "extension" => extension = Some(a.value),
@@ -889,7 +891,7 @@ fn parse_extension_item_remove<R: Read>(
     let mut comment = None;
     let mut items = Vec::new();
 
-    match_attributes!{a in attributes,
+    match_attributes! {a in attributes,
         "api"     => api     = Some(a.value),
         "profile" => profile = Some(a.value),
         "comment" => comment = Some(a.value)
@@ -927,7 +929,7 @@ fn parse_interface_item<R: Read>(
         "type" => {
             let mut name = None;
             let mut comment = None;
-            match_attributes!{a in attributes,
+            match_attributes! {a in attributes,
                 "name"    => name    = Some(a.value),
                 "comment" => comment = Some(a.value)
             }
@@ -939,7 +941,7 @@ fn parse_interface_item<R: Read>(
         "command" => {
             let mut name = None;
             let mut comment = None;
-            match_attributes!{a in attributes,
+            match_attributes! {a in attributes,
                 "name"    => name    = Some(a.value),
                 "comment" => comment = Some(a.value)
             }

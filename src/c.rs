@@ -2,7 +2,7 @@
 
 //--------------------------------------------------------------------------------------------------
 /* Performs Phase 1 of C compilation, specifically replaces platform-specific end-of-line indicators
- with newlines characters and transforms trigraph sequences.*/
+with newlines characters and transforms trigraph sequences.*/
 pub struct IterPhase1<'a> {
     src: &'a str,
 }
