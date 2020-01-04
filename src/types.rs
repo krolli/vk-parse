@@ -2,11 +2,11 @@
 ///
 /// The registry contains all the information contained in a certain version
 /// of the Vulkan specification, stored within a programmer-accessible format.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Registry(pub Vec<RegistryChild>);
 
 /// An element of the Vulkan registry.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum RegistryChild {
     /// Comments are human-readable strings which contain registry meta-data.
     Comment(String),
@@ -36,7 +36,7 @@ pub type VendorIds = CommentedChildren<VendorId>;
 ///
 /// Note: in newer versions of the Vulkan spec, this tag is not used,
 /// instead it has been replaced by the `VKVendorId` enum.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VendorId {
     /// Name of the vendor.
     pub name: String,
@@ -52,7 +52,7 @@ pub type Platforms = CommentedChildren<Platform>;
 ///
 /// Most operating systems will have only one corresponding platform,
 /// but Linux has multiple (XCB, Wayland, etc.)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Platform {
     /// Short identifier.
     pub name: String,
@@ -69,7 +69,7 @@ pub type Tags = CommentedChildren<Tag>;
 /// Some examples:
 /// - KHR for Khronos extensions
 /// - EXT for multi-vendor extensions
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Tag {
     /// The name of the tag, e.g. "KHR".
     pub name: String,
@@ -82,13 +82,13 @@ pub struct Tag {
 pub type Types = CommentedChildren<TypesChild>;
 
 /// An item making up a type definition.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TypesChild {
     Type(Type),
     Comment(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Type {
     pub name: Option<String>,
     pub alias: Option<String>,
@@ -103,20 +103,20 @@ pub struct Type {
 }
 
 /// The contents of a type definition.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TypeSpec {
     Code(TypeCode),
     Members(Vec<TypeMember>),
     None,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TypeCode {
     pub code: String,
     pub markup: Vec<TypeCodeMarkup>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TypeCodeMarkup {
     Name(String),
     Type(String),
@@ -124,7 +124,7 @@ pub enum TypeCodeMarkup {
 }
 
 /// A member of a type definition, i.e. a struct member.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TypeMember {
     /// Human-readable comment.
     Comment(String),
@@ -132,7 +132,7 @@ pub enum TypeMember {
     Definition(TypeMemberDefinition),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TypeMemberDefinition {
     pub len: Option<String>,
     pub altlen: Option<String>,
@@ -145,7 +145,7 @@ pub struct TypeMemberDefinition {
     pub markup: Vec<TypeMemberMarkup>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TypeMemberMarkup {
     Name(String),
     Type(String),
@@ -153,7 +153,7 @@ pub enum TypeMemberMarkup {
     Comment(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Enums {
     pub name: Option<String>,
     pub kind: Option<String>,
@@ -165,7 +165,7 @@ pub struct Enums {
 }
 
 /// An item which forms an enum.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EnumsChild {
     /// Actual named enum.
     Enum(Enum),
@@ -176,7 +176,7 @@ pub enum EnumsChild {
 }
 
 /// An unused range of enum values.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Unused {
     /// Beginning of the range.
     pub start: i64,
@@ -189,7 +189,7 @@ pub struct Unused {
 }
 
 /// An item of an enumeration type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Enum {
     /// Name of this enum.
     pub name: String,
@@ -201,7 +201,7 @@ pub struct Enum {
 }
 
 /// An enum specifier, which assigns a value to the enum.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EnumSpec {
     Alias {
         alias: String,
@@ -233,7 +233,7 @@ pub enum EnumSpec {
 pub type Commands = CommentedChildren<Command>;
 
 /// A command is just a Vulkan function.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Command {
     /// Indicates this function is an alias for another one.
     Alias { name: String, alias: String },
@@ -241,7 +241,7 @@ pub enum Command {
     Definition(CommandDefinition),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandDefinition {
     pub queues: Option<String>,
     pub successcodes: Option<String>,
@@ -260,7 +260,7 @@ pub struct CommandDefinition {
 }
 
 /// Parameter for this Vulkan function.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandParam {
     /// The expression which indicates the length of this array.
     pub len: Option<String>,
@@ -277,7 +277,7 @@ pub struct CommandParam {
     pub definition: NameWithType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Feature {
     pub api: String,
     pub name: String,
@@ -291,7 +291,7 @@ pub type FeatureChild = ExtensionChild;
 
 pub type Extensions = CommentedChildren<Extension>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Extension {
     /// Name of the extension.
     pub name: String,
@@ -326,7 +326,7 @@ pub struct Extension {
 /// A part of an extension declaration.
 ///
 /// Extensions either include functionality from the spec, or remove some functionality.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ExtensionChild {
     /// Indicates the items which this extension requires to work.
     Require {
@@ -351,7 +351,7 @@ pub enum ExtensionChild {
 /// An interface item is a function or an enum which makes up a Vulkan interface.
 ///
 /// This structure is used by extensions to express dependencies or include functionality.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum InterfaceItem {
     Comment(String),
     Type {
@@ -365,13 +365,13 @@ pub enum InterfaceItem {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NameWithType {
     pub type_name: Option<String>,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommentedChildren<T> {
     pub comment: Option<String>,
     pub children: Vec<T>,
