@@ -13,12 +13,6 @@
 	"build_systems":
 	[
 		{
-			"name": "cargo check",
-			"cmd": ["cargo", "check" ],
-			"working_dir": "${project_path}",
-			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
-		},
-		{
 			"name": "cargo build",
 			"cmd": ["cargo", "build" ],
 			"working_dir": "${project_path}",
@@ -27,6 +21,24 @@
 		{
 			"name": "cargo build release",
 			"cmd": ["cargo", "build", "--release" ],
+			"working_dir": "${project_path}",
+			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
+		},
+		{
+			"name": "cargo check",
+			"cmd": ["cargo", "check" ],
+			"working_dir": "${project_path}",
+			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
+		},
+		{
+			"name": "cargo doc",
+			"cmd": ["cargo", "doc" ],
+			"working_dir": "${project_path}",
+			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
+		},
+		{
+			"name": "cargo fmt",
+			"cmd": ["cargo", "fmt" ],
 			"working_dir": "${project_path}",
 			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
 		},
