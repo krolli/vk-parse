@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
 //--------------------------------------------------------------------------------------------------
-/* Performs Phase 1 of C compilation, specifically replaces platform-specific end-of-line indicators
-with newlines characters and transforms trigraph sequences.*/
-pub struct IterPhase1<'a> {
+/// Performs Phase 1 of C compilation, specifically replaces platform-specific end-of-line indicators
+/// with newlines characters and transforms trigraph sequences.
+struct IterPhase1<'a> {
     src: &'a str,
 }
 
@@ -44,7 +44,7 @@ impl<'a> Iterator for IterPhase1<'a> {
 }
 
 //--------------------------------------------------------------------------------------------------
-pub struct IterPhase2<'a> {
+struct IterPhase2<'a> {
     src: IterPhase1<'a>,
     c1: Option<char>,
     c2: Option<char>,
@@ -75,9 +75,9 @@ impl<'a> Iterator for IterPhase2<'a> {
 }
 
 //--------------------------------------------------------------------------------------------------
-/** Part of phase 3 that deals with comments and whitespace. Does not produce tokens, just filters
-and transforms characters. */
-pub struct IterPhase3a<'a> {
+/// Part of phase 3 that deals with comments and whitespace. Does not produce tokens, just filters
+/// and transforms characters.
+struct IterPhase3a<'a> {
     src: IterPhase2<'a>,
     peek: Option<char>,
     prev_space: bool,
@@ -178,12 +178,12 @@ impl<'a> Iterator for IterPhase3a<'a> {
 /// C/C++ standards, as those are not as easy to deal with and make more sense when combined with
 /// preprocessor.
 #[derive(Clone, Eq, PartialEq, Debug)]
-enum Token {
+enum Token<'a> {
     PpDirective(PpDirective),
     Punctuation,
-    HeaderName(String),
-    Identifier(String),
-    StringLiteral(String),
+    HeaderName(&'a str),
+    Identifier(&'a str),
+    StringLiteral(&'a str),
     CharacterLiteral(char),
     NewLine,
 }
@@ -240,28 +240,27 @@ enum LineState {
     Normal,
 }
 
-struct IterToken<'a> {
-    src: IterPhase3a<'a>,
+struct IterTokenInner<'src> {
+    src: IterPhase3a<'src>,
     peek: Option<char>,
     line: LineState,
+    buf: String,
 }
 
-impl<'a> IterToken<'a> {
-    fn new(code: &'a str) -> Self {
-        let mut src = IterPhase3a::new(code);
+impl<'src> IterTokenInner<'src> {
+    fn new(src: &'src str) -> Self {
+        let mut src = IterPhase3a::new(src);
         let peek = src.next();
         Self {
             src,
             peek,
             line: LineState::Start,
+            buf: String::new(),
         }
     }
-}
 
-impl<'a> Iterator for IterToken<'a> {
-    type Item = Token;
     fn next(&mut self) -> Option<Token> {
-        let mut buf = String::new();
+        self.buf.clear();
         loop {
             let c = if let Some(c) = self.peek {
                 c
@@ -276,7 +275,7 @@ impl<'a> Iterator for IterToken<'a> {
                     self.peek = self.src.next();
                 }
                 (LineState::Start, c) => {
-                    buf.push(c);
+                    self.buf.push(c);
                     self.line = LineState::Normal;
                     self.peek = self.src.next();
                 }
@@ -288,7 +287,7 @@ impl<'a> Iterator for IterToken<'a> {
                     '\n'
                 ),
                 (LineState::PpStart, c) => {
-                    buf.push(c);
+                    self.buf.push(c);
                     self.line = LineState::PpDirective;
                     self.peek = self.src.next();
                 }
@@ -296,27 +295,27 @@ impl<'a> Iterator for IterToken<'a> {
                 (LineState::PpDirective, ' ') => {
                     self.line = LineState::PpDirectiveBody;
                     self.peek = self.src.next();
-                    return Some(Token::PpDirective(PpDirective::from_str(buf.as_str())));
+                    return Some(Token::PpDirective(PpDirective::from_str(&self.buf)));
                 }
                 (LineState::PpDirective, '\n') => {
                     self.line = LineState::PpDirectiveEnd;
-                    return Some(Token::PpDirective(PpDirective::from_str(buf.as_str())));
+                    return Some(Token::PpDirective(PpDirective::from_str(&self.buf)));
                 }
                 (LineState::PpDirective, c) => {
-                    buf.push(c);
+                    self.buf.push(c);
                     self.peek = self.src.next();
                 }
 
                 (LineState::PpDirectiveBody, ' ') => {
                     self.peek = self.src.next();
-                    return Some(Token::Identifier(buf));
+                    return Some(Token::Identifier(&self.buf));
                 }
                 (LineState::PpDirectiveBody, '\n') => {
                     self.line = LineState::PpDirectiveEnd;
-                    return Some(Token::Identifier(buf));
+                    return Some(Token::Identifier(&self.buf));
                 }
                 (LineState::PpDirectiveBody, c) => {
-                    buf.push(c);
+                    self.buf.push(c);
                     self.peek = self.src.next();
                 }
 
@@ -333,25 +332,25 @@ impl<'a> Iterator for IterToken<'a> {
 
                 (LineState::Normal, ' ') => {
                     self.peek = self.src.next();
-                    return Some(Token::Identifier(buf));
+                    return Some(Token::Identifier(&self.buf));
                 }
                 (LineState::Normal, '\n') => {
                     self.peek = self.src.next();
                     self.line = LineState::Start;
-                    if buf.len() > 0 {
-                        return Some(Token::Identifier(buf));
+                    if self.buf.len() > 0 {
+                        return Some(Token::Identifier(&self.buf));
                     }
                 }
                 (LineState::Normal, ';') => {
-                    if buf.len() > 0 {
-                        return Some(Token::Identifier(buf));
+                    if self.buf.len() > 0 {
+                        return Some(Token::Identifier(&self.buf));
                     } else {
                         self.peek = self.src.next();
                         return Some(Token::Punctuation);
                     }
                 }
                 (LineState::Normal, c) => {
-                    buf.push(c);
+                    self.buf.push(c);
                     self.peek = self.src.next();
                 }
             }
@@ -435,7 +434,6 @@ pub fn is_c_identifier_char(c: char) -> bool {
     }
 }
 
-#[allow(dead_code)]
 pub fn is_c_identifier(s: &str) -> bool {
     for c in s.chars() {
         if !is_c_identifier_char(c) {
@@ -477,20 +475,17 @@ mod test {
 
         {
             let code = "#define x y\n //some comment here\n class Something;\n";
-            let tokenized: Vec<_> = IterToken::new(code).collect();
-            use std::str::FromStr;
+            let mut token_iter = IterTokenInner::new(code);
             assert_eq!(
-                &tokenized,
-                &[
-                    Token::PpDirective(PpDirective::Define),
-                    Token::Identifier(String::from_str("x").unwrap()),
-                    Token::Identifier(String::from_str("y").unwrap()),
-                    Token::NewLine,
-                    Token::Identifier(String::from_str("class").unwrap()),
-                    Token::Identifier(String::from_str("Something").unwrap()),
-                    Token::Punctuation,
-                ]
+                token_iter.next(),
+                Some(Token::PpDirective(PpDirective::Define))
             );
+            assert_eq!(token_iter.next(), Some(Token::Identifier("x")));
+            assert_eq!(token_iter.next(), Some(Token::Identifier("y")));
+            assert_eq!(token_iter.next(), Some(Token::NewLine));
+            assert_eq!(token_iter.next(), Some(Token::Identifier("class")),);
+            assert_eq!(token_iter.next(), Some(Token::Identifier("Something")),);
+            assert_eq!(token_iter.next(), Some(Token::Punctuation));
         }
     }
 }
