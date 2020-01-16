@@ -20,7 +20,7 @@ After that, in your Rust project:
 `Cargo.toml`
 ```toml
 [dependencies]
-vk-parse = "0.2"
+vk-parse = "0.3"
 vkxml = "0.3"
 ```
 
