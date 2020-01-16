@@ -506,6 +506,10 @@ pub struct Extension {
 
     /// The items which make up this extension.
     #[serde(default, skip_serializing_if = "is_default")]
+    pub specialuse: Option<String>,
+
+    /// The items which make up this extension.
+    #[serde(default, skip_serializing_if = "is_default")]
     pub children: Vec<ExtensionChild>,
 }
 

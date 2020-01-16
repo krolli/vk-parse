@@ -171,3 +171,4 @@ test_version! {test_v1_1_127, 1, 1, 127, "/xml"}
 test_version! {test_v1_1_128, 1, 1, 128, "/xml"}
 test_version! {test_v1_1_129, 1, 1, 129, "/xml"}
 test_version! {test_v1_1_130, 1, 1, 130, "/xml"}
+test_version! {test_v1_2_131, 1, 2, 131, "/xml"}

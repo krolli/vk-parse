@@ -777,6 +777,7 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     let mut promotedto = None;
     let mut obsoletedby = None;
     let mut provisional = None;
+    let mut specialuse = None;
     let mut children = Vec::new();
 
     match_attributes! {a in attributes,
@@ -794,7 +795,8 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         "deprecatedby" => deprecatedby  = Some(a.value),
         "promotedto"   => promotedto    = Some(a.value),
         "provisional"  => provisional   = Some(a.value),
-        "obsoletedby"  => obsoletedby   = Some(a.value)
+        "obsoletedby"  => obsoletedby   = Some(a.value),
+        "specialuse"   => specialuse    = Some(a.value)
     }
 
     match_elements! {attributes in events,
@@ -835,6 +837,7 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         promotedto,
         obsoletedby,
         provisional,
+        specialuse,
         children,
     }
 }
