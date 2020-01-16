@@ -1,7 +1,7 @@
 [package]
 name = "vk-parse"
-version = "0.2.0"
-authors = ["krolli <kroslakma@gmail.com>"]
+version = "0.3.0"
+authors = ["Martin Krošlák <kroslakma@gmail.com>"]
 description = "Vulkan specification parser"
 readme = "README.md"
 license = "Apache-2.0/MIT"
