@@ -778,6 +778,7 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     let mut obsoletedby = None;
     let mut provisional = None;
     let mut specialuse = None;
+    let mut sortorder = None;
     let mut children = Vec::new();
 
     match_attributes! {a in attributes,
@@ -796,7 +797,8 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         "promotedto"   => promotedto    = Some(a.value),
         "provisional"  => provisional   = Some(a.value),
         "obsoletedby"  => obsoletedby   = Some(a.value),
-        "specialuse"   => specialuse    = Some(a.value)
+        "specialuse"   => specialuse    = Some(a.value),
+        "sortorder"    => sortorder     = Some(a.value)
     }
 
     match_elements! {attributes in events,
@@ -820,6 +822,11 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         None => false,
     };
 
+    let sortorder = match sortorder {
+        Some(text) => Some(parse_integer(&text)),
+        None => None,
+    };
+
     unwrap_attribute!(extension, name);
     Extension {
         name,
@@ -838,6 +845,7 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         obsoletedby,
         provisional,
         specialuse,
+        sortorder,
         children,
     }
 }

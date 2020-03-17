@@ -508,6 +508,10 @@ pub struct Extension {
     #[serde(default, skip_serializing_if = "is_default")]
     pub specialuse: Option<String>,
 
+    /// Relative sortorder
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub sortorder: Option<i64>,
+
     /// The items which make up this extension.
     #[serde(default, skip_serializing_if = "is_default")]
     pub children: Vec<ExtensionChild>,

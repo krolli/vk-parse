@@ -18,7 +18,7 @@ serde_derive = "^1.0.75"
 
 [dev-dependencies]
 ron = "^0.4"
-reqwest = "^0.8"
+reqwest = { version = "^0.10", features = ["blocking"] }
 
 # These dependencies would be required to override selection of transitive dependencies if we were
 # to compile with minimal dependencies.
