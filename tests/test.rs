@@ -14,18 +14,10 @@ const URL_MASTER: &str =
 fn download<T: std::io::Write>(dst: &mut T, url: &str) {
     use std::io::BufRead;
 
-    let resp = reqwest::get(url).expect(&format!("Failed to GET resource: {:?}", url));
-    let _size = resp
-        .headers()
-        .get::<reqwest::header::ContentLength>()
-        .map(|ct_len| **ct_len)
-        .unwrap_or(0);
+    let resp = reqwest::blocking::get(url).expect(&format!("Failed to GET resource: {:?}", url));
     if !resp.status().is_success() {
         panic!("Download request failed with status: {:?}", resp.status())
     }
-    // if size == 0 {
-    //     panic!("Size of content returned was 0")
-    // }
 
     let mut src = std::io::BufReader::new(resp);
     loop {
@@ -172,3 +164,4 @@ test_version! {test_v1_1_128, 1, 1, 128, "/xml"}
 test_version! {test_v1_1_129, 1, 1, 129, "/xml"}
 test_version! {test_v1_1_130, 1, 1, 130, "/xml"}
 test_version! {test_v1_2_131, 1, 2, 131, "/xml"}
+test_version! {test_v1_2_135, 1, 2, 135, "/xml"}
