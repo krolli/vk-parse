@@ -1,4 +1,6 @@
 language: rust
+os: linux
+dist: xenial
 
 script:
   - cargo build --verbose --all
@@ -10,7 +12,7 @@ rust:
   - beta
   - nightly
 
-matrix:
+jobs:
   allow_failures:
     - rust: nightly
   fast_finish: true
