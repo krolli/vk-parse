@@ -3,8 +3,12 @@ os: linux
 dist: xenial
 
 script:
-  - cargo build --verbose --all
-  - cargo test --verbose --all
+  - cargo build --manifest-path vk-parse/Cargo.toml --features ""
+  - cargo build --manifest-path vk-parse/Cargo.toml --features "serialize"
+  - cargo build --manifest-path vk-parse/Cargo.toml --features "vkxml-convert"
+  - cargo build --manifest-path vk-parse/Cargo.toml --features "serialize,vkxml-convert"
+  - cargo build --all
+  - cargo test --all
 
 rust:
   - 1.31.1

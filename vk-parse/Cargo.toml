@@ -10,10 +10,15 @@ repository = "https://github.com/krolli/vk-parse"
 keywords = ["vulkan", "parser"]
 categories = ["parser-implementations", "rendering::graphics-api"]
 
+[features]
+serialize = ["serde", "serde_derive"]
+vkxml-convert = ["vkxml"]
+
 [dependencies]
-vkxml = "^0.3"
 xml-rs = "^0.8"
-serde = "^1.0.75"
-serde_derive = "^1.0.75"
+
+vkxml = { optional = true, version = "^0.3" }
+serde = { optional = true, version = "^1.0.75" }
+serde_derive = { optional = true, version = "^1.0.75" }
 
 [badges]
