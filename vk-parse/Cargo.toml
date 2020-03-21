@@ -1,0 +1,19 @@
+[package]
+name = "vk-parse"
+version = "0.4.0"
+authors = ["Martin Krošlák <kroslakma@gmail.com>"]
+description = "Vulkan specification parser"
+readme = "README.md"
+license = "Apache-2.0/MIT"
+documentation = "https://docs.rs/vk-parse"
+repository = "https://github.com/krolli/vk-parse"
+keywords = ["vulkan", "parser"]
+categories = ["parser-implementations", "rendering::graphics-api"]
+
+[dependencies]
+vkxml = "^0.3"
+xml-rs = "^0.8"
+serde = "^1.0.75"
+serde_derive = "^1.0.75"
+
+[badges]
