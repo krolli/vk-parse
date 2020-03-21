@@ -31,6 +31,12 @@
 			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
 		},
 		{
+			"name": "cargo check rustc 1-31-1",
+			"cmd": ["cargo", "+1.31.1", "check" ],
+			"working_dir": "${project_path}",
+			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
+		},
+		{
 			"name": "cargo doc",
 			"cmd": ["cargo", "doc" ],
 			"working_dir": "${project_path}",
@@ -45,6 +51,12 @@
 		{
 			"name": "cargo test",
 			"cmd": ["cargo", "test" ],
+			"working_dir": "${project_path}",
+			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
+		},
+		{
+			"name": "cargo test rustc 1-31-1",
+			"cmd": ["cargo", "+1.31.1", "test" ],
 			"working_dir": "${project_path}",
 			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
 		},

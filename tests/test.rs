@@ -1,6 +1,6 @@
 #![deny(warnings)]
-extern crate reqwest;
 
+extern crate minreq;
 extern crate ron;
 extern crate serde;
 extern crate vk_parse;
@@ -12,33 +12,20 @@ const URL_MASTER: &str =
     "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/master/xml/vk.xml";
 
 fn download<T: std::io::Write>(dst: &mut T, url: &str) {
-    use std::io::BufRead;
+    let resp = minreq::get(url)
+        .send()
+        .expect(&format!("Failed to GET resource: {:?}", url));
 
-    let resp = reqwest::get(url).expect(&format!("Failed to GET resource: {:?}", url));
-    let _size = resp
-        .headers()
-        .get::<reqwest::header::ContentLength>()
-        .map(|ct_len| **ct_len)
-        .unwrap_or(0);
-    if !resp.status().is_success() {
-        panic!("Download request failed with status: {:?}", resp.status())
+    let is_success = 200 <= resp.status_code && resp.status_code < 300;
+    if !is_success {
+        panic!(
+            "Download request failed with status: {:?}",
+            resp.status_code
+        )
     }
-    // if size == 0 {
-    //     panic!("Size of content returned was 0")
-    // }
 
-    let mut src = std::io::BufReader::new(resp);
-    loop {
-        let n = {
-            let mut buf = src.fill_buf().unwrap();
-            dst.write_all(&mut buf).unwrap();
-            buf.len()
-        };
-        if n == 0 {
-            break;
-        }
-        src.consume(n);
-    }
+    dst.write_all(resp.body.as_bytes())
+        .expect("Failed to write response body.");
 }
 
 fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
