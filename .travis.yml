@@ -13,6 +13,9 @@ rust:
   - nightly
 
 jobs:
+  include:
+    - dist: bionic
+      rust: 1.31.1
   allow_failures:
     - rust: nightly
   fast_finish: true
