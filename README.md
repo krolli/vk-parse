@@ -6,7 +6,6 @@
 [![](https://tokei.rs/b1/github/krolli/vk-parse)](https://github.com/krolli/vk-parse)
 [![Build Status](https://travis-ci.org/krolli/vk-parse.svg?branch=master)](https://travis-ci.org/krolli/vk-parse)
 
-Rust library for parsing vk.xml
 `vk-parse` is a Rust crate which parses the Vulkan API registry XML and converts it to a Rust representation. It can be used to simplify generation of Vulkan API bindings.
 
 Crate itself resides in [vk-parse subdirectory](vk-parse), where you can also find more information about it.
