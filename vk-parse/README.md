@@ -21,6 +21,25 @@ After that, in your Rust project:
 ```toml
 [dependencies]
 vk-parse = "0.4"
+```
+
+`main.rs`
+```rust
+extern crate vk_parse;
+use std::path::Path;
+
+fn main() {
+    let (registry, _errors) = vk_parse::parse_file(Path::new("vk.xml")).unwrap();
+    println!("{:?}", registry);
+}
+```
+
+Conversion to structures from [vkxml](https://github.com/terrybrashaw/vkxml) is optional and must be enabled using feature.
+
+`Cargo.toml`
+```toml
+[dependencies]
+vk-parse = { version = "0.4", features = ["vkxml-convert"] }
 vkxml = "0.3"
 ```
 
@@ -31,9 +50,14 @@ extern crate vkxml;
 use std::path::Path;
 
 fn main() {
-    let registry_ir = vk_parse::parse_file(Path::new("vk.xml"));
+    // You can either parse normal structures and convert them into vkxml format ...
+    let (registry_ir, _errors) = vk_parse::parse_file(Path::new("vk.xml")).unwrap();
     println!("{:?}", registry_ir);
     let registry_vkxml: vkxml::Registry = registry_ir.into();
+    println!("{:?}", registry_vkxml);
+
+    // ... or do both in single call.
+    let registry_vkxml = vk_parse::parse_file_as_vkxml(Path::new("vk.xml")).unwrap();
     println!("{:?}", registry_vkxml);
 }
 ```

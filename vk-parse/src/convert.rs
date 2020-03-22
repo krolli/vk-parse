@@ -31,15 +31,15 @@ fn new_field() -> vkxml::Field {
 /// Parses an file which must be the Vulkan registry XML in its standard format.
 ///
 /// Returns a Rust representation of the registry.
-pub fn parse_file_as_vkxml(path: &std::path::Path) -> vkxml::Registry {
-    parse_file(path).into()
+pub fn parse_file_as_vkxml(path: &std::path::Path) -> Result<vkxml::Registry, FatalError> {
+    parse_file(path).map(|(reg, _)| reg.into())
 }
 
 /// Parses data from stream which must be the Vulkan registry XML in its standard format.
 ///
 /// Returns a Rust representation of the registry.
-pub fn parse_stream_as_vkxml<T: std::io::Read>(stream: T) -> vkxml::Registry {
-    parse_stream(stream).into()
+pub fn parse_stream_as_vkxml<T: std::io::Read>(stream: T) -> Result<vkxml::Registry, FatalError> {
+    parse_stream(stream).map(|(reg, _)| reg.into())
 }
 
 impl From<Registry> for vkxml::Registry {

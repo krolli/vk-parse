@@ -37,8 +37,20 @@ fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
     let mut buf = Cursor::new(vec![0; 15]);
     download(&mut buf, &src);
     buf.set_position(0);
-    let _ir_parse = vk_parse::parse_stream(buf.clone());
-    let _vkxml_parse = vk_parse::parse_stream_as_vkxml(buf.clone());
+
+    match vk_parse::parse_stream(buf.clone()) {
+        Ok((_reg, errors)) => {
+            if !errors.is_empty() {
+                panic!("{:?}", errors);
+            }
+        }
+        Err(fatal_error) => panic!("{:?}", fatal_error),
+    }
+
+    match vk_parse::parse_stream_as_vkxml(buf) {
+        Ok(_) => (),
+        Err(fatal_error) => panic!("{:?}", fatal_error),
+    }
 }
 
 macro_rules! test_version {
@@ -56,8 +68,20 @@ fn test_master() {
     let mut buf = Cursor::new(vec![0; 15]);
     download(&mut buf, URL_MASTER);
     buf.set_position(0);
-    let _ir_parse = vk_parse::parse_stream(buf.clone());
-    let _vkxml_parse = vk_parse::parse_stream_as_vkxml(buf.clone());
+
+    match vk_parse::parse_stream(buf.clone()) {
+        Ok((_reg, errors)) => {
+            if !errors.is_empty() {
+                panic!("{:?}", errors);
+            }
+        }
+        Err(fatal_error) => panic!("{:?}", fatal_error),
+    }
+
+    match vk_parse::parse_stream_as_vkxml(buf) {
+        Ok(_) => (),
+        Err(fatal_error) => panic!("{:?}", fatal_error),
+    }
 }
 
 test_version! {test_v1_0_33, 1, 0, 33, "-core/src/spec"}

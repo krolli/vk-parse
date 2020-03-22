@@ -10,65 +10,114 @@ type XmlEvents<R> = xml::reader::Events<R>;
 type XmlAttribute = xml::attribute::OwnedAttribute;
 
 //--------------------------------------------------------------------------------------------------
+struct ParseCtx<R: Read> {
+    events: XmlEvents<R>,
+    xpath: String,
+    errors: Vec<Error>,
+}
+
+impl<R: Read> ParseCtx<R> {
+    fn push_element(&mut self, name: &str) {
+        self.xpath.push('/');
+        self.xpath.push_str(name);
+    }
+
+    fn pop_element(&mut self) {
+        if let Some(separator_pos) = self.xpath.rfind('/') {
+            self.xpath.truncate(separator_pos);
+        } else {
+            self.errors.push(Error::Internal {
+                desc: "ParseCtx push_element/pop_element mismatch.",
+            });
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
 macro_rules! unwrap_attribute (
-    ( $element:ident, $attribute:ident ) => {
+    ($ctx:expr, $element:ident, $attribute:ident) => {
         let $attribute = match $attribute {
             Some(val) => val,
-            None => panic!(
-                "Missing attribute '{}' on element '{}'.",
-                stringify!($attribute),
-                stringify!($element),
-            ),
+            None => {
+                $ctx.errors.push(Error::MissingAttribute {
+                    xpath: $ctx.xpath.clone(),
+                    name: String::from(stringify!($attribute)),
+                });
+                return None;
+            }
         };
     };
 );
 
 macro_rules! match_attributes {
-    ($a:ident in $attributes:expr, $($p:pat => $e:expr),+) => {
+    ($ctx:expr, $a:ident in $attributes:expr, $($p:pat => $e:expr),+) => {
         for $a in $attributes {
             let n = $a.name.local_name.as_str();
             match n {
                 $(
                     $p => $e,
                 )+
-                _ => panic!("Unexpected attribute {:?}", n),
+                _ => $ctx.errors.push(Error::UnexpectedAttribute {
+                    xpath: $ctx.xpath.clone(),
+                    name: String::from(n),
+                })
             }
         }
     };
 }
 
 macro_rules! match_elements {
-    ( $events:expr, $($p:pat => $e:expr),+) => {
-        while let Some(Ok(e)) = $events.next() {
+    ($ctx:expr, $($p:pat => $e:expr),+) => {
+        while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::StartElement { name, .. } => {
                     let name = name.local_name.as_str();
+                    $ctx.push_element(name);
                     match name {
                         $(
                             $p => $e,
                         )+
-                        _ => panic!("Unexpected element {:?}", name),
+                        _ => {
+                            $ctx.errors.push(Error::UnexpectedElement {
+                                xpath: $ctx.xpath.clone(),
+                                name: String::from(name),
+                            });
+                            consume_current_element($ctx);
+                        }
                     }
                 }
-                XmlEvent::EndElement { .. } => break,
+                XmlEvent::EndElement { .. } => {
+                    $ctx.pop_element();
+                    break;
+                }
                 _ => {}
             }
         }
     };
 
-    ( $attributes:ident in $events:expr, $($p:pat => $e:expr),+) => {
-        while let Some(Ok(e)) = $events.next() {
+    ( $ctx:expr, $attributes:ident, $($p:pat => $e:expr),+) => {
+        while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::StartElement { name, $attributes, .. } => {
                     let name = name.local_name.as_str();
+                    $ctx.push_element(name);
                     match name {
                         $(
                             $p => $e,
                         )+
-                        _ => panic!("Unexpected element {:?}", name),
+                        _ => {
+                            $ctx.errors.push(Error::UnexpectedElement {
+                                xpath: $ctx.xpath.clone(),
+                                name: String::from(name),
+                            });
+                            consume_current_element($ctx);
+                        }
                     }
                 }
-                XmlEvent::EndElement { .. } => break,
+                XmlEvent::EndElement { .. } => {
+                    $ctx.pop_element();
+                    break;
+                }
                 _ => {}
             }
         }
@@ -76,23 +125,31 @@ macro_rules! match_elements {
 }
 
 macro_rules! match_elements_combine_text {
-    ( $events:expr, $buffer:ident, $($p:pat => $e:expr),+) => {
-        while let Some(Ok(e)) = $events.next() {
+    ( $ctx:expr, $buffer:ident, $($p:pat => $e:expr),+) => {
+        while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::Characters(text) => $buffer.push_str(&text),
                 XmlEvent::Whitespace(text) => $buffer.push_str(&text),
                 XmlEvent::StartElement { name, .. } => {
                     $buffer.push(' ');
                     let name = name.local_name.as_str();
+                    $ctx.push_element(name);
                     match name {
                         $(
                             $p => $e,
                         )+
-                        _ => panic!("Unexpected element {:?}", name),
+                        _ => {
+                            $ctx.errors.push(Error::UnexpectedElement {
+                                xpath: $ctx.xpath.clone(),
+                                name: String::from(name),
+                            });
+                            consume_current_element($ctx);
+                        }
                     }
                 }
                 XmlEvent::EndElement { .. } => {
                     $buffer.push(' ');
+                    $ctx.pop_element();
                     break;
                 },
                 _ => {}
@@ -100,21 +157,31 @@ macro_rules! match_elements_combine_text {
         }
     };
 
-    ( $attributes:ident in $events:expr, $buffer:ident, $($p:pat => $e:expr),+) => {
-        while let Some(Ok(e)) = $events.next() {
+    ( $ctx:expr, $attributes:ident, $buffer:ident, $($p:pat => $e:expr),+) => {
+        while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::Characters(text) => $buffer.push_str(&text),
                 XmlEvent::Whitespace(text) => $buffer.push_str(&text),
                 XmlEvent::StartElement { name, $attributes, .. } => {
                     let name = name.local_name.as_str();
+                    $ctx.push_element(name);
                     match name {
                         $(
                             $p => $e,
                         )+
-                        _ => panic!("Unexpected element {:?}", name),
+                        _ => {
+                            $ctx.errors.push(Error::UnexpectedElement {
+                                xpath: $ctx.xpath.clone(),
+                                name: String::from(name),
+                            });
+                            consume_current_element($ctx);
+                        }
                     }
                 }
-                XmlEvent::EndElement { .. } => break,
+                XmlEvent::EndElement { .. } => {
+                    $ctx.pop_element();
+                    break;
+                }
                 _ => {}
             }
         }
@@ -122,63 +189,71 @@ macro_rules! match_elements_combine_text {
 }
 
 //--------------------------------------------------------------------------------------------------
-
 /// Parses the Vulkan XML file into a Rust object.
-pub fn parse_file(path: &std::path::Path) -> Registry {
-    let file = std::io::BufReader::new(std::fs::File::open(path).unwrap());
+pub fn parse_file(path: &std::path::Path) -> Result<(Registry, Vec<Error>), FatalError> {
+    let file = std::io::BufReader::new(std::fs::File::open(path)?);
     let parser = xml::reader::ParserConfig::new().create_reader(file);
-
-    let mut events = parser.into_iter();
-    match_elements! {events,
-        "registry" => return parse_registry(&mut events)
-    }
-
-    panic!("Couldn't find 'registry' element in file {:?}", path);
+    parse_xml(parser.into_iter())
 }
 
 /// Parses the Vulkan XML file from stream into a Rust object.
-pub fn parse_stream<T: std::io::Read>(stream: T) -> Registry {
+pub fn parse_stream<T: std::io::Read>(stream: T) -> Result<(Registry, Vec<Error>), FatalError> {
     let parser = xml::reader::ParserConfig::new().create_reader(stream);
-
-    let mut events = parser.into_iter();
-    match_elements! {events,
-        "registry" => return parse_registry(&mut events)
-    }
-
-    panic!("Couldn't find 'registry' element in stream");
+    parse_xml(parser.into_iter())
 }
 
-fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
+fn parse_xml<R: Read>(events: XmlEvents<R>) -> Result<(Registry, Vec<Error>), FatalError> {
+    let mut ctx = ParseCtx {
+        events,
+        xpath: String::from(""),
+        errors: Vec::new(),
+    };
+
+    let mut result = Err(FatalError::MissingRegistryElement);
+
+    {
+        let ctx = &mut ctx;
+        match_elements! {ctx,
+            "registry" => result = parse_registry(ctx)
+        }
+    }
+
+    result.map(|r| (r, ctx.errors))
+}
+
+fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError> {
     let mut registry = Registry(Vec::new());
 
-    match_elements! {attributes in events,
-        "comment" => registry.0.push(RegistryChild::Comment(parse_text_element(events))),
-        "vendorids" => registry.0.push(parse_vendorids(attributes, events)),
+    match_elements! {ctx, attributes,
+        "comment" => registry.0.push(RegistryChild::Comment(parse_text_element(ctx))),
+        "vendorids" => registry.0.push(parse_vendorids(ctx, attributes)),
         "platforms" => {
             let mut comment = None;
             let mut children = Vec::new();
 
-            match_attributes!{a in attributes,
+            match_attributes!{ctx, a in attributes,
                 "comment" => comment = Some(a.value)
             }
 
-            match_elements!{attributes in events,
-                "platform" => children.push(parse_platform(attributes, events))
+            match_elements!{ctx, attributes,
+                "platform" => if let Some(v) = parse_platform(ctx, attributes) {
+                    children.push(v);
+                }
             }
 
             registry.0.push(RegistryChild::Platforms(Platforms { comment, children }));
         },
 
-        "tags" => registry.0.push(parse_tags(attributes, events)),
+        "tags" => registry.0.push(parse_tags(ctx, attributes)),
         "types" => {
             let mut comment = None;
             let mut children = Vec::new();
-            match_attributes!{a in attributes,
+            match_attributes!{ctx, a in attributes,
                 "comment" => comment = Some(a.value)
             }
-            match_elements!{attributes in events,
-                "comment" => children.push(TypesChild::Comment(parse_text_element(events))),
-                "type" => children.push(parse_type(attributes, events))
+            match_elements!{ctx, attributes,
+                "comment" => children.push(TypesChild::Comment(parse_text_element(ctx))),
+                "type" => children.push(parse_type(ctx, attributes))
             }
             registry.0.push(RegistryChild::Types(Types{
                 comment,
@@ -193,7 +268,7 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
             let mut vendor = None;
             let mut comment = None;
             let mut children = Vec::new();
-            match_attributes!{a in attributes,
+            match_attributes!{ctx, a in attributes,
                 "name"    => name    = Some(a.value),
                 "type"    => kind    = Some(a.value),
                 "start"   => start   = Some(a.value),
@@ -201,30 +276,18 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
                 "vendor"  => vendor  = Some(a.value),
                 "comment" => comment = Some(a.value)
             }
-            match_elements!{attributes in events,
-                "enum" => children.push(EnumsChild::Enum(parse_enum(attributes, events))),
-                "unused" => {
-                    let mut start = None;
-                    let mut end = None;
-                    let mut vendor = None;
-                    let mut comment = None;
-                    match_attributes!{a in attributes,
-                        "start"   => start   = Some(a.value),
-                        "end"     => end     = Some(a.value),
-                        "vendor"  => vendor  = Some(a.value),
-                        "comment" => comment = Some(a.value)
-                    }
-                    consume_current_element(events);
-                    unwrap_attribute!(unused, start);
-                    let start = parse_integer(&start);
-                    let end = end.map(|val| parse_integer(&val));
-                    children.push(EnumsChild::Unused(Unused{start, end, vendor, comment}));
+            match_elements!{ctx, attributes,
+                "enum" => if let Some(v) = parse_enum(ctx, attributes) {
+                    children.push(EnumsChild::Enum(v));
                 },
-                "comment" => children.push(EnumsChild::Comment(parse_text_element(events)))
+                "unused" => if let Some(v) = parse_enums_child_unused(ctx, attributes) {
+                    children.push(v);
+                },
+                "comment" => children.push(EnumsChild::Comment(parse_text_element(ctx)))
             }
 
-            let start = start.map(|val| parse_integer(&val));
-            let end = end.map(|val| parse_integer(&val));
+            let start = start.and_then(|val| parse_integer(ctx, &val));
+            let end = end.and_then(|val| parse_integer(ctx, &val));
 
             registry.0.push(RegistryChild::Enums(Enums{ name, kind, start, end, vendor, comment, children }));
         },
@@ -232,133 +295,149 @@ fn parse_registry<R: Read>(events: &mut XmlEvents<R>) -> Registry {
             let mut comment = None;
             let mut children = Vec::new();
 
-            match_attributes!{a in attributes,
+            match_attributes!{ctx, a in attributes,
                 "comment" => comment = Some(a.value)
             }
 
-            match_elements!{attributes in events,
-                "command" => children.push(parse_command(attributes, events))
+            match_elements!{ctx, attributes,
+                "command" => if let Some(v) = parse_command(ctx, attributes) {
+                    children.push(v);
+                }
             }
 
             registry.0.push(RegistryChild::Commands(Commands{comment, children}));
         },
-        "feature" => {
-            registry.0.push(parse_feature(attributes, events));
+        "feature" => if let Some(v) = parse_feature(ctx, attributes) {
+            registry.0.push(v);
         },
-        "extensions" => registry.0.push(parse_extensions(attributes, events))
+        "extensions" => registry.0.push(parse_extensions(ctx, attributes))
     }
 
-    registry
+    Ok(registry)
 }
 
-pub fn parse_vendorids<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> RegistryChild {
+fn parse_vendorids<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> RegistryChild {
     let mut comment = None;
     let mut children = Vec::new();
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "comment" => comment = Some(a.value)
     }
 
-    match_elements! {attributes in events,
-        "vendorid" => children.push(parse_vendorid(attributes, events))
+    match_elements! {ctx, attributes,
+        "vendorid" => if let Some(v) = parse_vendorid(ctx, attributes) {
+            children.push(v);
+        }
     }
 
     RegistryChild::VendorIds(VendorIds { comment, children })
 }
 
-fn parse_vendorid<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> VendorId {
+fn parse_vendorid<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<VendorId> {
     let mut name = None;
     let mut comment = None;
     let mut id = None;
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
         "comment" => comment = Some(a.value),
         "id" => {
-            if !a.value.starts_with("0x") {
-                panic!("Expected hexadecimal integer. Found {:?}", a.value);
+            let mut v = None;
+            if a.value.starts_with("0x") {
+                v = u32::from_str_radix(&a.value.split_at(2).1, 16).ok();
             }
-            id = Some(u32::from_str_radix(&a.value.split_at(2).1, 16).unwrap());
+
+            if let Some(v) = v {
+                id = Some(v);
+            } else {
+                ctx.errors.push(Error::UnexpectedAttributeValue {
+                    xpath: ctx.xpath.clone(),
+                    name: String::from("id"),
+                    value: a.value.clone(),
+                });
+            }
         }
     }
 
-    consume_current_element(events);
+    consume_current_element(ctx);
 
-    unwrap_attribute!(vendorid, name);
-    unwrap_attribute!(vendorid, id);
+    unwrap_attribute!(ctx, vendorid, name);
+    unwrap_attribute!(ctx, vendorid, id);
 
-    VendorId { name, comment, id }
+    Some(VendorId { name, comment, id })
 }
 
-fn parse_platform<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Platform {
+fn parse_platform<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<Platform> {
     let mut name = None;
     let mut comment = None;
     let mut protect = None;
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "name"    => name    = Some(a.value),
         "comment" => comment = Some(a.value),
         "protect" => protect = Some(a.value)
     }
 
-    consume_current_element(events);
+    consume_current_element(ctx);
 
-    unwrap_attribute!(platform, name);
-    unwrap_attribute!(platform, protect);
+    unwrap_attribute!(ctx, platform, name);
+    unwrap_attribute!(ctx, platform, protect);
 
-    Platform {
+    Some(Platform {
         name,
         comment,
         protect,
-    }
+    })
 }
 
-pub fn parse_tags<R: Read>(
-    attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> RegistryChild {
+fn parse_tags<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> RegistryChild {
     let mut comment = None;
     let mut children = Vec::new();
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "comment" => comment = Some(a.value)
     }
 
-    match_elements! {attributes in events,
-        "tag" => children.push(parse_tag(attributes, events))
+    match_elements! {ctx, attributes,
+        "tag" => if let Some(v) = parse_tag(ctx, attributes) {
+            children.push(v);
+        }
     }
 
     RegistryChild::Tags(Tags { comment, children })
 }
 
-fn parse_tag<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Tag {
+fn parse_tag<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Tag> {
     let mut name = None;
     let mut author = None;
     let mut contact = None;
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "name"    => name    = Some(a.value),
         "author"  => author  = Some(a.value),
         "contact" => contact = Some(a.value)
     }
 
-    consume_current_element(events);
+    consume_current_element(ctx);
 
-    unwrap_attribute!(tag, name);
-    unwrap_attribute!(tag, author);
-    unwrap_attribute!(tag, contact);
+    unwrap_attribute!(ctx, tag, name);
+    unwrap_attribute!(ctx, tag, author);
+    unwrap_attribute!(ctx, tag, contact);
 
-    Tag {
+    Some(Tag {
         name,
         author,
         contact,
-    }
+    })
 }
 
-pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> TypesChild {
+fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> TypesChild {
     let mut api = None;
     let mut alias = None;
     let mut requires = None;
@@ -373,7 +452,7 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
     let mut markup = Vec::new();
     let mut members = Vec::new();
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "api"           => api           = Some(a.value),
         "alias"         => alias         = Some(a.value),
         "requires"      => requires      = Some(a.value),
@@ -385,7 +464,7 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
         "comment"       => comment       = Some(a.value)
     }
 
-    match_elements_combine_text! {attributes in events, code,
+    match_elements_combine_text! {ctx, attributes, code,
         "member" => {
             let mut len = None;
             let mut altlen = None;
@@ -396,7 +475,7 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
             let mut values = None;
             let mut code = String::new();
             let mut markup = Vec::new();
-            match_attributes!{a in attributes,
+            match_attributes!{ctx, a in attributes,
                 "len"                   => len                   = Some(a.value),
                 "altlen"                => altlen                = Some(a.value),
                 "externsync"            => externsync            = Some(a.value),
@@ -405,24 +484,24 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
                 "validextensionstructs" => validextensionstructs = Some(a.value),
                 "values"                => values                = Some(a.value)
             }
-            match_elements_combine_text!{events, code,
+            match_elements_combine_text!{ctx, code,
                 "type" => {
-                    let text = parse_text_element(events);
+                    let text = parse_text_element(ctx);
                     code.push_str(&text);
                     markup.push(TypeMemberMarkup::Type(text));
                 },
                 "name" => {
-                    let text = parse_text_element(events);
+                    let text = parse_text_element(ctx);
                     code.push_str(&text);
                     markup.push(TypeMemberMarkup::Name(text));
                 },
                 "enum" => {
-                    let text = parse_text_element(events);
+                    let text = parse_text_element(ctx);
                     code.push_str(&text);
                     markup.push(TypeMemberMarkup::Enum(text));
                 },
                 "comment" => {
-                    let text = parse_text_element(events);
+                    let text = parse_text_element(ctx);
                     markup.push(TypeMemberMarkup::Comment(text));
                 }
             }
@@ -438,19 +517,19 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
                 markup,
             }))
         },
-        "comment" => members.push(TypeMember::Comment(parse_text_element(events))),
+        "comment" => members.push(TypeMember::Comment(parse_text_element(ctx))),
         "name" => {
-            let text = parse_text_element(events);
+            let text = parse_text_element(ctx);
             code.push_str(&text);
             markup.push(TypeCodeMarkup::Name(text));
         },
         "type" => {
-            let text = parse_text_element(events);
+            let text = parse_text_element(ctx);
             code.push_str(&text);
             markup.push(TypeCodeMarkup::Type(text));
         },
         "apientry" => {
-            let text = parse_text_element(events);
+            let text = parse_text_element(ctx);
             code.push_str(&text);
             markup.push(TypeCodeMarkup::ApiEntry(text));
         }
@@ -476,7 +555,7 @@ pub fn parse_type<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents
     })
 }
 
-pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Command {
+fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Command> {
     let mut name = None;
     let mut alias = None;
     let mut queues = None;
@@ -487,7 +566,7 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
     let mut pipeline = None;
     let mut comment = None;
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
         "alias" => alias = Some(a.value),
         "queues" => queues = Some(a.value),
@@ -500,9 +579,9 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
     }
 
     if let Some(alias) = alias {
-        unwrap_attribute!(command, name);
-        consume_current_element(events);
-        Command::Alias { alias, name }
+        unwrap_attribute!(ctx, command, name);
+        consume_current_element(ctx);
+        Some(Command::Alias { alias, name })
     } else {
         let mut code = String::new();
         let mut proto = None;
@@ -511,35 +590,39 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
         let mut implicitexternsyncparams = Vec::new();
 
         fn parse_name_with_type<R: Read>(
+            ctx: &mut ParseCtx<R>,
             buffer: &mut String,
-            events: &mut XmlEvents<R>,
-        ) -> NameWithType {
+        ) -> Option<NameWithType> {
             let mut name = None;
             let mut type_name = None;
-            match_elements_combine_text! {events, buffer,
+            match_elements_combine_text! {ctx, buffer,
                 "type" => {
-                    let text = parse_text_element(events);
+                    let text = parse_text_element(ctx);
                     buffer.push_str(&text);
                     type_name = Some(text);
                 },
                 "name" => {
-                    let text = parse_text_element(events);
+                    let text = parse_text_element(ctx);
                     buffer.push_str(&text);
                     name = Some(text);
                 }
             }
-            NameWithType {
-                name: match name {
-                    Some(name) => name,
-                    None => panic!("Missing name element."),
-                },
-                type_name,
-            }
+            let name = if let Some(v) = name {
+                v
+            } else {
+                ctx.errors.push(Error::MissingElement {
+                    xpath: ctx.xpath.clone(),
+                    name: String::from("name"),
+                });
+                return None;
+            };
+
+            Some(NameWithType { name, type_name })
         }
 
-        match_elements! {attributes in events,
+        match_elements! {ctx, attributes,
             "proto" => {
-                proto = Some(parse_name_with_type(&mut code, events));
+                proto = parse_name_with_type(ctx, &mut code);
                 code.push('(');
             },
 
@@ -550,7 +633,7 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
                 let mut optional = None;
                 let mut noautovalidity = None;
 
-                match_attributes!{a in attributes,
+                match_attributes!{ctx, a in attributes,
                     "len"            => len            = Some(a.value),
                     "altlen"         => altlen         = Some(a.value),
                     "externsync"     => externsync     = Some(a.value),
@@ -561,34 +644,45 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
                 if params.len() > 0 {
                     code.push_str(", ");
                 }
-                let definition = parse_name_with_type(&mut code, events);
-                params.push(CommandParam {
-                    len,
-                    altlen,
-                    externsync,
-                    optional,
-                    noautovalidity,
-                    definition,
-                });
+                if let Some(definition) = parse_name_with_type(ctx, &mut code) {
+                    params.push(CommandParam {
+                        len,
+                        altlen,
+                        externsync,
+                        optional,
+                        noautovalidity,
+                        definition,
+                    });
+                }
             },
 
             "alias" => {
-                match_attributes!{a in attributes,
+                match_attributes!{ctx, a in attributes,
                     "name" => alias = Some(a.value)
                 }
-                consume_current_element(events);
+                consume_current_element(ctx);
             },
 
-            "description" => description = Some(parse_text_element(events)),
+            "description" => description = Some(parse_text_element(ctx)),
             "implicitexternsyncparams" => {
-                match_elements!{events,
-                    "param" => implicitexternsyncparams.push(parse_text_element(events))
+                match_elements!{ctx,
+                    "param" => implicitexternsyncparams.push(parse_text_element(ctx))
                 }
             }
         }
         code.push_str(");");
 
-        Command::Definition(CommandDefinition {
+        let proto = if let Some(v) = proto {
+            v
+        } else {
+            ctx.errors.push(Error::MissingElement {
+                xpath: ctx.xpath.clone(),
+                name: String::from("proto"),
+            });
+            return None;
+        };
+
+        Some(Command::Definition(CommandDefinition {
             queues,
             successcodes,
             errorcodes,
@@ -596,20 +690,17 @@ pub fn parse_command<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEve
             cmdbufferlevel,
             pipeline,
             comment,
-            proto: match proto {
-                Some(proto) => proto,
-                None => panic!("Missing proto element in command definition."),
-            },
+            proto,
             params,
             alias,
             description,
             implicitexternsyncparams,
             code,
-        })
+        }))
     }
 }
 
-fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Enum {
+fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Enum> {
     let mut name = None;
     let mut comment = None;
     let mut type_suffix = None;
@@ -622,7 +713,7 @@ fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
     let mut positive = true;
     let mut alias = None;
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
         "comment" => comment = Some(a.value),
         "type" => type_suffix = Some(a.value),
@@ -634,10 +725,11 @@ fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
             if a.value.as_str() == "-" {
                 positive = false;
             } else {
-                panic!(
-                    "Unexpected value of attribute {:?}, expected \"-\", found {:?}",
-                    name, a.value
-                );
+                ctx.errors.push(Error::UnexpectedAttributeValue {
+                    xpath: ctx.xpath.clone(),
+                    name: String::from("dir"),
+                    value: a.value
+                });
             }
         },
         "bitpos" => bitpos = Some(a.value),
@@ -645,9 +737,7 @@ fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
         "alias" => alias = Some(a.value)
     }
 
-    consume_current_element(events);
-
-    unwrap_attribute!(enum, name);
+    unwrap_attribute!(ctx, enum, name);
 
     let mut count = 0;
     if offset.is_some() {
@@ -663,52 +753,104 @@ fn parse_enum<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>)
         count += 1;
     }
     if count > 1 {
-        panic!(
-            "Unable to determine correct specification of enum: {:?}, {:?}, {:?}, {:?}",
-            offset, bitpos, value, alias
-        );
+        ctx.errors.push(Error::SchemaViolation {
+            xpath: ctx.xpath.clone(),
+            desc: format!(
+                "Unable to determine correct specification of enum: offset={:?}, bitpos={:?}, value={:?}, alias={:?}",
+                offset, bitpos, value, alias
+            ),
+        });
+        consume_current_element(ctx);
+        return None;
     }
 
     let spec = if let Some(alias) = alias {
         EnumSpec::Alias { alias, extends }
     } else if let Some(offset) = offset {
+        let offset = match parse_integer(ctx, &offset) {
+            Some(v) => v,
+            None => {
+                consume_current_element(ctx);
+                return None;
+            }
+        };
         if let Some(extends) = extends {
             EnumSpec::Offset {
-                offset: parse_integer(&offset),
+                offset,
                 extends,
                 extnumber: match extnumber {
-                    Some(extnumber) => Some(parse_integer(&extnumber)),
+                    Some(extnumber) => parse_integer(ctx, &extnumber),
                     None => None,
                 },
                 dir: positive,
             }
         } else {
-            panic!("Missing extends on enum with offset spec.");
+            ctx.errors.push(Error::SchemaViolation {
+                xpath: ctx.xpath.clone(),
+                desc: String::from("Missing extends on enum with offset spec."),
+            });
+            consume_current_element(ctx);
+            return None;
         }
     } else if let Some(bitpos) = bitpos {
-        EnumSpec::Bitpos {
-            bitpos: parse_integer(&bitpos),
-            extends,
-        }
+        let bitpos = match parse_integer(ctx, &bitpos) {
+            Some(v) => v,
+            None => {
+                consume_current_element(ctx);
+                return None;
+            }
+        };
+        EnumSpec::Bitpos { bitpos, extends }
     } else if let Some(value) = value {
         EnumSpec::Value { value, extends }
     } else {
         EnumSpec::None
     };
 
-    Enum {
+    consume_current_element(ctx);
+
+    Some(Enum {
         name,
         comment,
         type_suffix,
         api,
         spec,
-    }
+    })
 }
 
-pub fn parse_feature<R: Read>(
+fn parse_enums_child_unused<R: Read>(
+    ctx: &mut ParseCtx<R>,
     attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> RegistryChild {
+) -> Option<EnumsChild> {
+    let mut start = None;
+    let mut end = None;
+    let mut vendor = None;
+    let mut comment = None;
+    match_attributes! {ctx, a in attributes,
+        "start"   => start   = Some(a.value),
+        "end"     => end     = Some(a.value),
+        "vendor"  => vendor  = Some(a.value),
+        "comment" => comment = Some(a.value)
+    }
+    consume_current_element(ctx);
+    unwrap_attribute!(ctx, unused, start);
+    let start = match parse_integer(ctx, &start) {
+        Some(v) => v,
+        None => return None,
+    };
+    let end = end.and_then(|val| parse_integer(ctx, &val));
+    Some(EnumsChild::Unused(Unused {
+        start,
+        end,
+        vendor,
+        comment,
+    }))
+}
+
+fn parse_feature<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<RegistryChild> {
     let mut api = None;
     let mut name = None;
     let mut number = None;
@@ -716,7 +858,7 @@ pub fn parse_feature<R: Read>(
     let mut comment = None;
     let mut children = Vec::new();
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "api"     => api     = Some(a.value),
         "name"    => name    = Some(a.value),
         "number"  => number  = Some(a.value),
@@ -724,44 +866,49 @@ pub fn parse_feature<R: Read>(
         "comment" => comment = Some(a.value)
     }
 
-    match_elements! {attributes in events,
-        "require" => children.push(parse_extension_item_require(attributes, events)),
-        "remove"  => children.push(parse_extension_item_remove(attributes, events))
+    match_elements! {ctx, attributes,
+        "require" => children.push(parse_extension_item_require(ctx, attributes)),
+        "remove"  => children.push(parse_extension_item_remove(ctx, attributes))
     }
 
-    unwrap_attribute!(feature, api);
-    unwrap_attribute!(feature, name);
-    unwrap_attribute!(feature, number);
+    unwrap_attribute!(ctx, feature, api);
+    unwrap_attribute!(ctx, feature, name);
+    unwrap_attribute!(ctx, feature, number);
 
-    RegistryChild::Feature(Feature {
+    Some(RegistryChild::Feature(Feature {
         api,
         name,
         number,
         protect,
         comment,
         children,
-    })
+    }))
 }
 
-pub fn parse_extensions<R: Read>(
+fn parse_extensions<R: Read>(
+    ctx: &mut ParseCtx<R>,
     attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
 ) -> RegistryChild {
     let mut comment = None;
     let mut children = Vec::new();
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "comment" => comment = Some(a.value)
     }
 
-    match_elements! {attributes in events,
-        "extension" => children.push(parse_extension(attributes, events))
+    match_elements! {ctx, attributes,
+        "extension" => if let Some(v) = parse_extension(ctx, attributes) {
+            children.push(v);
+        }
     }
 
     RegistryChild::Extensions(Extensions { comment, children })
 }
 
-fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvents<R>) -> Extension {
+fn parse_extension<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<Extension> {
     let mut name = None;
     let mut comment = None;
     let mut number = None;
@@ -781,7 +928,7 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
     let mut sortorder = None;
     let mut children = Vec::new();
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "name"         => name          = Some(a.value),
         "comment"      => comment       = Some(a.value),
         "number"       => number        = Some(a.value),
@@ -801,13 +948,8 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         "sortorder"    => sortorder     = Some(a.value)
     }
 
-    match_elements! {attributes in events,
-        "require" => children.push(parse_extension_item_require(attributes, events)),
-        "remove" => children.push(parse_extension_item_remove(attributes, events))
-    }
-
     let number = match number {
-        Some(text) => Some(parse_integer(&text)),
+        Some(text) => parse_integer(ctx, &text),
         None => None,
     };
 
@@ -816,19 +958,29 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
             if value == "true" {
                 true
             } else {
-                panic!("Unexpected value of 'provisional' attribute: {:?}", value);
+                ctx.errors.push(Error::SchemaViolation {
+                    xpath: ctx.xpath.clone(),
+                    desc: format!("Unexpected value of 'provisional' attribute: {}", value),
+                });
+                false
             }
         }
         None => false,
     };
 
     let sortorder = match sortorder {
-        Some(text) => Some(parse_integer(&text)),
+        Some(text) => parse_integer(ctx, &text),
         None => None,
     };
 
-    unwrap_attribute!(extension, name);
-    Extension {
+    unwrap_attribute!(ctx, extension, name);
+
+    match_elements! {ctx, attributes,
+        "require" => children.push(parse_extension_item_require(ctx, attributes)),
+        "remove" => children.push(parse_extension_item_remove(ctx, attributes))
+    }
+
+    Some(Extension {
         name,
         comment,
         number,
@@ -847,12 +999,12 @@ fn parse_extension<R: Read>(attributes: Vec<XmlAttribute>, events: &mut XmlEvent
         specialuse,
         sortorder,
         children,
-    }
+    })
 }
 
 fn parse_extension_item_require<R: Read>(
+    ctx: &mut ParseCtx<R>,
     attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
 ) -> ExtensionChild {
     let mut api = None;
     let mut profile = None;
@@ -861,7 +1013,7 @@ fn parse_extension_item_require<R: Read>(
     let mut comment = None;
     let mut items = Vec::new();
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "api"       => api       = Some(a.value),
         "profile"   => profile   = Some(a.value),
         "extension" => extension = Some(a.value),
@@ -869,16 +1021,21 @@ fn parse_extension_item_require<R: Read>(
         "comment"   => comment   = Some(a.value)
     }
 
-    while let Some(Ok(e)) = events.next() {
+    while let Some(Ok(e)) = ctx.events.next() {
         match e {
             XmlEvent::StartElement {
                 name, attributes, ..
-            } => items.push(parse_interface_item(
-                name.local_name.as_str(),
-                attributes,
-                events,
-            )),
-            XmlEvent::EndElement { .. } => break,
+            } => {
+                let name = name.local_name.as_str();
+                ctx.push_element(name);
+                if let Some(v) = parse_interface_item(ctx, name, attributes) {
+                    items.push(v);
+                }
+            }
+            XmlEvent::EndElement { .. } => {
+                ctx.pop_element();
+                break;
+            }
             _ => {}
         }
     }
@@ -894,30 +1051,35 @@ fn parse_extension_item_require<R: Read>(
 }
 
 fn parse_extension_item_remove<R: Read>(
+    ctx: &mut ParseCtx<R>,
     attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
 ) -> ExtensionChild {
     let mut api = None;
     let mut profile = None;
     let mut comment = None;
     let mut items = Vec::new();
 
-    match_attributes! {a in attributes,
+    match_attributes! {ctx, a in attributes,
         "api"     => api     = Some(a.value),
         "profile" => profile = Some(a.value),
         "comment" => comment = Some(a.value)
     }
 
-    while let Some(Ok(e)) = events.next() {
+    while let Some(Ok(e)) = ctx.events.next() {
         match e {
             XmlEvent::StartElement {
                 name, attributes, ..
-            } => items.push(parse_interface_item(
-                name.local_name.as_str(),
-                attributes,
-                events,
-            )),
-            XmlEvent::EndElement { .. } => break,
+            } => {
+                let name = name.local_name.as_str();
+                ctx.push_element(name);
+                if let Some(v) = parse_interface_item(ctx, name, attributes) {
+                    items.push(v);
+                }
+            }
+            XmlEvent::EndElement { .. } => {
+                ctx.pop_element();
+                break;
+            }
             _ => {}
         }
     }
@@ -931,58 +1093,74 @@ fn parse_extension_item_remove<R: Read>(
 }
 
 fn parse_interface_item<R: Read>(
+    ctx: &mut ParseCtx<R>,
     name: &str,
     attributes: Vec<XmlAttribute>,
-    events: &mut XmlEvents<R>,
-) -> InterfaceItem {
+) -> Option<InterfaceItem> {
     match name {
-        "comment" => InterfaceItem::Comment(parse_text_element(events)),
+        "comment" => Some(InterfaceItem::Comment(parse_text_element(ctx))),
         "type" => {
             let mut name = None;
             let mut comment = None;
-            match_attributes! {a in attributes,
+            match_attributes! {ctx, a in attributes,
                 "name"    => name    = Some(a.value),
                 "comment" => comment = Some(a.value)
             }
-            unwrap_attribute!(type, name);
-            consume_current_element(events);
-            InterfaceItem::Type { name, comment }
+            unwrap_attribute!(ctx, type, name);
+            consume_current_element(ctx);
+            Some(InterfaceItem::Type { name, comment })
         }
-        "enum" => InterfaceItem::Enum(parse_enum(attributes, events)),
+        "enum" => parse_enum(ctx, attributes).map(|v| InterfaceItem::Enum(v)),
         "command" => {
             let mut name = None;
             let mut comment = None;
-            match_attributes! {a in attributes,
+            match_attributes! {ctx, a in attributes,
                 "name"    => name    = Some(a.value),
                 "comment" => comment = Some(a.value)
             }
-            unwrap_attribute!(type, name);
-            consume_current_element(events);
-            InterfaceItem::Command { name, comment }
+            unwrap_attribute!(ctx, type, name);
+            consume_current_element(ctx);
+            Some(InterfaceItem::Command { name, comment })
         }
-        _ => panic!("Unexpected element {:?}", name),
+        _ => {
+            ctx.errors.push(Error::UnexpectedElement {
+                xpath: ctx.xpath.clone(),
+                name: String::from(name),
+            });
+            return None;
+        }
     }
 }
 
-pub fn parse_integer(text: &str) -> i64 {
-    if text.starts_with("0x") {
-        i64::from_str_radix(text.split_at(2).1, 16).unwrap()
+fn parse_integer<R: Read>(ctx: &mut ParseCtx<R>, text: &str) -> Option<i64> {
+    let parse_res = if text.starts_with("0x") {
+        i64::from_str_radix(text.split_at(2).1, 16)
     } else {
-        if let Ok(val) = i64::from_str_radix(text, 10) {
-            val
-        } else {
-            panic!("Couldn't parse integer from {:?}", text);
-        }
+        i64::from_str_radix(text, 10)
+    };
+
+    if let Ok(v) = parse_res {
+        Some(v)
+    } else {
+        ctx.errors.push(Error::SchemaViolation {
+            xpath: ctx.xpath.clone(),
+            desc: format!("Value '{}' is not valid base 10 or 16 integer.", text),
+        });
+        None
     }
 }
 
-pub fn consume_current_element<R: Read>(events: &mut XmlEvents<R>) {
+fn consume_current_element<R: Read>(ctx: &mut ParseCtx<R>) {
     let mut depth = 1;
-    while let Some(Ok(e)) = events.next() {
+    while let Some(Ok(e)) = ctx.events.next() {
         match e {
-            XmlEvent::StartElement { .. } => depth += 1,
+            XmlEvent::StartElement { name, .. } => {
+                ctx.push_element(name.local_name.as_str());
+                depth += 1;
+            }
             XmlEvent::EndElement { .. } => {
                 depth -= 1;
+                ctx.pop_element();
                 if depth == 0 {
                     break;
                 }
@@ -992,15 +1170,19 @@ pub fn consume_current_element<R: Read>(events: &mut XmlEvents<R>) {
     }
 }
 
-pub fn parse_text_element<R: Read>(events: &mut XmlEvents<R>) -> String {
+fn parse_text_element<R: Read>(ctx: &mut ParseCtx<R>) -> String {
     let mut result = String::new();
     let mut depth = 1;
-    while let Some(Ok(e)) = events.next() {
+    while let Some(Ok(e)) = ctx.events.next() {
         match e {
-            XmlEvent::StartElement { .. } => depth += 1,
+            XmlEvent::StartElement { name, .. } => {
+                ctx.push_element(name.local_name.as_str());
+                depth += 1;
+            }
             XmlEvent::Characters(text) => result.push_str(&text),
             XmlEvent::EndElement { .. } => {
                 depth -= 1;
+                ctx.pop_element();
                 if depth == 0 {
                     break;
                 }

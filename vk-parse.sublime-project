@@ -26,7 +26,7 @@
 		},
 		{
 			"name": "cargo check",
-			"cmd": ["cargo", "check" ],
+			"cmd": ["cargo", "check", "--manifest-path", "vk-parse/Cargo.toml", "--features", "vkxml-convert" ],
 			"working_dir": "${project_path}",
 			"file_regex": "^ *--> (.*):([0-9]+):([0-9]+)$",
 		},
