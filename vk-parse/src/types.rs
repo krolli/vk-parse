@@ -209,6 +209,12 @@ pub struct Type {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub allowduplicate: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub parent: Option<String>,
 
     #[cfg_attr(

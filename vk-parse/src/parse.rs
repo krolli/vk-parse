@@ -447,21 +447,23 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut returnedonly = None;
     let mut structextends = None;
     let mut comment = None;
+    let mut allowduplicate = None;
 
     let mut code = String::new();
     let mut markup = Vec::new();
     let mut members = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "api"           => api           = Some(a.value),
-        "alias"         => alias         = Some(a.value),
-        "requires"      => requires      = Some(a.value),
-        "name"          => name          = Some(a.value),
-        "category"      => category      = Some(a.value),
-        "parent"        => parent        = Some(a.value),
-        "returnedonly"  => returnedonly  = Some(a.value),
-        "structextends" => structextends = Some(a.value),
-        "comment"       => comment       = Some(a.value)
+        "api"            => api            = Some(a.value),
+        "alias"          => alias          = Some(a.value),
+        "requires"       => requires       = Some(a.value),
+        "name"           => name           = Some(a.value),
+        "category"       => category       = Some(a.value),
+        "parent"         => parent         = Some(a.value),
+        "returnedonly"   => returnedonly   = Some(a.value),
+        "structextends"  => structextends  = Some(a.value),
+        "comment"        => comment        = Some(a.value),
+        "allowduplicate" => allowduplicate = Some(a.value)
     }
 
     match_elements_combine_text! {ctx, attributes, code,
@@ -545,6 +547,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         returnedonly,
         structextends,
         comment,
+        allowduplicate,
         spec: if members.len() > 0 {
             TypeSpec::Members(members)
         } else if code.len() > 0 {
