@@ -187,3 +187,8 @@ test_version! {test_v1_2_132, 1, 2, 132, "/xml"}
 test_version! {test_v1_2_133, 1, 2, 133, "/xml"}
 test_version! {test_v1_2_134, 1, 2, 134, "/xml"}
 test_version! {test_v1_2_135, 1, 2, 135, "/xml"}
+test_version! {test_v1_2_136, 1, 2, 136, "/xml"}
+test_version! {test_v1_2_137, 1, 2, 137, "/xml"}
+test_version! {test_v1_2_138, 1, 2, 138, "/xml"}
+test_version! {test_v1_2_139, 1, 2, 139, "/xml"}
+test_version! {test_v1_2_140, 1, 2, 140, "/xml"}
