@@ -313,6 +313,18 @@ pub struct TypeMemberDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub selector: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub selection: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub noautovalidity: Option<String>,
 
     #[cfg_attr(

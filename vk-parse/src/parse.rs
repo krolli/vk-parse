@@ -472,6 +472,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let mut altlen = None;
             let mut externsync = None;
             let mut optional = None;
+            let mut selector = None;
+            let mut selection = None;
             let mut noautovalidity = None;
             let mut validextensionstructs = None;
             let mut values = None;
@@ -482,6 +484,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "altlen"                => altlen                = Some(a.value),
                 "externsync"            => externsync            = Some(a.value),
                 "optional"              => optional              = Some(a.value),
+                "selector"              => selector              = Some(a.value),
+                "selection"             => selection             = Some(a.value),
                 "noautovalidity"        => noautovalidity        = Some(a.value),
                 "validextensionstructs" => validextensionstructs = Some(a.value),
                 "values"                => values                = Some(a.value)
@@ -512,6 +516,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 altlen,
                 externsync,
                 optional,
+                selector,
+                selection,
                 noautovalidity,
                 validextensionstructs,
                 values,
