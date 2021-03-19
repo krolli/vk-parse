@@ -405,6 +405,12 @@ pub struct Enums {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub children: Vec<EnumsChild>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub bitwidth: Option<u32>,
 }
 
 /// An item which forms an enum.

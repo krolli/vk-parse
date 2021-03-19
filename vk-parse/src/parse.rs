@@ -267,14 +267,16 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
             let mut end = None;
             let mut vendor = None;
             let mut comment = None;
+            let mut bitwidth = None;
             let mut children = Vec::new();
             match_attributes!{ctx, a in attributes,
-                "name"    => name    = Some(a.value),
-                "type"    => kind    = Some(a.value),
-                "start"   => start   = Some(a.value),
-                "end"     => end     = Some(a.value),
-                "vendor"  => vendor  = Some(a.value),
-                "comment" => comment = Some(a.value)
+                "name"     => name     = Some(a.value),
+                "type"     => kind     = Some(a.value),
+                "start"    => start    = Some(a.value),
+                "end"      => end      = Some(a.value),
+                "vendor"   => vendor   = Some(a.value),
+                "comment"  => comment  = Some(a.value),
+                "bitwidth" => bitwidth = Some(a.value)
             }
             match_elements!{ctx, attributes,
                 "enum" => if let Some(v) = parse_enum(ctx, attributes) {
@@ -288,8 +290,9 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
 
             let start = start.and_then(|val| parse_integer(ctx, &val));
             let end = end.and_then(|val| parse_integer(ctx, &val));
+            let bitwidth = bitwidth.and_then(|val| parse_integer(ctx, &val)).map(|val| val as u32);
 
-            registry.0.push(RegistryChild::Enums(Enums{ name, kind, start, end, vendor, comment, children }));
+            registry.0.push(RegistryChild::Enums(Enums{ name, kind, start, end, vendor, comment, children, bitwidth }));
         },
         "commands" => {
             let mut comment = None;
