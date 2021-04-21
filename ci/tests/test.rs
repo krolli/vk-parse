@@ -8,8 +8,8 @@ extern crate vkxml;
 extern crate xml;
 
 const URL_REPO: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs";
-const URL_MASTER: &str =
-    "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/master/xml/vk.xml";
+const URL_MAIN: &str =
+    "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml";
 
 fn download<T: std::io::Write>(dst: &mut T, url: &str) {
     let resp = minreq::get(url)
@@ -66,7 +66,7 @@ macro_rules! test_version {
 fn test_master() {
     use std::io::Cursor;
     let mut buf = Cursor::new(vec![0; 15]);
-    download(&mut buf, URL_MASTER);
+    download(&mut buf, URL_MAIN);
     buf.set_position(0);
 
     match vk_parse::parse_stream(buf.clone()) {
