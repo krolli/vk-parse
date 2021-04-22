@@ -8,8 +8,7 @@ extern crate vkxml;
 extern crate xml;
 
 const URL_REPO: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs";
-const URL_MAIN: &str =
-    "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml";
+const URL_MAIN: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml";
 
 fn download<T: std::io::Write>(dst: &mut T, url: &str) {
     let resp = minreq::get(url)
@@ -63,7 +62,7 @@ macro_rules! test_version {
 }
 
 #[test]
-fn test_master() {
+fn test_main() {
     use std::io::Cursor;
     let mut buf = Cursor::new(vec![0; 15]);
     download(&mut buf, URL_MAIN);
@@ -194,3 +193,37 @@ test_version! {test_v1_2_139, 1, 2, 139, "/xml"}
 test_version! {test_v1_2_140, 1, 2, 140, "/xml"}
 test_version! {test_v1_2_141, 1, 2, 141, "/xml"}
 test_version! {test_v1_2_142, 1, 2, 142, "/xml"}
+test_version! {test_v1_2_143, 1, 2, 143, "/xml"}
+test_version! {test_v1_2_144, 1, 2, 144, "/xml"}
+test_version! {test_v1_2_145, 1, 2, 145, "/xml"}
+test_version! {test_v1_2_146, 1, 2, 146, "/xml"}
+test_version! {test_v1_2_147, 1, 2, 147, "/xml"}
+test_version! {test_v1_2_148, 1, 2, 148, "/xml"}
+test_version! {test_v1_2_149, 1, 2, 149, "/xml"}
+test_version! {test_v1_2_150, 1, 2, 150, "/xml"}
+test_version! {test_v1_2_151, 1, 2, 151, "/xml"}
+test_version! {test_v1_2_152, 1, 2, 152, "/xml"}
+test_version! {test_v1_2_153, 1, 2, 153, "/xml"}
+test_version! {test_v1_2_154, 1, 2, 154, "/xml"}
+test_version! {test_v1_2_155, 1, 2, 155, "/xml"}
+test_version! {test_v1_2_156, 1, 2, 156, "/xml"}
+test_version! {test_v1_2_157, 1, 2, 157, "/xml"}
+test_version! {test_v1_2_158, 1, 2, 158, "/xml"}
+test_version! {test_v1_2_159, 1, 2, 159, "/xml"}
+test_version! {test_v1_2_160, 1, 2, 160, "/xml"}
+test_version! {test_v1_2_161, 1, 2, 161, "/xml"}
+test_version! {test_v1_2_162, 1, 2, 162, "/xml"}
+test_version! {test_v1_2_163, 1, 2, 163, "/xml"}
+test_version! {test_v1_2_164, 1, 2, 164, "/xml"}
+test_version! {test_v1_2_165, 1, 2, 165, "/xml"}
+test_version! {test_v1_2_166, 1, 2, 166, "/xml"}
+test_version! {test_v1_2_167, 1, 2, 167, "/xml"}
+test_version! {test_v1_2_168, 1, 2, 168, "/xml"}
+test_version! {test_v1_2_169, 1, 2, 169, "/xml"}
+test_version! {test_v1_2_170, 1, 2, 170, "/xml"}
+test_version! {test_v1_2_171, 1, 2, 171, "/xml"}
+test_version! {test_v1_2_172, 1, 2, 172, "/xml"}
+test_version! {test_v1_2_173, 1, 2, 173, "/xml"}
+test_version! {test_v1_2_174, 1, 2, 174, "/xml"}
+test_version! {test_v1_2_175, 1, 2, 175, "/xml"}
+test_version! {test_v1_2_176, 1, 2, 176, "/xml"}
