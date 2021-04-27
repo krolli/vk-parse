@@ -731,6 +731,7 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut extnumber = None;
     let mut offset = None;
     let mut positive = true;
+    let mut protect = None;
     let mut alias = None;
 
     match_attributes! {ctx, a in attributes,
@@ -754,6 +755,7 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         },
         "bitpos" => bitpos = Some(a.value),
         "extnumber" => extnumber = Some(a.value),
+        "protect" => protect = Some(a.value),
         "alias" => alias = Some(a.value)
     }
 
@@ -834,6 +836,7 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         comment,
         type_suffix,
         api,
+        protect,
         spec,
     })
 }
