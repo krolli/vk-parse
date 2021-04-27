@@ -313,7 +313,9 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
         "feature" => if let Some(v) = parse_feature(ctx, attributes) {
             registry.0.push(v);
         },
-        "extensions" => registry.0.push(parse_extensions(ctx, attributes))
+        "extensions" => registry.0.push(parse_extensions(ctx, attributes)),
+        "spirvextensions" => registry.0.push(parse_spirvextensions(ctx, attributes)),
+        "spirvcapabilities" => registry.0.push(parse_spirvcapabilities(ctx, attributes))
     }
 
     Ok(registry)
@@ -1141,6 +1143,141 @@ fn parse_interface_item<R: Read>(
             });
             return None;
         }
+    }
+}
+
+fn parse_spirvextensions<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> RegistryChild {
+    let mut comment = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "spirvextension" => if let Some(v) = parse_spirvextension(ctx, attributes) {
+            children.push(v);
+        }
+    }
+
+    RegistryChild::SpirvExtensions(SpirvExtensions { comment, children })
+}
+
+fn parse_spirvextension<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<SpirvExtension> {
+    let mut name = None;
+    let mut enables = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "name" => name = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "enable" => if let Some(v) = parse_enable(ctx, attributes) {
+            enables.push(v);
+        }
+    }
+
+    unwrap_attribute!(ctx, spirvextension, name);
+
+    Some(SpirvExtension { name, enables })
+}
+
+fn parse_spirvcapabilities<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> RegistryChild {
+    let mut comment = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "spirvcapability" => if let Some(v) = parse_spirvcapability(ctx, attributes) {
+            children.push(v);
+        }
+    }
+
+    RegistryChild::SpirvCapabilities(SpirvCapabilities { comment, children })
+}
+
+fn parse_spirvcapability<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<SpirvCapability> {
+    let mut name = None;
+    let mut enables = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "name" => name = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "enable" => if let Some(v) = parse_enable(ctx, attributes) {
+            enables.push(v);
+        }
+    }
+
+    unwrap_attribute!(ctx, spirvcapability, name);
+
+    Some(SpirvCapability { name, enables })
+}
+
+fn parse_enable<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Enable> {
+    let mut version = None;
+    let mut extension = None;
+    let mut struct_ = None;
+    let mut feature = None;
+    let mut requires = None;
+    let mut alias = None;
+    let mut property = None;
+    let mut member = None;
+    let mut value = None;
+
+    match_attributes! {ctx, a in attributes,
+        "version" => version = Some(a.value),
+        "extension" => extension = Some(a.value),
+        "struct" => struct_ = Some(a.value),
+        "feature" => feature = Some(a.value),
+        "requires" => requires = Some(a.value),
+        "alias" => alias = Some(a.value),
+        "property" => property = Some(a.value),
+        "member" => member = Some(a.value),
+        "value" => value = Some(a.value)
+    }
+
+    consume_current_element(ctx);
+
+    if let Some(version) = version {
+        Some(Enable::Version(version))
+    } else if let Some(extension) = extension {
+        Some(Enable::Extension(extension))
+    } else if let Some(struct_) = struct_ {
+        unwrap_attribute!(ctx, enable, feature);
+        Some(Enable::Feature(FeatureEnable {
+            struct_,
+            feature,
+            requires,
+            alias,
+        }))
+    } else if let Some(property) = property {
+        unwrap_attribute!(ctx, enable, member);
+        unwrap_attribute!(ctx, enable, value);
+        Some(Enable::Property(PropertyEnable {
+            property,
+            member,
+            value,
+            requires,
+        }))
+    } else {
+        unimplemented!();
     }
 }
 

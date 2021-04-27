@@ -88,6 +88,10 @@ pub enum RegistryChild {
 
     /// Container for all published Vulkan specification extensions.
     Extensions(Extensions),
+
+    SpirvExtensions(SpirvExtensions),
+
+    SpirvCapabilities(SpirvCapabilities),
 }
 
 pub type VendorIds = CommentedChildren<VendorId>;
@@ -994,6 +998,93 @@ pub struct CommentedChildren<T> {
     pub comment: Option<String>,
 
     pub children: Vec<T>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct SpirvExtOrCap {
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub name: String,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub enables: Vec<Enable>,
+}
+
+pub type SpirvExtension = SpirvExtOrCap;
+pub type SpirvExtensions = CommentedChildren<SpirvExtension>;
+
+pub type SpirvCapability = SpirvExtOrCap;
+pub type SpirvCapabilities = CommentedChildren<SpirvCapability>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub enum Enable {
+    Version(String),
+    Extension(String),
+    Feature(FeatureEnable),
+    Property(PropertyEnable),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct FeatureEnable {
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub struct_: String,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub feature: String,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub requires: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub alias: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct PropertyEnable {
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub property: String,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub member: String,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub value: String,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub requires: Option<String>,
 }
 
 #[cfg(feature = "serialize")]

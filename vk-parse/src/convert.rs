@@ -164,6 +164,8 @@ impl From<Registry> for vkxml::Registry {
                 }
 
                 RegistryChild::Platforms { .. } => (),
+                RegistryChild::SpirvExtensions { .. } => (),
+                RegistryChild::SpirvCapabilities { .. } => (),
             }
         }
 
