@@ -452,6 +452,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut returnedonly = None;
     let mut structextends = None;
     let mut allowduplicate = None;
+    let mut objtypeenum = None;
     let mut comment = None;
 
     let mut code = String::new();
@@ -468,6 +469,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         "returnedonly"   => returnedonly   = Some(a.value),
         "structextends"  => structextends  = Some(a.value),
         "allowduplicate" => allowduplicate = Some(a.value),
+        "objtypeenum"    => objtypeenum    = Some(a.value),
         "comment"        => comment        = Some(a.value)
     }
 
@@ -558,6 +560,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         returnedonly,
         structextends,
         allowduplicate,
+        objtypeenum,
         comment,
         spec: if members.len() > 0 {
             TypeSpec::Members(members)
