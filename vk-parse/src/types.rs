@@ -359,6 +359,12 @@ pub struct TypeMemberDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub limittype: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub code: String,
 
     #[cfg_attr(

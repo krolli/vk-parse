@@ -486,6 +486,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let mut noautovalidity = None;
             let mut validextensionstructs = None;
             let mut values = None;
+            let mut limittype = None;
             let mut code = String::new();
             let mut markup = Vec::new();
             match_attributes!{ctx, a in attributes,
@@ -497,7 +498,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "selection"             => selection             = Some(a.value),
                 "noautovalidity"        => noautovalidity        = Some(a.value),
                 "validextensionstructs" => validextensionstructs = Some(a.value),
-                "values"                => values                = Some(a.value)
+                "values"                => values                = Some(a.value),
+                "limittype"             => limittype             = Some(a.value)
             }
             match_elements_combine_text!{ctx, code,
                 "type" => {
@@ -530,6 +532,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 noautovalidity,
                 validextensionstructs,
                 values,
+                limittype,
                 code,
                 markup,
             }))
