@@ -3,6 +3,7 @@ os: linux
 dist: xenial
 
 script:
+  - rustup toolchain install nightly
   - cargo +nightly update -Z minimal-versions
   - cargo build --manifest-path vk-parse/Cargo.toml --features ""
   - cargo build --manifest-path vk-parse/Cargo.toml --features "serialize"
