@@ -1,5 +1,6 @@
 /// Errors from which parser cannot recover.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum FatalError {
     MissingRegistryElement,
     IoError(std::io::Error),
@@ -17,6 +18,7 @@ impl From<std::io::Error> for FatalError {
 /// without affecting anything around it, while unrecognized element will have
 /// all of its contents skipped.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     UnexpectedElement {
         xpath: String,
@@ -59,6 +61,7 @@ pub struct Registry(pub Vec<RegistryChild>);
 /// An element of the Vulkan registry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum RegistryChild {
     /// Comments are human-readable strings which contain registry meta-data.
     Comment(String),
@@ -102,6 +105,7 @@ pub type VendorIds = CommentedChildren<VendorId>;
 /// not used, instead it has been replaced by the `VKVendorId` enum.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct VendorId {
     /// Name of the vendor.
     pub name: String,
@@ -127,6 +131,7 @@ pub type Platforms = CommentedChildren<Platform>;
 /// Used in versions 1.1.70 and later.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct Platform {
     /// Short identifier.
     pub name: String,
@@ -151,6 +156,7 @@ pub type Tags = CommentedChildren<Tag>;
 /// - EXT for multi-vendor extensions
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct Tag {
     /// The name of the tag, e.g. "KHR".
     pub name: String,
@@ -165,6 +171,7 @@ pub type Types = CommentedChildren<TypesChild>;
 /// An item making up a type definition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum TypesChild {
     Type(Type),
     Comment(String),
@@ -172,6 +179,7 @@ pub enum TypesChild {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct Type {
     #[cfg_attr(
         feature = "serialize",
@@ -255,6 +263,7 @@ pub struct Type {
 /// The contents of a type definition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum TypeSpec {
     None,
     Code(TypeCode),
@@ -269,6 +278,7 @@ impl Default for TypeSpec {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct TypeCode {
     pub code: String,
 
@@ -281,6 +291,7 @@ pub struct TypeCode {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum TypeCodeMarkup {
     Name(String),
     Type(String),
@@ -290,6 +301,7 @@ pub enum TypeCodeMarkup {
 /// A member of a type definition, i.e. a struct member.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum TypeMember {
     /// Human-readable comment.
     Comment(String),
@@ -300,6 +312,7 @@ pub enum TypeMember {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct TypeMemberDefinition {
     #[cfg_attr(
         feature = "serialize",
@@ -376,6 +389,7 @@ pub struct TypeMemberDefinition {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum TypeMemberMarkup {
     Name(String),
     Type(String),
@@ -385,6 +399,7 @@ pub enum TypeMemberMarkup {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct Enums {
     #[cfg_attr(
         feature = "serialize",
@@ -438,6 +453,7 @@ pub struct Enums {
 /// An item which forms an enum.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum EnumsChild {
     /// Actual named enum.
     Enum(Enum),
@@ -452,6 +468,7 @@ pub enum EnumsChild {
 /// An unused range of enum values.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct Unused {
     /// Beginning of the range.
     pub start: i64,
@@ -481,6 +498,7 @@ pub struct Unused {
 /// An item of an enumeration type.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct Enum {
     /// Name of this enum.
     pub name: String,
@@ -520,6 +538,7 @@ pub struct Enum {
 /// An enum specifier, which assigns a value to the enum.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum EnumSpec {
     None,
 
@@ -593,6 +612,7 @@ pub type Commands = CommentedChildren<Command>;
 /// A command is just a Vulkan function.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum Command {
     /// Indicates this function is an alias for another one.
     Alias { name: String, alias: String },
@@ -603,6 +623,7 @@ pub enum Command {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct CommandDefinition {
     #[cfg_attr(
         feature = "serialize",
@@ -686,6 +707,7 @@ pub struct CommandDefinition {
 /// Parameter for this Vulkan function.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct CommandParam {
     /// The expression which indicates the length of this array.
     #[cfg_attr(
@@ -732,6 +754,7 @@ pub struct CommandParam {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct Feature {
     #[cfg_attr(
         feature = "serialize",
@@ -776,6 +799,7 @@ pub type Extensions = CommentedChildren<Extension>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct Extension {
     /// Name of the extension.
     pub name: String,
@@ -899,6 +923,7 @@ pub struct Extension {
 /// Extensions either include functionality from the spec, or remove some functionality.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum ExtensionChild {
     /// Indicates the items which this extension requires to work.
     Require {
@@ -970,6 +995,7 @@ pub enum ExtensionChild {
 /// This structure is used by extensions to express dependencies or include functionality.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum InterfaceItem {
     Comment(String),
 
@@ -998,6 +1024,7 @@ pub enum InterfaceItem {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct NameWithType {
     #[cfg_attr(
         feature = "serialize",
@@ -1026,6 +1053,7 @@ pub struct CommentedChildren<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct SpirvExtOrCap {
     #[cfg_attr(
         feature = "serialize",
@@ -1048,6 +1076,7 @@ pub type SpirvCapabilities = CommentedChildren<SpirvCapability>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum Enable {
     Version(String),
     Extension(String),
@@ -1057,6 +1086,7 @@ pub enum Enable {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct FeatureEnable {
     #[cfg_attr(
         feature = "serialize",
@@ -1085,6 +1115,7 @@ pub struct FeatureEnable {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct PropertyEnable {
     #[cfg_attr(
         feature = "serialize",
