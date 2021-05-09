@@ -13,4 +13,5 @@ serde_derive = "^1.0.75"
 vk-parse = { path = "../vk-parse", features = ["serialize", "vkxml-convert"] }
 vkxml = "^0.3"
 xml-rs = "^0.8"
-# cargo +nightly update -Z minimal-versions && cargo update --package log --precise 0.4.4
+# Phony dependency to bump the requirement for rustls
+log = "^0.4.4"

@@ -1,4 +1,5 @@
 /.hg
 /target
 /test-data
+/Cargo.lock
 *.sublime-workspace
