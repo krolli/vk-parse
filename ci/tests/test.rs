@@ -23,7 +23,7 @@ fn download<T: std::io::Write>(dst: &mut T, url: &str) {
         )
     }
 
-    dst.write_all(resp.body.as_bytes())
+    dst.write_all(resp.as_bytes())
         .expect("Failed to write response body.");
 }
 
