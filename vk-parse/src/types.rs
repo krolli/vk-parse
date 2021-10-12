@@ -17,7 +17,7 @@ impl From<std::io::Error> for FatalError {
 /// which it occurs. For example, unrecognized attribute will simply be skipped
 /// without affecting anything around it, while unrecognized element will have
 /// all of its contents skipped.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Error {
     UnexpectedElement {
