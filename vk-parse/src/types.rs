@@ -378,6 +378,12 @@ pub struct TypeMemberDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub objecttype: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub code: String,
 
     #[cfg_attr(
@@ -743,6 +749,12 @@ pub struct CommandParam {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub noautovalidity: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub objecttype: Option<String>,
 
     /// The definition of this parameter.
     #[cfg_attr(

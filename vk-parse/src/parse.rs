@@ -487,6 +487,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let mut validextensionstructs = None;
             let mut values = None;
             let mut limittype = None;
+            let mut objecttype = None;
             let mut code = String::new();
             let mut markup = Vec::new();
             match_attributes!{ctx, a in attributes,
@@ -499,7 +500,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "noautovalidity"        => noautovalidity        = Some(a.value),
                 "validextensionstructs" => validextensionstructs = Some(a.value),
                 "values"                => values                = Some(a.value),
-                "limittype"             => limittype             = Some(a.value)
+                "limittype"             => limittype             = Some(a.value),
+                "objecttype"            => objecttype            = Some(a.value)
             }
             match_elements_combine_text!{ctx, code,
                 "type" => {
@@ -533,6 +535,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 validextensionstructs,
                 values,
                 limittype,
+                objecttype,
                 code,
                 markup,
             }))
@@ -655,13 +658,15 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 let mut externsync = None;
                 let mut optional = None;
                 let mut noautovalidity = None;
+                let mut objecttype = None;
 
                 match_attributes!{ctx, a in attributes,
                     "len"            => len            = Some(a.value),
                     "altlen"         => altlen         = Some(a.value),
                     "externsync"     => externsync     = Some(a.value),
                     "optional"       => optional       = Some(a.value),
-                    "noautovalidity" => noautovalidity = Some(a.value)
+                    "noautovalidity" => noautovalidity = Some(a.value),
+                    "objecttype"     => objecttype     = Some(a.value)
                 }
 
                 if params.len() > 0 {
@@ -674,6 +679,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                         externsync,
                         optional,
                         noautovalidity,
+                        objecttype,
                         definition,
                     });
                 }
