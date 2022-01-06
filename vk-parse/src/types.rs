@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 /// Errors from which parser cannot recover.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -45,6 +47,11 @@ pub enum Error {
         xpath: String,
         desc: String,
     },
+    ParseIntError {
+        xpath: String,
+        text: String,
+        error: std::num::ParseIntError,
+    },
     Internal {
         desc: &'static str,
     },
@@ -91,6 +98,8 @@ pub enum RegistryChild {
 
     /// Container for all published Vulkan specification extensions.
     Extensions(Extensions),
+
+    Formats(Formats),
 
     SpirvExtensions(SpirvExtensions),
 
@@ -1034,6 +1043,72 @@ pub enum InterfaceItem {
     },
 }
 
+pub type Formats = CommentedChildren<Format>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct Format {
+    pub name: String,
+    pub class: String,
+    pub blockSize: u8,
+    pub texelsPerBlock: u8,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub blockExtent: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub packed: Option<u8>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub compressed: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub chroma: Option<String>,
+
+    pub children: Vec<FormatChild>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum FormatChild {
+    #[non_exhaustive]
+    Component {
+        name: String,
+        bits: String,
+        numericFormat: String,
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        planeIndex: Option<u8>,
+    },
+
+    #[non_exhaustive]
+    Plane {
+        index: u8,
+        widthDivisor: u8,
+        heightDivisor: u8,
+        compatible: String,
+    },
+
+    #[non_exhaustive]
+    SpirvImageFormat { name: String },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
@@ -1053,6 +1128,7 @@ pub struct NameWithType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub struct CommentedChildren<T> {
     #[cfg_attr(
         feature = "serialize",

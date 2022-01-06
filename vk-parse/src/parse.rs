@@ -2,6 +2,7 @@ extern crate xml;
 
 use std;
 use std::io::Read;
+use std::str::FromStr;
 use xml::reader::XmlEvent;
 
 use types::*;
@@ -31,6 +32,14 @@ impl<R: Read> ParseCtx<R> {
             });
         }
     }
+}
+
+fn xpath_attribute(xpath: &str, attribute_name: &str) -> String {
+    let mut xpath = String::from(xpath);
+    xpath.push_str("[@");
+    xpath.push_str(attribute_name);
+    xpath.push(']');
+    xpath
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -314,6 +323,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
             registry.0.push(v);
         },
         "extensions" => registry.0.push(parse_extensions(ctx, attributes)),
+        "formats" => registry.0.push(parse_formats(ctx)),
         "spirvextensions" => registry.0.push(parse_spirvextensions(ctx, attributes)),
         "spirvcapabilities" => registry.0.push(parse_spirvcapabilities(ctx, attributes))
     }
@@ -1164,6 +1174,196 @@ fn parse_interface_item<R: Read>(
     }
 }
 
+fn parse_formats<R: Read>(ctx: &mut ParseCtx<R>) -> RegistryChild {
+    let mut children = Vec::new();
+
+    match_elements! {ctx, attributes,
+        "format" => if let Some(v) = parse_format(ctx, attributes) {
+            children.push(v);
+        }
+    }
+
+    RegistryChild::Formats(Formats {
+        comment: None,
+        children,
+    })
+}
+
+#[allow(non_snake_case)]
+fn parse_format<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Format> {
+    let mut name = None;
+    let mut class = None;
+    let mut blockSize = None;
+    let mut texelsPerBlock = None;
+    let mut blockExtent = None;
+    let mut packed = None;
+    let mut compressed = None;
+    let mut chroma = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "name"           => name           = Some(a.value),
+        "class"          => class          = Some(a.value),
+        "blockSize"      => blockSize      = Some(a.value),
+        "texelsPerBlock" => texelsPerBlock = Some(a.value),
+        "blockExtent"    => blockExtent    = Some(a.value),
+        "packed"         => packed         = Some(a.value),
+        "compressed"     => compressed     = Some(a.value),
+        "chroma"         => chroma         = Some(a.value)
+    }
+
+    unwrap_attribute!(ctx, extension, name);
+    unwrap_attribute!(ctx, extension, class);
+    unwrap_attribute!(ctx, extension, blockSize);
+    unwrap_attribute!(ctx, extension, texelsPerBlock);
+
+    match_elements! {ctx, attributes,
+        "component"        => if let Some(v) = parse_format_component(ctx, attributes) { children.push(v); },
+        "plane"            => if let Some(v) = parse_format_plane(ctx, attributes) { children.push(v); },
+        "spirvimageformat" => if let Some(v) = parse_format_spirvimageformat(ctx, attributes) { children.push(v); }
+    }
+
+    let blockSize: Option<u8> = parse_int_attribute(ctx, blockSize, "blockSize");
+    let texelsPerBlock: Option<u8> = parse_int_attribute(ctx, texelsPerBlock, "texelsPerBlock");
+    let packed = packed.map(|v| -> Option<u8> { parse_int_attribute(ctx, v, "packed") });
+
+    let blockSize = match blockSize {
+        Some(v) => v,
+        None => return None,
+    };
+
+    let texelsPerBlock = match texelsPerBlock {
+        Some(v) => v,
+        None => return None,
+    };
+
+    let packed = match packed {
+        Some(Some(v)) => Some(v),
+        Some(None) => return None, // Attribute present, but parse error occurred.
+        None => None,
+    };
+
+    Some(Format {
+        name,
+        class,
+        blockSize,
+        texelsPerBlock,
+        blockExtent,
+        packed,
+        compressed,
+        chroma,
+        children,
+    })
+}
+
+#[allow(non_snake_case)]
+fn parse_format_component<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<FormatChild> {
+    let mut name = None;
+    let mut bits = None;
+    let mut numericFormat = None;
+    let mut planeIndex = None;
+
+    match_attributes! {ctx, a in attributes,
+        "name"          => name          = Some(a.value),
+        "bits"          => bits          = Some(a.value),
+        "numericFormat" => numericFormat = Some(a.value),
+        "planeIndex"    => planeIndex    = Some(a.value)
+    }
+
+    unwrap_attribute!(ctx, extension, name);
+    unwrap_attribute!(ctx, extension, bits);
+    unwrap_attribute!(ctx, extension, numericFormat);
+
+    consume_current_element(ctx);
+
+    let planeIndex =
+        planeIndex.map(|v| -> Option<u8> { parse_int_attribute(ctx, v, "planeIndex") });
+
+    let planeIndex = match planeIndex {
+        Some(Some(v)) => Some(v),
+        Some(None) => return None, // Attribute present, but parse error occurred.
+        None => None,
+    };
+
+    Some(FormatChild::Component {
+        name,
+        bits,
+        numericFormat,
+        planeIndex,
+    })
+}
+
+#[allow(non_snake_case)]
+fn parse_format_plane<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<FormatChild> {
+    let mut index = None;
+    let mut widthDivisor = None;
+    let mut heightDivisor = None;
+    let mut compatible = None;
+
+    match_attributes! {ctx, a in attributes,
+        "index"         => index         = Some(a.value),
+        "widthDivisor"  => widthDivisor  = Some(a.value),
+        "heightDivisor" => heightDivisor = Some(a.value),
+        "compatible"    => compatible    = Some(a.value)
+    }
+
+    unwrap_attribute!(ctx, extension, index);
+    unwrap_attribute!(ctx, extension, widthDivisor);
+    unwrap_attribute!(ctx, extension, heightDivisor);
+    unwrap_attribute!(ctx, extension, compatible);
+
+    consume_current_element(ctx);
+
+    let index: Option<u8> = parse_int_attribute(ctx, index, "index");
+    let widthDivisor: Option<u8> = parse_int_attribute(ctx, widthDivisor, "widthDivisor");
+    let heightDivisor: Option<u8> = parse_int_attribute(ctx, heightDivisor, "heightDivisor");
+
+    let index = match index {
+        Some(v) => v,
+        None => return None,
+    };
+
+    let widthDivisor = match widthDivisor {
+        Some(v) => v,
+        None => return None,
+    };
+
+    let heightDivisor = match heightDivisor {
+        Some(v) => v,
+        None => return None,
+    };
+
+    Some(FormatChild::Plane {
+        index,
+        widthDivisor,
+        heightDivisor,
+        compatible,
+    })
+}
+
+fn parse_format_spirvimageformat<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<FormatChild> {
+    let mut name = None;
+
+    match_attributes! {ctx, a in attributes,
+        "name" => name = Some(a.value)
+    }
+
+    unwrap_attribute!(ctx, extension, name);
+
+    consume_current_element(ctx);
+
+    Some(FormatChild::SpirvImageFormat { name })
+}
+
 fn parse_spirvextensions<R: Read>(
     ctx: &mut ParseCtx<R>,
     attributes: Vec<XmlAttribute>,
@@ -1314,6 +1514,24 @@ fn parse_integer<R: Read>(ctx: &mut ParseCtx<R>, text: &str) -> Option<i64> {
             desc: format!("Value '{}' is not valid base 10 or 16 integer.", text),
         });
         None
+    }
+}
+
+fn parse_int_attribute<I: FromStr<Err = std::num::ParseIntError>, R: Read>(
+    ctx: &mut ParseCtx<R>,
+    text: String,
+    attribute_name: &str,
+) -> Option<I> {
+    match I::from_str(&text) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            ctx.errors.push(Error::ParseIntError {
+                xpath: xpath_attribute(&ctx.xpath, attribute_name),
+                text: text,
+                error: e,
+            });
+            None
+        }
     }
 }
 
