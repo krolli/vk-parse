@@ -250,3 +250,7 @@ test_version! {test_v1_2_196, 1, 2, 196, "/xml"}
 test_version! {test_v1_2_197, 1, 2, 197, "/xml"}
 test_version! {test_v1_2_198, 1, 2, 198, "/xml"}
 test_version! {test_v1_2_199, 1, 2, 199, "/xml"}
+test_version! {test_v1_2_200, 1, 2, 200, "/xml"}
+test_version! {test_v1_2_201, 1, 2, 201, "/xml"}
+test_version! {test_v1_2_202, 1, 2, 202, "/xml"}
+test_version! {test_v1_2_203, 1, 2, 203, "/xml"}
