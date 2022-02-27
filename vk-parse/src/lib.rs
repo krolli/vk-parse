@@ -11,21 +11,15 @@ extern crate xml;
 extern crate serde_derive;
 #[cfg(feature = "serialize")]
 extern crate serde;
-
-#[cfg(feature = "vkxml-convert")]
-extern crate vkxml;
+pub use types::*;
 
 #[macro_use]
-mod parse;
+mod util;
 mod c;
-#[cfg(feature = "vkxml-convert")]
-mod convert;
 mod types;
 
-#[cfg(feature = "vkxml-convert")]
-pub use convert::parse_file_as_vkxml;
-#[cfg(feature = "vkxml-convert")]
-pub use convert::parse_stream_as_vkxml;
-pub use parse::parse_file;
-pub use parse::parse_stream;
-pub use types::*;
+#[cfg(feature = "vulkan")]
+mod vk;
+#[cfg(feature = "opengl")]
+mod gl;
+
