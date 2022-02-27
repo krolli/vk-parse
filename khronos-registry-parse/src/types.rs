@@ -1,4 +1,3 @@
-
 /// Errors from which parser can recover. How much information will be missing
 /// in the resulting Registry depends on the type of error and situation in
 /// which it occurs. For example, unrecognized attribute will simply be skipped

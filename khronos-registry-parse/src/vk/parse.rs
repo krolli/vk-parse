@@ -3,10 +3,10 @@ extern crate xml;
 use std;
 use std::io::Read;
 use std::str::FromStr;
-use xml::reader::XmlEvent;
 use types::*;
 use util::*;
 use vk::types::*;
+use xml::reader::XmlEvent;
 
 //--------------------------------------------------------------------------------------------------
 /// Parses the Vulkan XML file into a Rust object.
@@ -1309,4 +1309,3 @@ fn parse_enable<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -
         unimplemented!();
     }
 }
-

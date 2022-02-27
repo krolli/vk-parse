@@ -18,8 +18,7 @@ mod util;
 mod c;
 mod types;
 
-#[cfg(feature = "vulkan")]
-mod vk;
 #[cfg(feature = "opengl")]
 mod gl;
-
+#[cfg(feature = "vulkan")]
+mod vk;

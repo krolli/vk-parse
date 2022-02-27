@@ -12,17 +12,18 @@ categories = ["parser-implementations", "rendering::graphics-api"]
 
 [features]
 serialize = ["serde", "serde_derive"]
-vkxml-convert = ["vkxml"]
+vkxml-convert = ["vkxml", "vulkan"]
 vulkan = []
 opengl = []
 
-
 [dependencies]
 xml-rs = "^0.8"
-
-common-parse = { path = "../common-parse", version = "0.1.0" }
 vkxml = { optional = true, version = "^0.3" }
 serde = { optional = true, version = "^1.0.75" }
 serde_derive = { optional = true, version = "^1.0.75" }
+
+[dev-dependencies]
+minreq = { version = "^2", features = ["https"] }
+ron = "^0.4"
 
 [badges]

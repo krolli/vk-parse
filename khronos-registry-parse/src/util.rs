@@ -1,6 +1,6 @@
+use crate::types::Error;
 use std::io::Read;
 use std::str::FromStr;
-use crate::types::Error;
 use xml::reader::XmlEvent;
 
 pub type XmlEvents<R> = xml::reader::Events<R>;
@@ -13,7 +13,6 @@ pub fn xpath_attribute(xpath: &str, attribute_name: &str) -> String {
     xpath.push(']');
     xpath
 }
-
 
 //--------------------------------------------------------------------------------------------------
 #[macro_export]
@@ -173,7 +172,6 @@ macro_rules! match_elements_combine_text {
         }
     };
 }
-
 
 //--------------------------------------------------------------------------------------------------
 pub struct ParseCtx<R: Read> {
