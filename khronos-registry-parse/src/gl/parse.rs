@@ -45,6 +45,8 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
         "comment" => registry.0.push(RegistryChild::Comment(parse_text_element(ctx))),
         "enums" => {
             let mut namespace = None;
+            let mut group = None;
+            let mut enum_type = None;
             let mut start = None;
             let mut end = None;
             let mut vendor = None;
@@ -53,6 +55,8 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
 
             match_attributes!{ctx, a in attributes,
                 "namespace" => namespace = Some(a.value),
+                "group"     => group = Some(a.value),
+                "type"     =>  enum_type = Some(a.value),
                 "start"     => start     = Some(a.value),
                 "end"       => end       = Some(a.value),
                 "vendor"    => vendor    = Some(a.value),
@@ -69,7 +73,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
                 "comment" => children.push(EnumsChild::Comment(parse_text_element(ctx)))
             }
             registry.0.push(RegistryChild::Enums(
-                Enums{namespace,start,end,vendor,comment, children }));
+                Enums{namespace, group, enum_type,start,end,vendor,comment, children }));
 
         },
         "commands" => {

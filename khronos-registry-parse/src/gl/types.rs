@@ -224,6 +224,18 @@ pub struct Enums {
     pub namespace: Option<String>,
 
     #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub group: Option<String>,
+
+    #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub enum_type: Option<String>,
+
+    #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
