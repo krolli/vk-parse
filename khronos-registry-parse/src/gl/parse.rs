@@ -69,7 +69,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
                 "comment" => children.push(EnumsChild::Comment(parse_text_element(ctx)))
             }
             registry.0.push(RegistryChild::Enums(
-                Enums{ name, kind, start, end, vendor, comment, children }));
+                Enums{namespace,start,end,vendor,comment, children }));
 
         },
         "commands" => {
@@ -141,11 +141,11 @@ fn parse_extension<R: Read>(
 
     match_attributes! {ctx, a in attributes,
         "name"      => name  = Some(a.value),
-        "supported" => supported = Some(a.value),
+        "supported" => supported = Some(a.value)
     }
 
     match_elements! { ctx, attributes,
-        "require" => children.push(parse_extension_item_require(ctx, attributes)),
+        "require" => children.push(parse_extension_item_require(ctx, attributes))
     }
 
     Some(Extension {
@@ -203,7 +203,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
              match_attributes!{ctx, a in attributes,
                 "group"   => group  = Some(a.value),
                 "class"   => class  = Some(a.value),
-                "len"     => len    = Some(a.value),
+                "len"     => len    = Some(a.value)
             }
             if params.len() > 0 {
                 code.push_str(", ");
@@ -220,7 +220,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         },
         "vecequiv" => {
             match_attributes!{ctx, a in attributes,
-                "name"   => vec_equiv = Some(a.value),
+                "name"   => vec_equiv = Some(a.value)
             }
         }
     }
@@ -281,7 +281,7 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
         "value" => value = Some(a.value),
-        "group" => group = Some(a.value),
+        "group" => group = Some(a.value)
     }
     unwrap_attribute!(ctx, enum, name);
     Some(Enum { name, value, group })

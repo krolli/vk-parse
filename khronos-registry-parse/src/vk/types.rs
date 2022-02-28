@@ -1,19 +1,5 @@
 #![allow(non_snake_case)]
 
-/// Errors from which parser cannot recover.
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum FatalError {
-    MissingRegistryElement,
-    IoError(std::io::Error),
-}
-
-impl From<std::io::Error> for FatalError {
-    fn from(v: std::io::Error) -> FatalError {
-        FatalError::IoError(v)
-    }
-}
-
 /// Rust structure representing the Vulkan registry.
 ///
 /// The registry contains all the information contained in a certain version

@@ -156,13 +156,13 @@ pub enum ExtensionChild {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub struct Extension {
-    pub name: Optiona<String>,
+    pub name: Option<String>,
 
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub supported: Optiona<String>,
+    pub supported: Option<String>,
 
     /// The items which make up this extension.
     #[cfg_attr(

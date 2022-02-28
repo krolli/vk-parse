@@ -1,3 +1,17 @@
+/// Errors from which parser cannot recover.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum FatalError {
+    MissingRegistryElement,
+    IoError(std::io::Error),
+}
+
+impl From<std::io::Error> for FatalError {
+    fn from(v: std::io::Error) -> FatalError {
+        FatalError::IoError(v)
+    }
+}
+
 /// Errors from which parser can recover. How much information will be missing
 /// in the resulting Registry depends on the type of error and situation in
 /// which it occurs. For example, unrecognized attribute will simply be skipped
