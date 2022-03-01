@@ -1,21 +1,38 @@
-use std::io::Read;
-use xml::reader::XmlEvent;
+extern crate xml;
 
-use gl::types::*;
+use std;
+use std::io;
+use std::io::{BufReader, Read};
+use std::str::FromStr;
 use types::*;
 use util::*;
+use gl::types::*;
+use xml::reader::XmlEvent;
+use std::str;
 
-//--------------------------------------------------------------------------------------------------
-/// Parses the Vulkan XML file into a Rust object.
+pub const BOM: &'static [u8] = &[0xEF, 0xBB, 0xBF];
+
+
 pub fn parse_file(path: &std::path::Path) -> Result<(Registry, Vec<Error>), FatalError> {
     let file = std::io::BufReader::new(std::fs::File::open(path)?);
-    let parser = xml::reader::ParserConfig::new().create_reader(file);
-    parse_xml(parser.into_iter())
+    parse_stream(file)
 }
 
-/// Parses the Vulkan XML file from stream into a Rust object.
-pub fn parse_stream<T: std::io::Read>(stream: T) -> Result<(Registry, Vec<Error>), FatalError> {
-    let parser = xml::reader::ParserConfig::new().create_reader(stream);
+pub fn parse_stream<T: std::io::Read>(mut stream: T) -> Result<(Registry, Vec<Error>), FatalError> {
+    let mut buffer = vec![0; 0];
+    stream.read_to_end(&mut buffer);
+
+    let mut offset = 0;
+    for (i, _) in buffer.iter().enumerate() {
+        if buffer[i..].starts_with(BOM) {
+            offset = i + BOM.len();
+        }
+        if i != 0 {
+            break
+        }
+    }
+
+    let parser = xml::reader::ParserConfig::new().create_reader(&buffer[offset..]);
     parse_xml(parser.into_iter())
 }
 
@@ -67,14 +84,18 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
                 "enum" => if let Some(v) = parse_enum(ctx, attributes) {
                     children.push(EnumsChild::Enum(v));
                 },
-                // "unused" => if let Some(v) = parse_enums_child_unused(ctx, attributes) {
-                //     children.push(v);
-                // },
                 "comment" => children.push(EnumsChild::Comment(parse_text_element(ctx)))
             }
             registry.0.push(RegistryChild::Enums(
                 Enums{namespace, group, enum_type,start,end,vendor,comment, children }));
 
+        },
+        "types" => {
+            let mut children = Vec::new();
+            match_elements!{ctx, attributes,
+                "type" => children.push(parse_type(ctx, attributes))
+            }
+            registry.0.push(RegistryChild::Types(Types { children }));
         },
         "commands" => {
             let mut namespace = None;
@@ -93,6 +114,33 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
     }
 
     Ok(registry)
+}
+
+
+fn parse_type<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Type {
+    let mut name = None;
+    let mut requires = None;
+    let mut comment = None;
+    let mut code: String = String::new();
+
+    match_attributes! {ctx, a in attributes,
+        "requires" => requires  = Some(a.value),
+        "comment"  => comment = Some(a.value)
+    }
+
+    match_elements_combine_text! {ctx, code,
+        "name" => name = Some(parse_text_element(ctx))
+    }
+
+    Type {
+        requires,
+        name,
+        comment,
+        code
+    }
 }
 
 fn parse_extensions<R: Read>(

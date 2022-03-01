@@ -11,6 +11,7 @@ extern crate xml;
 extern crate serde_derive;
 #[cfg(feature = "serialize")]
 extern crate serde;
+
 pub use types::*;
 
 #[macro_use]
