@@ -2,6 +2,7 @@
 extern crate khronos_registry_parse;
 
 use std::fs::File;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 #[cfg(feature = "opengl")]
 use khronos_registry_parse::gl;
@@ -71,11 +72,10 @@ macro_rules! test_version {
 #[cfg(feature = "opengl")]
 fn test_opengl_main() {
     use std::io::Cursor;
-    let mut buf = Cursor::new(vec![0; 0]);
-    download(&mut buf, URL_MAIN_GL);
-    buf.set_position(0);
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/test/gl.xml");
+    let mut file = BufReader::new(File::open(&path).expect("Unable to open gl.xml"));
 
-    match gl::parse_stream(buf.clone()) {
+    match gl::parse_stream(file) {
         Ok((_reg, errors)) => {
             if !errors.is_empty() {
                 panic!("{:?}", errors);

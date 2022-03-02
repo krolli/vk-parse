@@ -79,10 +79,12 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
                 "vendor"    => vendor    = Some(a.value),
                 "comment"   => comment   = Some(a.value)
             }
-
              match_elements!{ctx, attributes,
                 "enum" => if let Some(v) = parse_enum(ctx, attributes) {
                     children.push(EnumsChild::Enum(v));
+                },
+                "unused" => {
+                    consume_current_element(ctx);
                 },
                 "comment" => children.push(EnumsChild::Comment(parse_text_element(ctx)))
             }
@@ -110,9 +112,23 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
             }
            registry.0.push(RegistryChild::Commands(Commands{namespace, children}));
         },
-        "extensions" => registry.0.push(parse_extensions(ctx, attributes))
+        "extensions" => registry.0.push(parse_extensions(ctx, attributes)),
+        "feature" => {
+            match_attributes!{ctx, a in attributes,
+               "api"=> {},
+                "name" => {},
+                "number" => {}
+            }
+            match_elements!{ctx, attributes,
+                "require" => {
+                    consume_current_element(ctx);
+                },
+                "remove" => {
+                    consume_current_element(ctx);
+                }
+            }
+        }
     }
-
     Ok(registry)
 }
 
@@ -122,21 +138,28 @@ fn parse_type<R: Read>(
     attributes: Vec<XmlAttribute>,
 ) -> Type {
     let mut name = None;
+    let mut type_name = None;
     let mut requires = None;
     let mut comment = None;
     let mut code: String = String::new();
-
     match_attributes! {ctx, a in attributes,
         "requires" => requires  = Some(a.value),
-        "comment"  => comment = Some(a.value)
+        "comment"  => comment = Some(a.value),
+        "name" => name = Some(a.value)
     }
 
     match_elements_combine_text! {ctx, code,
-        "name" => name = Some(parse_text_element(ctx))
+        "name" => {
+            type_name = Some(parse_text_element(ctx));
+        },
+        "apientry" => {
+            consume_current_element(ctx)
+        } //skip
     }
 
     Type {
         requires,
+        type_name,
         name,
         comment,
         code
@@ -193,11 +216,14 @@ fn parse_extension<R: Read>(
 
     match_attributes! {ctx, a in attributes,
         "name"      => name  = Some(a.value),
-        "supported" => supported = Some(a.value)
+        "supported" => supported = Some(a.value),
+        "comment" => {}
     }
 
     match_elements! { ctx, attributes,
-        "require" => children.push(parse_extension_item_require(ctx, attributes))
+        "require" => {
+            consume_current_element(ctx);
+        }
     }
 
     Some(Extension {
@@ -270,10 +296,17 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 });
             }
         },
+        "alias" => {
+            consume_current_element(ctx);
+        },
+        "glx" => {
+            consume_current_element(ctx);
+        },
         "vecequiv" => {
             match_attributes!{ctx, a in attributes,
                 "name"   => vec_equiv = Some(a.value)
             }
+            consume_current_element(ctx);
         }
     }
 
@@ -333,8 +366,13 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
         "value" => value = Some(a.value),
-        "group" => group = Some(a.value)
+        "group" => group = Some(a.value),
+        "alias" => {},
+        "type" => {},
+        "api" => {},
+        "comment" => {}
     }
+    consume_current_element(ctx);
     unwrap_attribute!(ctx, enum, name);
     Some(Enum { name, value, group })
 }
