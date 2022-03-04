@@ -2,7 +2,6 @@ extern crate xml;
 
 use std;
 use std::io::Read;
-use std::str::FromStr;
 use types::*;
 use util::*;
 use vk::types::*;

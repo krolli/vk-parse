@@ -126,6 +126,15 @@ pub struct Extensions {
 #[non_exhaustive]
 pub enum InterfaceItem {
     Enum(Enum),
+    Type {
+        name: String,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        comment: Option<String>,
+    },
     Command {
         name: String,
 
@@ -151,8 +160,33 @@ pub enum ExtensionChild {
             serde(default, skip_serializing_if = "is_default")
         )]
         items: Vec<InterfaceItem>,
+
+        #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+        )]
+         comment: Option<String>,
+    },
+    Removed {
+        #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+        )]
+        items: Vec<InterfaceItem>,
+
+        #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+        )]
+        comment: Option<String>,
     },
 }
+
+pub enum ExtensionType {
+    Required,
+    Removed,
+}
+
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -166,12 +200,46 @@ pub struct Extension {
     )]
     pub supported: Option<String>,
 
+    #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub comment: Option<String>,
+
     /// The items which make up this extension.
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
     pub children: Vec<ExtensionChild>,
+
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct Features {
+    pub name: Option<String>,
+
+    #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub api: Option<String>,
+
+    #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub number: Option<String>,
+
+    /// The items which make up this extension.
+    #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub children: Vec<ExtensionChild>,
+
 }
 
 
@@ -209,6 +277,11 @@ pub struct Type {
     )]
     pub code: String,
 
+    #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub api_entry: bool
 }
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -237,6 +310,10 @@ pub enum RegistryChild {
 
     /// Container for all published Vulkan specification extensions.
     Extensions(Extensions),
+
+
+    /// Container for all published Vulkan specification extensions.
+    Features(Features),
 }
 
 

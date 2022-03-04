@@ -1,14 +1,11 @@
 extern crate xml;
 
 use std;
-use std::io;
-use std::io::{BufReader, Read};
-use std::str::FromStr;
+use std::io::Read;
 use types::*;
 use util::*;
 use gl::types::*;
 use xml::reader::XmlEvent;
-use std::str;
 
 pub const BOM: &'static [u8] = &[0xEF, 0xBB, 0xBF];
 
@@ -20,7 +17,7 @@ pub fn parse_file(path: &std::path::Path) -> Result<(Registry, Vec<Error>), Fata
 
 pub fn parse_stream<T: std::io::Read>(mut stream: T) -> Result<(Registry, Vec<Error>), FatalError> {
     let mut buffer = vec![0; 0];
-    stream.read_to_end(&mut buffer);
+    stream.read_to_end(&mut buffer)?;
 
     let mut offset = 0;
     for (i, _) in buffer.iter().enumerate() {
@@ -114,24 +111,82 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
         },
         "extensions" => registry.0.push(parse_extensions(ctx, attributes)),
         "feature" => {
+            let mut children = Vec::new();
+            let mut api = None;
+            let mut name = None;
+            let mut number = None;
             match_attributes!{ctx, a in attributes,
-               "api"=> {},
-                "name" => {},
-                "number" => {}
+               "api"=> api = Some(a.value),
+                "name" => name = Some(a.value),
+                "number" => number = Some(a.value)
             }
             match_elements!{ctx, attributes,
-                "require" => {
-                    consume_current_element(ctx);
+                "require" => if let Some(ext) = parse_extension_items(ctx, ExtensionType::Required, attributes) {
+                    children.push(ext);
                 },
-                "remove" => {
-                    consume_current_element(ctx);
+                "remove" => if let Some(ext) = parse_extension_items(ctx, ExtensionType::Removed, attributes) {
+                    children.push(ext);
                 }
             }
+          registry.0.push(RegistryChild::Features(Features{name, api, number, children}));
         }
     }
     Ok(registry)
 }
 
+
+
+fn parse_extension_items<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    ext_type: ExtensionType,
+    attributes: Vec<XmlAttribute>,
+) -> Option<ExtensionChild> {
+    let mut required_children = Vec::new();
+    let mut required_comment = None;
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => required_comment = Some(a.value)
+    }
+
+    match_elements! { ctx, attributes,
+         "enum"  => if let Some(e) = parse_enum(ctx, attributes) {
+            required_children.push(InterfaceItem::Enum(e));
+        },
+        "type" => {
+            let mut name = None;
+            let mut comment = None;
+            match_attributes! {ctx, a in attributes,
+                "name"    => name    = Some(a.value),
+                "comment" => comment = Some(a.value)
+            }
+            unwrap_attribute!(ctx, type, name);
+            consume_current_element(ctx);
+            required_children.push(InterfaceItem::Type { name, comment });
+        },
+         "command" => {
+            let mut name = None;
+            let mut comment = None;
+            match_attributes! {ctx, a in attributes,
+                "name"    => name    = Some(a.value),
+                "comment" => comment = Some(a.value)
+            }
+            unwrap_attribute!(ctx, type, name);
+            consume_current_element(ctx);
+            required_children.push(InterfaceItem::Command { name, comment });
+        }
+    }
+    match ext_type {
+        ExtensionType::Required => Some(ExtensionChild::Require {
+            items: required_children,
+            comment: required_comment
+        }),
+        ExtensionType::Removed => Some(ExtensionChild::Removed {
+            items: required_children,
+            comment: required_comment
+        })
+    }
+
+}
 
 fn parse_type<R: Read>(
     ctx: &mut ParseCtx<R>,
@@ -142,6 +197,7 @@ fn parse_type<R: Read>(
     let mut requires = None;
     let mut comment = None;
     let mut code: String = String::new();
+    let mut api_entry = false;
     match_attributes! {ctx, a in attributes,
         "requires" => requires  = Some(a.value),
         "comment"  => comment = Some(a.value),
@@ -153,11 +209,13 @@ fn parse_type<R: Read>(
             type_name = Some(parse_text_element(ctx));
         },
         "apientry" => {
-            consume_current_element(ctx)
-        } //skip
+            api_entry = true;
+            consume_current_element(ctx) //skip
+        }
     }
 
     Type {
+        api_entry,
         requires,
         type_name,
         name,
@@ -168,7 +226,7 @@ fn parse_type<R: Read>(
 
 fn parse_extensions<R: Read>(
     ctx: &mut ParseCtx<R>,
-    attributes: Vec<XmlAttribute>,
+    _attributes: Vec<XmlAttribute>,
 ) -> RegistryChild {
     let mut children = Vec::new();
     match_elements! {ctx, attributes,
@@ -179,90 +237,36 @@ fn parse_extensions<R: Read>(
     RegistryChild::Extensions(Extensions { children })
 }
 
-fn parse_extension_item_require<R: Read>(
-    ctx: &mut ParseCtx<R>,
-    attributes: Vec<XmlAttribute>,
-) -> ExtensionChild {
-    let mut items = Vec::new();
-
-    while let Some(Ok(e)) = ctx.events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                ctx.push_element(name);
-                if let Some(v) = parse_interface_item(ctx, name, attributes) {
-                    items.push(v);
-                }
-            }
-            XmlEvent::EndElement { .. } => {
-                ctx.pop_element();
-                break;
-            }
-            _ => {}
-        }
-    }
-    ExtensionChild::Require { items }
-}
-
 fn parse_extension<R: Read>(
     ctx: &mut ParseCtx<R>,
     attributes: Vec<XmlAttribute>,
 ) -> Option<Extension> {
     let mut name = None;
     let mut supported = None;
-    let mut children = Vec::new();
+    let mut comment = None;
+    let mut children: Vec<ExtensionChild> = Vec::new();
 
     match_attributes! {ctx, a in attributes,
         "name"      => name  = Some(a.value),
         "supported" => supported = Some(a.value),
-        "comment" => {}
+        "comment" => comment = Some(a.value)
     }
 
     match_elements! { ctx, attributes,
-        "require" => {
-            consume_current_element(ctx);
+        "require" => if let Some(ext) = parse_extension_items(ctx, ExtensionType::Required, attributes) {
+            children.push(ext);
         }
     }
 
     Some(Extension {
         name,
         supported,
+        comment,
         children,
     })
 }
 
-fn parse_interface_item<R: Read>(
-    ctx: &mut ParseCtx<R>,
-    name: &str,
-    attributes: Vec<XmlAttribute>,
-) -> Option<InterfaceItem> {
-    match name {
-        // "comment" => Some(InterfaceItem::Comment(parse_text_element(ctx))),
-        "enum" => parse_enum(ctx, attributes).map(|v| InterfaceItem::Enum(v)),
-        "command" => {
-            let mut name = None;
-            let mut comment = None;
-            match_attributes! {ctx, a in attributes,
-                "name"    => name    = Some(a.value),
-                "comment" => comment = Some(a.value)
-            }
-            unwrap_attribute!(ctx, type, name);
-            consume_current_element(ctx);
-            Some(InterfaceItem::Command { name, comment })
-        }
-        _ => {
-            ctx.errors.push(Error::UnexpectedElement {
-                xpath: ctx.xpath.clone(),
-                name: String::from(name),
-            });
-            return None;
-        }
-    }
-}
-
-fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Command> {
+fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, _attributes: Vec<XmlAttribute>) -> Option<Command> {
     let mut code = String::new();
     let mut proto = None;
     let mut vec_equiv = None;
