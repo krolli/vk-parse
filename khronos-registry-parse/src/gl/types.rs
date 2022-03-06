@@ -68,10 +68,39 @@ pub struct CommentedChildren<T> {
     pub children: Vec<T>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
-pub struct CommandDefinition {
+pub struct Glx {
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub name: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub comment: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub glx_type: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub opcode: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct Command {
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
@@ -95,18 +124,18 @@ pub struct CommandDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub vec_equiv: Option<String>,
-}
 
-/// A command is just a Vulkan function.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[non_exhaustive]
-pub enum Command {
-    /// Indicates this function is an alias for another one.
-    Alias { name: String, alias: String },
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub aliases: Vec<String>,
 
-    /// Defines a new Vulkan function.
-    Definition(CommandDefinition),
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub glx: Option<Glx>,
 }
 
 pub type Commands = CommentedChildren<Command>;
@@ -162,23 +191,31 @@ pub enum ExtensionChild {
         items: Vec<InterfaceItem>,
 
         #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
         )]
-         comment: Option<String>,
+        comment: Option<String>,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        api: Option<String>,
     },
     Removed {
         #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
         )]
         items: Vec<InterfaceItem>,
 
         #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
         )]
         comment: Option<String>,
+
+        profile: Option<String>,
     },
 }
 
@@ -186,7 +223,6 @@ pub enum ExtensionType {
     Required,
     Removed,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -201,8 +237,8 @@ pub struct Extension {
     pub supported: Option<String>,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub comment: Option<String>,
 
@@ -212,7 +248,6 @@ pub struct Extension {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub children: Vec<ExtensionChild>,
-
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -222,66 +257,64 @@ pub struct Features {
     pub name: Option<String>,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub api: Option<String>,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub number: Option<String>,
 
     /// The items which make up this extension.
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub children: Vec<ExtensionChild>,
-
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub struct Type {
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub requires: Option<String>,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub comment: Option<String>,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub name: Option<String>,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub type_name: Option<String>,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub code: String,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
-    pub api_entry: bool
+    pub api_entry: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -289,7 +322,6 @@ pub struct Type {
 pub struct Types {
     pub children: Vec<Type>,
 }
-
 
 /// An element of the Vulkan registry.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -311,11 +343,9 @@ pub enum RegistryChild {
     /// Container for all published Vulkan specification extensions.
     Extensions(Extensions),
 
-
     /// Container for all published Vulkan specification extensions.
     Features(Features),
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -328,14 +358,14 @@ pub struct Enums {
     pub namespace: Option<String>,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub group: Option<String>,
 
     #[cfg_attr(
-    feature = "serialize",
-    serde(default, skip_serializing_if = "is_default")
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
     )]
     pub enum_type: Option<String>,
 

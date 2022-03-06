@@ -1,17 +1,18 @@
-
 extern crate khronos_registry_parse;
 
-use std::fs::File;
-use std::io::BufReader;
-use std::path::{Path, PathBuf};
 #[cfg(feature = "opengl")]
 use khronos_registry_parse::gl;
 #[cfg(feature = "vulkan")]
 use khronos_registry_parse::vk;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
 
 const URL_REPO: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs";
-const URL_MAIN_VK: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml";
-const URL_MAIN_GL: &str = "https://raw.githubusercontent.com/KhronosGroup/OpenGL-Registry/main/xml/gl.xml";
+const URL_MAIN_VK: &str =
+    "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml";
+const URL_MAIN_GL: &str =
+    "https://raw.githubusercontent.com/KhronosGroup/OpenGL-Registry/main/xml/gl.xml";
 
 fn download<T: std::io::Write>(dst: &mut T, url: &str) {
     let resp = minreq::get(url)
@@ -29,7 +30,6 @@ fn download<T: std::io::Write>(dst: &mut T, url: &str) {
     dst.write_all(resp.as_bytes())
         .expect("Failed to write response body.");
 }
-
 
 #[cfg(feature = "vulkan")]
 fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
@@ -84,7 +84,6 @@ fn test_opengl_main() {
         Err(fatal_error) => panic!("{:?}", fatal_error),
     }
 }
-
 
 #[test]
 #[cfg(feature = "vulkan")]

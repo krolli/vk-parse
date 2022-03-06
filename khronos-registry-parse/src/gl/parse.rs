@@ -1,14 +1,13 @@
 extern crate xml;
 
+use gl::types::*;
 use std;
 use std::io::Read;
 use types::*;
 use util::*;
-use gl::types::*;
 use xml::reader::XmlEvent;
 
 pub const BOM: &'static [u8] = &[0xEF, 0xBB, 0xBF];
-
 
 pub fn parse_file(path: &std::path::Path) -> Result<(Registry, Vec<Error>), FatalError> {
     let file = std::io::BufReader::new(std::fs::File::open(path)?);
@@ -25,7 +24,7 @@ pub fn parse_stream<T: std::io::Read>(mut stream: T) -> Result<(Registry, Vec<Er
             offset = i + BOM.len();
         }
         if i != 0 {
-            break
+            break;
         }
     }
 
@@ -134,8 +133,6 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
     Ok(registry)
 }
 
-
-
 fn parse_extension_items<R: Read>(
     ctx: &mut ParseCtx<R>,
     ext_type: ExtensionType,
@@ -143,9 +140,13 @@ fn parse_extension_items<R: Read>(
 ) -> Option<ExtensionChild> {
     let mut required_children = Vec::new();
     let mut required_comment = None;
+    let mut profile = None;
+    let mut api = None;
 
     match_attributes! {ctx, a in attributes,
-        "comment" => required_comment = Some(a.value)
+        "comment" => required_comment = Some(a.value),
+        "profile" => profile = Some(a.value),
+        "api" => api = Some(a.value)
     }
 
     match_elements! { ctx, attributes,
@@ -178,20 +179,18 @@ fn parse_extension_items<R: Read>(
     match ext_type {
         ExtensionType::Required => Some(ExtensionChild::Require {
             items: required_children,
-            comment: required_comment
+            comment: required_comment,
+            api,
         }),
         ExtensionType::Removed => Some(ExtensionChild::Removed {
             items: required_children,
-            comment: required_comment
-        })
+            comment: required_comment,
+            profile,
+        }),
     }
-
 }
 
-fn parse_type<R: Read>(
-    ctx: &mut ParseCtx<R>,
-    attributes: Vec<XmlAttribute>,
-) -> Type {
+fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Type {
     let mut name = None;
     let mut type_name = None;
     let mut requires = None;
@@ -220,7 +219,7 @@ fn parse_type<R: Read>(
         type_name,
         name,
         comment,
-        code
+        code,
     }
 }
 
@@ -266,11 +265,16 @@ fn parse_extension<R: Read>(
     })
 }
 
-fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, _attributes: Vec<XmlAttribute>) -> Option<Command> {
+fn parse_command<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    _attributes: Vec<XmlAttribute>,
+) -> Option<Command> {
     let mut code = String::new();
     let mut proto = None;
     let mut vec_equiv = None;
     let mut params = Vec::new();
+    let mut aliases = Vec::new();
+    let mut glx = None;
 
     match_elements! {ctx, attributes,
         "proto" => {
@@ -301,9 +305,28 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, _attributes: Vec<XmlAttribute>)
             }
         },
         "alias" => {
+             match_attributes!{ctx, a in attributes,
+                "name"   => aliases.push(a.value)
+            }
             consume_current_element(ctx);
         },
         "glx" => {
+            let mut glx_type = None;
+            let mut opcode = None;
+            let mut name = None;
+            let mut comment = None;
+            match_attributes!{ctx, a in attributes,
+                "type"   => glx_type = Some(a.value),
+                "opcode"   => opcode = Some(a.value),
+                "name"   => name = Some(a.value),
+                "comment"   => comment = Some(a.value)
+            }
+            glx = Some(Glx {
+                glx_type,
+                opcode,
+                name,
+                comment
+            });
             consume_current_element(ctx);
         },
         "vecequiv" => {
@@ -313,7 +336,6 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, _attributes: Vec<XmlAttribute>)
             consume_current_element(ctx);
         }
     }
-
     let proto = if let Some(v) = proto {
         v
     } else {
@@ -323,12 +345,14 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, _attributes: Vec<XmlAttribute>)
         });
         return None;
     };
-    Some(Command::Definition(CommandDefinition {
+    Some(Command {
         proto,
         params,
         code,
         vec_equiv,
-    }))
+        glx,
+        aliases,
+    })
 }
 
 fn parse_name_with_type<R: Read>(
