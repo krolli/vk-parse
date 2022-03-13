@@ -384,7 +384,7 @@ fn parse_name_with_type<R: Read>(
         return None;
     };
 
-    Some(NameWithType { name, type_name })
+    Some(NameWithType { name, type_name, buffer: buffer.to_string() })
 }
 
 fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Enum> {
