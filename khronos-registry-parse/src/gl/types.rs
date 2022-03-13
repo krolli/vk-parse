@@ -28,7 +28,32 @@ pub struct NameWithType {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub buffer: String
+    pub code: String
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct CommandProto {
+    #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub group: Option<String>,
+
+    #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub class: Option<String>,
+
+    /// The definition of this parameter.
+    #[cfg_attr(
+    feature = "serialize",
+    serde(default, skip_serializing_if = "is_default")
+    )]
+    pub definition: NameWithType,
+
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -111,7 +136,7 @@ pub struct Command {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub proto: NameWithType,
+    pub proto: CommandProto,
 
     #[cfg_attr(
         feature = "serialize",

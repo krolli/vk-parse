@@ -278,7 +278,19 @@ fn parse_command<R: Read>(
 
     match_elements! {ctx, attributes,
         "proto" => {
-            proto = parse_name_with_type(ctx, &mut code);
+            let mut group = None;
+            let mut class = None;
+            match_attributes! {ctx, a in attributes,
+                "group"   => group  = Some(a.value),
+                "class"   => class  = Some(a.value)
+            }
+            if let Some(definition) = parse_name_with_type(ctx, &mut code) {
+                proto = Some(CommandProto {
+                    group,
+                    class,
+                    definition
+                });
+            }
             code.push('(');
         },
         "param" => {
@@ -374,6 +386,7 @@ fn parse_name_with_type<R: Read>(
             name = Some(text);
         }
     }
+
     let name = if let Some(v) = name {
         v
     } else {
@@ -384,7 +397,7 @@ fn parse_name_with_type<R: Read>(
         return None;
     };
 
-    Some(NameWithType { name, type_name, buffer: buffer.to_string() })
+    Some(NameWithType { name, type_name, code: buffer.to_string() })
 }
 
 fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Enum> {
