@@ -374,18 +374,20 @@ fn parse_name_with_type<R: Read>(
     let mut name = None;
     let mut type_name = None;
 
-    match_elements_combine_text! {ctx, buffer,
+    let mut arg_buffer: String = String::new();
+    match_elements_combine_text! {ctx, arg_buffer,
         "ptype" => {
             let text = parse_text_element(ctx);
-            buffer.push_str(&text);
+            arg_buffer.push_str(&text);
             type_name = Some(text);
         },
         "name" => {
             let text = parse_text_element(ctx);
-            buffer.push_str(&text);
+            arg_buffer.push_str(&text);
             name = Some(text);
         }
     }
+    buffer.push_str(arg_buffer.as_str());
 
     let name = if let Some(v) = name {
         v
@@ -397,7 +399,7 @@ fn parse_name_with_type<R: Read>(
         return None;
     };
 
-    Some(NameWithType { name, type_name, code: buffer.to_string() })
+    Some(NameWithType { name, type_name, code: arg_buffer.to_string() })
 }
 
 fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Enum> {
