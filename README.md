@@ -8,4 +8,4 @@
 
 `vk-parse` is a Rust crate which parses the Vulkan API registry XML and converts it to a Rust representation. It can be used to simplify generation of Vulkan API bindings.
 
-Crate itself resides in [vk-parse subdirectory](vk-parse), where you can also find more information about it.
+Crate itself resides in [vk-parse subdirectory](khronos-registry-parse), where you can also find more information about it.

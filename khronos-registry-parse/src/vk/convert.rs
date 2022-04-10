@@ -1,9 +1,10 @@
 extern crate vkxml;
 
 use c;
-use parse::*;
 use std;
 use types::*;
+use vk::parse::*;
+use vk::types::*;
 
 //--------------------------------------------------------------------------------------------------
 fn new_field() -> vkxml::Field {

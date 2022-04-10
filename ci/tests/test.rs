@@ -1,14 +1,16 @@
-#![deny(warnings)]
+extern crate khronos_registry_parse;
 
-extern crate minreq;
-extern crate ron;
-extern crate serde;
-extern crate vk_parse;
-extern crate vkxml;
-extern crate xml;
+use khronos_registry_parse::gl;
+use khronos_registry_parse::vk;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
 
 const URL_REPO: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs";
-const URL_MAIN: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml";
+const URL_MAIN_VK: &str =
+    "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml";
+const URL_MAIN_GL: &str =
+    "https://raw.githubusercontent.com/KhronosGroup/OpenGL-Registry/main/xml/gl.xml";
 
 fn download<T: std::io::Write>(dst: &mut T, url: &str) {
     let resp = minreq::get(url)
@@ -37,7 +39,7 @@ fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
     download(&mut buf, &src);
     buf.set_position(0);
 
-    match vk_parse::parse_stream(buf.clone()) {
+    match vk::parse_stream(buf.clone()) {
         Ok((_reg, errors)) => {
             if !errors.is_empty() {
                 panic!("{:?}", errors);
@@ -46,7 +48,8 @@ fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
         Err(fatal_error) => panic!("{:?}", fatal_error),
     }
 
-    match vk_parse::parse_stream_as_vkxml(buf) {
+    #[cfg(feature = "vkxml-convert")]
+    match vk::parse_stream_as_vkxml(buf) {
         Ok(_) => (),
         Err(fatal_error) => panic!("{:?}", fatal_error),
     }
@@ -62,13 +65,30 @@ macro_rules! test_version {
 }
 
 #[test]
-fn test_main() {
+fn test_opengl_main() {
     use std::io::Cursor;
     let mut buf = Cursor::new(vec![0; 15]);
-    download(&mut buf, URL_MAIN);
+    download(&mut buf, URL_MAIN_GL);
     buf.set_position(0);
 
-    match vk_parse::parse_stream(buf.clone()) {
+    match gl::parse_stream(buf.clone()) {
+        Ok((_reg, errors)) => {
+            if !errors.is_empty() {
+                panic!("{:?}", errors);
+            }
+        }
+        Err(fatal_error) => panic!("{:?}", fatal_error),
+    }
+}
+
+#[test]
+fn test_vulkan_main() {
+    use std::io::Cursor;
+    let mut buf = Cursor::new(vec![0; 15]);
+    download(&mut buf, URL_MAIN_VK);
+    buf.set_position(0);
+
+    match vk::parse_stream(buf.clone()) {
         Ok((_reg, errors)) => {
             if !errors.is_empty() {
                 panic!("{:?}", errors);
@@ -77,7 +97,7 @@ fn test_main() {
         Err(fatal_error) => panic!("{:?}", fatal_error),
     }
 
-    match vk_parse::parse_stream_as_vkxml(buf) {
+    match vk::parse_stream_as_vkxml(buf) {
         Ok(_) => (),
         Err(fatal_error) => panic!("{:?}", fatal_error),
     }

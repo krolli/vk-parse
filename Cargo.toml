@@ -1,5 +1,5 @@
 [workspace]
 members = [
-    "vk-parse",
-    "ci",
+    "khronos-registry-parse",
+    "ci"
 ]

@@ -1,5 +1,5 @@
 [package]
-name = "vk-parse"
+name = "khronos-registry-parse"
 version = "0.7.0"
 authors = ["Martin Krošlák <kroslakma@gmail.com>"]
 description = "Vulkan specification parser"
@@ -12,13 +12,18 @@ categories = ["parser-implementations", "rendering::graphics-api"]
 
 [features]
 serialize = ["serde", "serde_derive"]
-vkxml-convert = ["vkxml"]
+vkxml-convert = ["vkxml", "vulkan"]
+vulkan = []
+opengl = []
 
 [dependencies]
 xml-rs = "^0.8"
-
 vkxml = { optional = true, version = "^0.3" }
 serde = { optional = true, version = "^1.0.75" }
 serde_derive = { optional = true, version = "^1.0.75" }
+
+[dev-dependencies]
+minreq = { version = "^2", features = ["https"] }
+ron = "^0.4"
 
 [badges]
