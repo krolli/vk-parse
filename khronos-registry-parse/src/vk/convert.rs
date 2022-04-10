@@ -1,7 +1,6 @@
 extern crate vkxml;
 
 use c;
-use parse::*;
 use std;
 use types::*;
 use vk::parse::*;

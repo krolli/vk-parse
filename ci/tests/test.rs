@@ -1,8 +1,6 @@
 extern crate khronos_registry_parse;
 
-#[cfg(feature = "opengl")]
 use khronos_registry_parse::gl;
-#[cfg(feature = "vulkan")]
 use khronos_registry_parse::vk;
 use std::fs::File;
 use std::io::BufReader;
@@ -31,7 +29,6 @@ fn download<T: std::io::Write>(dst: &mut T, url: &str) {
         .expect("Failed to write response body.");
 }
 
-#[cfg(feature = "vulkan")]
 fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
     let src = format!(
         "{}/v{}.{}.{}{}/vk.xml",
@@ -61,7 +58,6 @@ fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
 macro_rules! test_version {
     ($test_name:ident, $major:expr, $minor:expr, $patch:expr, $url_suffix:expr) => {
         #[test]
-        #[cfg(feature = "vulkan")]
         fn $test_name() {
             parsing_test($major, $minor, $patch, $url_suffix);
         }
@@ -69,13 +65,13 @@ macro_rules! test_version {
 }
 
 #[test]
-#[cfg(feature = "opengl")]
 fn test_opengl_main() {
     use std::io::Cursor;
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/test/gl.xml");
-    let mut file = BufReader::new(File::open(&path).expect("Unable to open gl.xml"));
+    let mut buf = Cursor::new(vec![0; 15]);
+    download(&mut buf, URL_MAIN_GL);
+    buf.set_position(0);
 
-    match gl::parse_stream(file) {
+    match gl::parse_stream(buf.clone()) {
         Ok((_reg, errors)) => {
             if !errors.is_empty() {
                 panic!("{:?}", errors);
@@ -86,7 +82,6 @@ fn test_opengl_main() {
 }
 
 #[test]
-#[cfg(feature = "vulkan")]
 fn test_vulkan_main() {
     use std::io::Cursor;
     let mut buf = Cursor::new(vec![0; 15]);
@@ -102,7 +97,6 @@ fn test_vulkan_main() {
         Err(fatal_error) => panic!("{:?}", fatal_error),
     }
 
-    #[cfg(feature = "vkxml-convert")]
     match vk::parse_stream_as_vkxml(buf) {
         Ok(_) => (),
         Err(fatal_error) => panic!("{:?}", fatal_error),
