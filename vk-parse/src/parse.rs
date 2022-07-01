@@ -59,7 +59,7 @@ macro_rules! unwrap_attribute (
 );
 
 macro_rules! match_attributes {
-    ($ctx:expr, $a:ident in $attributes:expr, $($p:pat => $e:expr),+) => {
+    ($ctx:expr, $a:ident in $attributes:expr, $($p:pat => $e:expr),+ $(,)?) => {
         for $a in $attributes {
             let n = $a.name.local_name.as_str();
             match n {
@@ -669,6 +669,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 let mut optional = None;
                 let mut noautovalidity = None;
                 let mut objecttype = None;
+                let mut validstructs = None;
 
                 match_attributes!{ctx, a in attributes,
                     "len"            => len            = Some(a.value),
@@ -676,10 +677,16 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     "externsync"     => externsync     = Some(a.value),
                     "optional"       => optional       = Some(a.value),
                     "noautovalidity" => noautovalidity = Some(a.value),
-                    "objecttype"     => objecttype     = Some(a.value)
+                    "objecttype"     => objecttype     = Some(a.value),
+                    "validstructs"   => validstructs   = Some(a.value),
                 }
 
-                if params.len() > 0 {
+                let validstructs = validstructs.map_or(
+                    Default::default(),
+                    |structs| structs.split(',').map(|s| s.to_owned()).collect()
+                );
+
+                if !params.is_empty() {
                     code.push_str(", ");
                 }
                 if let Some(definition) = parse_name_with_type(ctx, &mut code) {
@@ -691,6 +698,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                         noautovalidity,
                         objecttype,
                         definition,
+                        validstructs,
                     });
                 }
             },
