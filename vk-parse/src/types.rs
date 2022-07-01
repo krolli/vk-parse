@@ -771,6 +771,16 @@ pub struct CommandParam {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub definition: NameWithType,
+
+    /// only applicable for parameters which are pointers to `VkBaseInStructure` or
+    /// `VkBaseOutStructure` types, used as abstract placeholders. Specifies a list of structures
+    /// which may be passed in place of the parameter, or anywhere in the `pNext` chain of the
+    /// parameter.
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub validstructs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
