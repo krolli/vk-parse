@@ -39,6 +39,9 @@ pub enum Error {
         xpath: String,
         name: String,
     },
+    MissingCharacters {
+        xpath: String,
+    },
     MissingAttribute {
         xpath: String,
         name: String,
@@ -277,6 +280,7 @@ pub enum TypeSpec {
     None,
     Code(TypeCode),
     Members(Vec<TypeMember>),
+    FunctionPointer(NameWithType, Vec<NameWithType>),
 }
 
 impl Default for TypeSpec {
@@ -395,6 +399,13 @@ pub struct TypeMemberDefinition {
     )]
     pub code: String,
 
+    /// The definition of this member.
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub definition: NameWithType,
+
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
@@ -406,9 +417,6 @@ pub struct TypeMemberDefinition {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub enum TypeMemberMarkup {
-    Name(String),
-    Type(String),
-    Enum(String),
     Comment(String),
 }
 
@@ -1125,6 +1133,28 @@ pub enum FormatChild {
     SpirvImageFormat { name: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum PointerKind {
+    Single {
+        is_const: bool,
+    },
+    Double {
+        is_const: bool,
+        inner_is_const: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum ArrayLength {
+    // TODO could probably make this smaller and/or NonZero
+    Static(usize),
+    Constant(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
@@ -1133,7 +1163,31 @@ pub struct NameWithType {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub type_name: Option<String>,
+    pub type_name: String,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub pointer_kind: Option<PointerKind>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub is_struct: bool,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub bitfield_size: Option<core::num::NonZeroU8>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub array_shape: Option<Vec<ArrayLength>>,
 
     #[cfg_attr(
         feature = "serialize",

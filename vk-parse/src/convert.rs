@@ -342,19 +342,18 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                     }
 
                     "funcpointer" => {
-                        let mut fnptr = vkxml::FunctionPointer {
-                            name: vkxml::Identifier::new(),
-                            notation: t.comment,
-                            return_type: new_field(),
-                            param: Vec::new(),
-                        };
-                        let code = match t.spec {
-                            TypeSpec::Code(TypeCode { code, .. }) => code,
-                            _ => panic!("Unexpected contents of handle {:?}", t.spec),
-                        };
-
-                        parse_type_funcptr(&mut fnptr, &code);
-                        return Some(vkxml::DefinitionsElement::FuncPtr(fnptr));
+                        if let TypeSpec::FunctionPointer(defn, params) = t.spec {
+                            return Some(vkxml::DefinitionsElement::FuncPtr(
+                                vkxml::FunctionPointer {
+                                    name: defn.name.clone().into(),
+                                    notation: t.comment,
+                                    return_type: defn.into(),
+                                    param: params.into_iter().map(|p| p.into()).collect(),
+                                },
+                            ));
+                        } else {
+                            panic!("Unexpected contents of handle {:?}", t.spec)
+                        }
                     }
 
                     "struct" => {
@@ -392,14 +391,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                                     match member {
                                         TypeMember::Comment(..) => (),
                                         TypeMember::Definition(def) => {
-                                            let mut iter = def
-                                                .code
-                                                .split_whitespace()
-                                                .flat_map(|s| c::TokenIter::new(s))
-                                                .peekable();
-
-                                            let field = parse_c_field(&mut iter).unwrap();
-                                            u.elements.push(field);
+                                            u.elements.push(def.definition.into());
                                         }
                                     }
                                 }
@@ -422,13 +414,7 @@ impl From<TypeMember> for vkxml::StructElement {
         match orig {
             TypeMember::Comment(comment) => vkxml::StructElement::Notation(comment),
             TypeMember::Definition(def) => {
-                let mut iter = def
-                    .code
-                    .split_whitespace()
-                    .flat_map(|s| c::TokenIter::new(s))
-                    .peekable();
-
-                let mut field = parse_c_field(&mut iter).unwrap();
+                let mut field: vkxml::Field = def.definition.into();
                 field.c_size = def.altlen;
                 field.sync = def.externsync;
                 field.optional = def.optional;
@@ -453,9 +439,7 @@ impl From<TypeMember> for vkxml::StructElement {
                 }
                 for tag in def.markup {
                     match tag {
-                        TypeMemberMarkup::Enum(value) => field.size_enumref = Some(value),
                         TypeMemberMarkup::Comment(comment) => field.notation = Some(comment),
-                        _ => (),
                     }
                 }
 
@@ -689,61 +673,6 @@ fn process_define_code(r: &mut vkxml::Define, code: String) {
     }
 }
 
-fn parse_type_funcptr(r: &mut vkxml::FunctionPointer, code: &str) {
-    let mut iter = code
-        .split_whitespace()
-        .flat_map(|s| c::TokenIter::new(s))
-        .peekable();
-    let token = iter.next().unwrap();
-    if token != "typedef" {
-        panic!("Unexpected token {:?}", token);
-    }
-
-    r.return_type = parse_c_field(&mut iter).unwrap();
-
-    let token = iter.next().unwrap();
-    if token != "(" {
-        panic!("Unexpected token {:?}", token);
-    }
-
-    let token = iter.next().unwrap();
-    if token != "VKAPI_PTR" {
-        panic!("Unexpected token {:?}", token);
-    }
-
-    let token = iter.next().unwrap();
-    if token != "*" {
-        panic!("Unexpected token {:?}", token);
-    }
-
-    r.name.push_str(iter.next().unwrap());
-
-    let token = iter.next().unwrap();
-    if token != ")" {
-        panic!("Unexpected token {:?}", token);
-    }
-
-    while let Some(token) = iter.next() {
-        match token {
-            "(" | "," => (),
-            ")" => break,
-            _ => panic!("Unexpected token {:?}", token),
-        }
-
-        let field = if let Some(field) = parse_c_field(&mut iter) {
-            field
-        } else {
-            continue;
-        };
-
-        if field.basetype == "void" && field.reference.is_none() && field.name.is_none() {
-            continue;
-        }
-
-        r.param.push(field);
-    }
-}
-
 impl From<EnumsChild> for Option<vkxml::Constant> {
     fn from(orig: EnumsChild) -> Self {
         match orig {
@@ -808,69 +737,52 @@ impl From<Enum> for Option<vkxml::Constant> {
     }
 }
 
-fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
-    iter: &mut std::iter::Peekable<I>,
-) -> Option<vkxml::Field> {
-    match iter.peek() {
-        Some(&")") => return None,
-        None => return None,
-        _ => (),
-    }
-
-    let mut r = new_field();
-
-    let mut token = iter.next().unwrap();
-    loop {
-        match token {
-            "const" => {
-                r.is_const = true;
-                token = iter.next().unwrap();
-            }
-            "struct" => {
-                r.is_struct = true;
-                token = iter.next().unwrap();
-            }
-            _ => break,
-        }
-    }
-
-    r.basetype = String::from(token);
-
-    while let Some(&token) = iter.peek() {
-        match token {
-            "," | ")" | "(" | ";" => break,
-            "*" => match r.reference {
-                None => r.reference = Some(vkxml::ReferenceType::Pointer),
-                _ => (),
-            },
-            "const" => r.reference = Some(vkxml::ReferenceType::PointerToConstPointer),
-            "[" => {
-                r.array = Some(vkxml::ArrayType::Static);
-            }
-            "]" => {
-                break;
-            }
-            t => {
-                if r.array.is_some() {
-                    let mut is_number = true;
-                    for c in t.chars() {
-                        if c < '0' || '9' < c {
-                            is_number = false;
-                            break;
-                        }
-                    }
-                    if is_number {
-                        r.size = Some(String::from(t));
-                    }
-                } else {
-                    r.name = Some(String::from(token))
+impl From<NameWithType> for vkxml::Field {
+    fn from(nt: NameWithType) -> Self {
+        let NameWithType {
+            type_name,
+            pointer_kind,
+            is_struct,
+            bitfield_size: _,
+            array_shape,
+            name,
+        } = nt;
+        let mut r = new_field();
+        r.name = Some(name);
+        r.is_const = matches!(
+            pointer_kind,
+            Some(
+                PointerKind::Single { is_const: true } | PointerKind::Double { is_const: true, .. }
+            )
+        );
+        r.is_struct = is_struct;
+        r.basetype = type_name;
+        r.reference = match pointer_kind {
+            Some(PointerKind::Single { .. }) => Some(vkxml::ReferenceType::Pointer),
+            Some(PointerKind::Double {
+                inner_is_const: true,
+                ..
+            }) => Some(vkxml::ReferenceType::PointerToConstPointer),
+            Some(PointerKind::Double {
+                inner_is_const: false,
+                ..
+            }) => Some(vkxml::ReferenceType::PointerToPointer),
+            None => None,
+        };
+        if let Some(shape) = array_shape.as_deref() {
+            r.array = Some(vkxml::ArrayType::Static);
+            match shape {
+                [ArrayLength::Static(n), ..] => {
+                    r.size = Some(n.to_string());
                 }
-            }
+                [ArrayLength::Constant(c), ..] => {
+                    r.size_enumref = Some(c.clone());
+                }
+                [] => unreachable!(),
+            };
         }
-        iter.next().unwrap();
+        r
     }
-
-    Some(r)
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1240,10 +1152,7 @@ impl From<Command> for Option<vkxml::Command> {
                     queues: def.queues,
                     renderpass: None,
                 };
-                match def.proto.type_name {
-                    Some(type_name) => r.return_type.basetype = type_name,
-                    None => (),
-                }
+                r.return_type.basetype = def.proto.type_name;
                 r.return_type.successcodes = def.successcodes;
                 r.return_type.errorcodes = def.errorcodes;
                 for text in def.implicitexternsyncparams {
@@ -1268,11 +1177,7 @@ impl From<Command> for Option<vkxml::Command> {
 
                 r.param.reserve(def.params.len());
                 for param in def.params {
-                    let mut p = new_field();
-                    p.name = Some(param.definition.name);
-                    if let Some(v) = param.definition.type_name {
-                        p.basetype = v;
-                    }
+                    let mut p: vkxml::Field = param.definition.into();
                     p.optional = param.optional;
                     p.sync = param.externsync;
                     if let Some(mut value) = param.len {
@@ -1291,57 +1196,6 @@ impl From<Command> for Option<vkxml::Command> {
                         p.array = Some(vkxml::ArrayType::Dynamic);
                     }
                     r.param.push(p);
-                }
-
-                let mut tokens = c::TokenIter::new(&def.code);
-                while let Some(token) = tokens.next() {
-                    if token == "(" {
-                        break;
-                    }
-                }
-
-                let mut is_array = false;
-                let mut array_size = String::new();
-                let mut param_idx = 0;
-                let mut ptr_count = 0;
-                let mut const_count = 0;
-                while let Some(token) = tokens.next() {
-                    match token {
-                        "," | ")" => {
-                            let p = &mut r.param[param_idx];
-                            if const_count > 0 {
-                                p.is_const = true;
-                            }
-                            if ptr_count == 2 {
-                                if const_count >= 1 {
-                                    p.reference = Some(vkxml::ReferenceType::PointerToConstPointer);
-                                } else {
-                                    p.reference = Some(vkxml::ReferenceType::PointerToPointer);
-                                }
-                            } else if ptr_count == 1 {
-                                p.reference = Some(vkxml::ReferenceType::Pointer);
-                            }
-                            param_idx += 1;
-                            ptr_count = 0;
-                            const_count = 0;
-                        }
-                        "*" => ptr_count += 1,
-                        "const" => const_count += 1,
-                        "struct" => r.param[param_idx].is_struct = true,
-                        "[" => is_array = true,
-                        "]" => {
-                            is_array = false;
-                            let p = &mut r.param[param_idx];
-                            p.array = Some(vkxml::ArrayType::Static);
-                            p.size = Some(array_size);
-                            array_size = String::new();
-                        }
-                        t => {
-                            if is_array {
-                                array_size.push_str(t);
-                            }
-                        }
-                    }
                 }
 
                 Some(r)
