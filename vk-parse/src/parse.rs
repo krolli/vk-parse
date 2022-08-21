@@ -137,7 +137,7 @@ macro_rules! match_elements {
 }
 
 macro_rules! match_elements_combine_text {
-    ( $ctx:expr, $attributes:ident, $buffer:ident, $($p:pat => $e:expr),+) => {
+    ( $ctx:expr, $attributes:ident, $buffer:ident, $($p:pat $(if $g:expr)? => $e:expr),+) => {
         while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::Characters(text) => $buffer.push_str(&text),
@@ -147,7 +147,7 @@ macro_rules! match_elements_combine_text {
                     $ctx.push_element(name);
                     match name {
                         $(
-                            $p => $e,
+                            $p $(if $g)? => $e,
                         )+
                         _ => {
                             $ctx.errors.push(Error::UnexpectedElement {
@@ -690,7 +690,7 @@ fn parse_name_with_type<
     })
 }
 
-fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<(NameWithType, Vec<NameWithType>)> {
+fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPointer> {
     let (type_name, pointer_kind) = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next()
     {
         let trimmed_text = text.trim();
@@ -748,7 +748,10 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<(NameWithType, V
         let trimmed_text = text.trim();
         // empty params will have text be `)(void);`
         if trimmed_text.ends_with(';') {
-            return Some((fnptr_defn, params));
+            return Some(TypeFunctionPointer {
+                proto: fnptr_defn,
+                params,
+            });
         }
 
         let trimmed_text = trimmed_text.strip_prefix(')').expect("").trim_start();
@@ -809,7 +812,263 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<(NameWithType, V
         };
     }
 
-    Some((fnptr_defn, params))
+    Some(TypeFunctionPointer {
+        proto: fnptr_defn,
+        params,
+    })
+}
+
+fn process_define_code(code: String, name_: String, defref: Vec<String>) -> TypeDefine {
+    fn consume_whitespace(chars: &mut std::str::Chars, mut current: Option<char>) -> Option<char> {
+        while let Some(c) = current {
+            if !c.is_whitespace() {
+                break;
+            }
+            current = chars.next();
+        }
+        current
+    }
+
+    let mut is_disabled = true;
+    let mut replace = false;
+    let mut parameters = Vec::new();
+    let mut value_ = None;
+    let mut c_expr_ = None;
+    let mut comment_ = None;
+
+    {
+        enum State {
+            Initial,
+            LineComment,
+            BlockComment,
+            DefineName,
+            DefineArgs,
+            DefineExpression,
+            DefineValue,
+        }
+        let mut state = State::Initial;
+        let mut chars = code.chars();
+        loop {
+            match state {
+                State::Initial => {
+                    let mut current = chars.next();
+                    current = consume_whitespace(&mut chars, current);
+
+                    match current {
+                        Some('/') => {
+                            current = chars.next();
+                            match current {
+                                Some('/') => state = State::LineComment,
+                                Some('*') => state = State::BlockComment,
+                                Some(c) => panic!("Unexpected symbol {:?}", c),
+                                None => panic!("Unexpected end of code."),
+                            }
+                        }
+
+                        Some('#') => {
+                            let text = chars.as_str();
+                            let mut directive_len = 0;
+                            while let Some(c) = chars.next() {
+                                if c.is_whitespace() {
+                                    break;
+                                }
+                                if 'a' <= c && c <= 'z' {
+                                    directive_len += 1;
+                                } else {
+                                    panic!("Unexpected symbol in preprocessor directive: {:?}", c);
+                                }
+                            }
+
+                            let directive = &text[..directive_len];
+                            match directive {
+                                "define" => state = State::DefineName,
+                                _ => {
+                                    // Different directive. Whole text treated as c expression and replace set to true.
+                                    replace = true;
+                                    is_disabled = false;
+                                    break;
+                                }
+                            }
+                        }
+
+                        Some('s') => {
+                            let expected = "truct ";
+
+                            let text = chars.as_str();
+                            if text.starts_with(expected) {
+                                // mk:TODO Less hacky handling of define which is actually forward declaration.
+                                replace = true;
+                                break;
+                            } else {
+                                println!("Unexpected code segment {:?}", code);
+                            }
+                        }
+
+                        Some(c) => panic!("Unexpected symbol {:?}", c),
+                        None => panic!("Unexpected end of code."),
+                    }
+                }
+
+                State::LineComment => {
+                    let text = chars.as_str();
+                    if let Some(idx) = text.find('\n') {
+                        let comment = text[..idx].trim();
+                        if comment_.is_none() {
+                            comment_.replace(String::from(comment));
+                        }
+                        chars = text[idx + 1..].chars();
+                        state = State::Initial;
+                    } else {
+                        if comment_.is_none() {
+                            comment_.replace(String::from(text.trim()));
+                        }
+
+                        break;
+                    }
+                }
+
+                State::BlockComment => {
+                    let text = chars.as_str();
+                    if let Some(idx) = text.find("*/") {
+                        let comment = &text[..idx];
+                        if comment_.is_none() {
+                            comment_.replace(String::from(comment));
+                        }
+                        chars = text[idx + 2..].chars();
+                        state = State::Initial;
+                    } else {
+                        panic!("Unterminated block comment {:?}", text);
+                    }
+                }
+
+                State::DefineName => {
+                    is_disabled = false;
+                    let text = chars.as_str();
+                    let mut current = chars.next();
+                    let mut whitespace_len = 0;
+                    while let Some(c) = current {
+                        if !c.is_whitespace() {
+                            break;
+                        }
+                        current = chars.next();
+                        whitespace_len += 1;
+                    }
+
+                    let mut name_len = 0;
+                    while let Some(c) = current {
+                        if !crate::c::is_c_identifier_char(c) {
+                            break;
+                        }
+                        name_len += 1;
+                        current = chars.next();
+                    }
+
+                    let name = &text[whitespace_len..whitespace_len + name_len];
+                    if name != name_ {
+                        panic!("#define name mismatch. {:?} vs. {:?}", name, name_);
+                    }
+
+                    match current {
+                        Some('(') => state = State::DefineArgs,
+                        Some(c) => {
+                            if c.is_whitespace() {
+                                state = State::DefineValue;
+                            } else {
+                                panic!("Unexpected char after #define name: {:?}", c);
+                            }
+                        }
+                        None => break,
+                    }
+                }
+
+                State::DefineArgs => {
+                    let mut text = chars.as_str();
+                    let mut current = chars.next();
+                    loop {
+                        let mut whitespace_len = 0;
+                        while let Some(c) = current {
+                            if !c.is_whitespace() {
+                                break;
+                            }
+                            whitespace_len += 1;
+                            current = chars.next();
+                        }
+
+                        let mut name_len = 0;
+                        while let Some(c) = current {
+                            if !crate::c::is_c_identifier_char(c) {
+                                break;
+                            }
+                            current = chars.next();
+                            name_len += 1;
+                        }
+                        let name = &text[whitespace_len..whitespace_len + name_len];
+                        parameters.push(String::from(name));
+
+                        current = consume_whitespace(&mut chars, current);
+                        match current {
+                            Some(',') => {
+                                text = chars.as_str();
+                                current = chars.next();
+                            }
+                            Some(')') => {
+                                chars.next();
+                                break;
+                            }
+                            Some(c) => {
+                                panic!("Unexpected character in #define argument list: {:?}", c)
+                            }
+                            None => {
+                                panic!("End of text while in the middle of #define argument list.")
+                            }
+                        }
+                    }
+                    state = State::DefineExpression;
+                }
+
+                State::DefineExpression => {
+                    c_expr_.replace(String::from(chars.as_str().trim()));
+                    break;
+                }
+
+                State::DefineValue => {
+                    let v = String::from(chars.as_str().trim());
+                    if !defref.is_empty() {
+                        c_expr_.replace(v);
+                    } else {
+                        value_.replace(v);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    if replace {
+        c_expr_.replace(code);
+    }
+    let value = if let Some(expression) = c_expr_ {
+        if parameters.is_empty() {
+            TypeDefineValue::Expression(expression)
+        } else {
+            TypeDefineValue::Function {
+                params: parameters,
+                expression,
+            }
+        }
+    } else if let Some(value) = value_ {
+        TypeDefineValue::Value(value)
+    } else {
+        TypeDefineValue::Empty
+    };
+    TypeDefine {
+        name: name_,
+        comment: comment_,
+        defref,
+        is_disabled,
+        replace,
+        value,
+    }
 }
 
 fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> TypesChild {
@@ -851,8 +1110,10 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         None
     };
 
+    let has_members = matches!(category.as_deref(), Some("struct" | "union"));
+
     match_elements_combine_text! {ctx, attributes, code,
-        "member" => {
+        "member" if has_members => {
             let mut len = None;
             let mut altlen = None;
             let mut externsync = None;
@@ -905,7 +1166,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             }))
         }
         },
-        "comment" => members.push(TypeMember::Comment(parse_text_element(ctx))),
+        "comment" if has_members => members.push(TypeMember::Comment(parse_text_element(ctx))),
         "name" => {
             let text = parse_text_element(ctx);
             code.push_str(&text);
@@ -923,12 +1184,112 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         }
     }
 
+    let spec = match category.as_deref() {
+        Some("include") => TypeSpec::Include {
+            name: markup.iter().find_map(|m| match m {
+                TypeCodeMarkup::Name(name) => Some(name.clone()),
+                _ => None,
+            }),
+            quoted: !code.contains("<"),
+        },
+        Some("define") => {
+            let name_ = name
+                .clone()
+                .or_else(|| {
+                    markup.iter().find_map(|m| match m {
+                        TypeCodeMarkup::Name(name) => Some(name.clone()),
+                        _ => None,
+                    })
+                })
+                .unwrap();
+            let defref = markup
+                .iter()
+                .filter_map(|m| match m {
+                    TypeCodeMarkup::Type(ty) => Some(ty.clone()),
+                    _ => None,
+                })
+                .collect();
+            TypeSpec::Define(process_define_code(code, name_, defref))
+        }
+        Some("basetype") => TypeSpec::Typedef {
+            name: markup
+                .iter()
+                .find_map(|m| match m {
+                    TypeCodeMarkup::Name(name) => Some(name.clone()),
+                    _ => None,
+                })
+                .unwrap(),
+            basetype: markup.iter().find_map(|m| match m {
+                TypeCodeMarkup::Type(ty) => Some(ty.clone()),
+                _ => None,
+            }),
+        },
+        Some("bitmask") => {
+            if name.is_some() || alias.is_some() {
+                TypeSpec::Bitmask(None)
+            } else {
+                TypeSpec::Bitmask(Some(NameWithType {
+                    name: markup
+                        .iter()
+                        .find_map(|m| match m {
+                            TypeCodeMarkup::Name(name) => Some(name.clone()),
+                            _ => None,
+                        })
+                        .unwrap(),
+                    type_name: markup
+                        .iter()
+                        .find_map(|m| match m {
+                            TypeCodeMarkup::Type(ty) => Some(ty.clone()),
+                            _ => None,
+                        })
+                        .unwrap(),
+                    pointer_kind: None,
+                    is_struct: false,
+                    bitfield_size: None,
+                    array_shape: None,
+                }))
+            }
+        }
+        Some("handle") => {
+            if name.is_some() || alias.is_some() {
+                TypeSpec::None
+            } else {
+                TypeSpec::Handle(TypeHandle {
+                    name: markup
+                        .iter()
+                        .find_map(|m| match m {
+                            TypeCodeMarkup::Name(name) => Some(name.clone()),
+                            _ => None,
+                        })
+                        .unwrap(),
+                    handle_type: match markup
+                        .iter()
+                        .find_map(|m| match m {
+                            TypeCodeMarkup::Type(val) => Some(val.as_str()),
+                            _ => None,
+                        })
+                        .unwrap()
+                    {
+                        "VK_DEFINE_HANDLE" => HandleType::Dispatch,
+                        "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => HandleType::NoDispatch,
+                        h => unreachable!("Unexpected handle type {:?}", h),
+                    },
+                })
+            }
+        }
+        Some("enum") => TypeSpec::Enumeration,
+        Some("funcpointer") => TypeSpec::FunctionPointer(fn_ptr_spec.unwrap()),
+        Some("struct") => TypeSpec::Struct(members),
+        Some("union") => TypeSpec::Union(members),
+        None => TypeSpec::None,
+        Some(c) => unreachable!("Unexpected category of type {:?}", c),
+    };
+
     TypesChild::Type(Type {
         api,
         alias,
         requires,
         name,
-        category,
         parent,
         returnedonly,
         structextends,
@@ -936,15 +1297,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         objtypeenum,
         bitvalues,
         comment,
-        spec: if let Some((defn, params)) = fn_ptr_spec {
-            TypeSpec::FunctionPointer(defn, params)
-        } else if members.len() > 0 {
-            TypeSpec::Members(members)
-        } else if code.len() > 0 {
-            TypeSpec::Code(TypeCode { code, markup })
-        } else {
-            TypeSpec::None
-        },
+        spec,
     })
 }
 

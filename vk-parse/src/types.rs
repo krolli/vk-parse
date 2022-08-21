@@ -221,12 +221,6 @@ pub struct Type {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub category: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
     pub comment: Option<String>,
 
     #[cfg_attr(
@@ -278,9 +272,22 @@ pub struct Type {
 #[non_exhaustive]
 pub enum TypeSpec {
     None,
-    Code(TypeCode),
-    Members(Vec<TypeMember>),
-    FunctionPointer(NameWithType, Vec<NameWithType>),
+    Include {
+        name: Option<String>,
+        quoted: bool,
+    },
+    Define(TypeDefine),
+    Typedef {
+        name: String,
+        // FIXME doesn't include all of the necessary information to recreate
+        basetype: Option<String>,
+    },
+    Bitmask(Option<NameWithType>),
+    Handle(TypeHandle),
+    Enumeration,
+    FunctionPointer(TypeFunctionPointer),
+    Struct(Vec<TypeMember>),
+    Union(Vec<TypeMember>),
 }
 
 impl Default for TypeSpec {
@@ -289,23 +296,10 @@ impl Default for TypeSpec {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[non_exhaustive]
-pub struct TypeCode {
-    pub code: String,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub markup: Vec<TypeCodeMarkup>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
-pub enum TypeCodeMarkup {
+pub(crate) enum TypeCodeMarkup {
     Name(String),
     Type(String),
     ApiEntry(String),
@@ -418,6 +412,61 @@ pub struct TypeMemberDefinition {
 #[non_exhaustive]
 pub enum TypeMemberMarkup {
     Comment(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct TypeFunctionPointer {
+    pub proto: NameWithType,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub params: Vec<NameWithType>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct TypeHandle {
+    pub name: String,
+
+    pub handle_type: HandleType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum HandleType {
+    Dispatch,
+    NoDispatch,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct TypeDefine {
+    pub name: String,
+    pub comment: Option<String>,
+    pub defref: Vec<String>,
+    pub is_disabled: bool,
+    pub replace: bool,
+    pub value: TypeDefineValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum TypeDefineValue {
+    Empty,
+    Value(String),
+    Expression(String),
+    Function {
+        params: Vec<String>,
+        expression: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

@@ -1,6 +1,5 @@
 extern crate vkxml;
 
-use c;
 use parse::*;
 use std;
 use types::*;
@@ -179,9 +178,8 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
         match orig {
             TypesChild::Comment(text) => Some(vkxml::DefinitionsElement::Notation(text)),
             TypesChild::Type(t) => {
-                let category = match t.category {
-                    Some(c) => c,
-                    None => {
+                match t.spec {
+                    TypeSpec::None => {
                         let name = t.name.unwrap_or(String::new());
                         return Some(vkxml::DefinitionsElement::Reference(vkxml::Reference {
                             name,
@@ -189,147 +187,96 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             include: t.requires,
                         }));
                     }
-                };
-
-                match category.as_str() {
-                    "include" => {
-                        let mut include = vkxml::Include {
-                            name: t.name.unwrap_or(String::new()),
+                    TypeSpec::Include { name, quoted } => {
+                        let name = t.name.or(name).unwrap_or(String::new());
+                        let need_ext = !name.ends_with(".h");
+                        let include = vkxml::Include {
+                            name,
                             notation: t.comment,
-                            style: vkxml::IncludeStyle::Quote,
-                            need_ext: false,
+                            style: match quoted {
+                                true => vkxml::IncludeStyle::Quote,
+                                false => vkxml::IncludeStyle::Bracket,
+                            },
+                            need_ext,
                         };
 
-                        match t.spec {
-                            TypeSpec::Code(TypeCode { code, markup }) => {
-                                let mut iter = code.split_whitespace();
-                                let token = iter.next().unwrap();
-                                if token != "#include" {
-                                    panic!("Unexpected token {:?}", token);
-                                }
-                                let token = iter.next().unwrap();
-                                if token.starts_with('<') {
-                                    include.style = vkxml::IncludeStyle::Bracket;
-                                }
-                                for tag in markup {
-                                    match tag {
-                                        TypeCodeMarkup::Name(name) => include.name = name,
-                                        _ => (),
-                                    }
-                                }
-                            }
-                            _ => (),
-                        }
-
-                        include.need_ext = !include.name.ends_with(".h");
                         return Some(vkxml::DefinitionsElement::Include(include));
                     }
 
-                    "define" => {
+                    TypeSpec::Define(TypeDefine {
+                        name,
+                        value,
+                        comment,
+                        defref,
+                        is_disabled,
+                        replace,
+                    }) => {
                         let mut define = vkxml::Define {
-                            name: t.name.unwrap_or(String::new()),
+                            name: name,
                             notation: t.comment,
-                            is_disabled: true,
-                            comment: None,
-                            replace: false,
-                            defref: Vec::new(),
+                            is_disabled,
+                            comment,
+                            replace,
+                            defref,
                             parameters: Vec::new(),
                             c_expression: None,
                             value: None,
                         };
-                        match t.spec {
-                            TypeSpec::Code(TypeCode { code, markup }) => {
-                                for tag in markup {
-                                    match tag {
-                                        TypeCodeMarkup::Type(val) => define.defref.push(val),
-                                        TypeCodeMarkup::Name(val) => define.name = val,
-                                        _ => panic!("Unexpected tag in define {:?}", tag),
-                                    }
-                                }
-                                process_define_code(&mut define, code);
+                        match value {
+                            TypeDefineValue::Empty => {}
+                            TypeDefineValue::Value(v) => {
+                                define.value = Some(v);
                             }
-                            _ => panic!("Unexpected contents of define {:?}", t.spec),
+                            TypeDefineValue::Expression(e) => {
+                                define.c_expression = Some(e);
+                            }
+                            TypeDefineValue::Function { params, expression } => {
+                                define.parameters = params;
+                                define.c_expression = Some(expression);
+                            }
                         }
                         return Some(vkxml::DefinitionsElement::Define(define));
                     }
 
-                    "basetype" => {
-                        let mut typedef = vkxml::Typedef {
-                            name: String::new(),
+                    TypeSpec::Typedef { name, basetype } => {
+                        let typedef = vkxml::Typedef {
+                            name,
                             notation: t.comment,
-                            basetype: String::new(),
+                            basetype: basetype.unwrap_or_default(),
                         };
-                        let markup = match t.spec {
-                            TypeSpec::Code(TypeCode { markup, .. }) => markup,
-                            _ => panic!("Unexpected contents of typedef {:?}", t.spec),
-                        };
-                        for tag in markup {
-                            match tag {
-                                TypeCodeMarkup::Type(val) => typedef.basetype = val,
-                                TypeCodeMarkup::Name(val) => typedef.name = val,
-                                _ => panic!("Unexpected tag in typedef {:?}", tag),
-                            }
-                        }
                         return Some(vkxml::DefinitionsElement::Typedef(typedef));
                     }
 
-                    "bitmask" => {
-                        if t.name.is_some() || t.alias.is_some() {
-                            return None;
-                        }
-                        let mut bitmask = vkxml::Bitmask {
-                            name: vkxml::Identifier::new(),
+                    TypeSpec::Bitmask(None) => {
+                        return None;
+                    }
+                    TypeSpec::Bitmask(Some(name_val)) => {
+                        let NameWithType {
+                            type_name, name, ..
+                        } = name_val;
+                        let bitmask = vkxml::Bitmask {
+                            name,
                             notation: t.comment,
-                            basetype: vkxml::Identifier::new(),
+                            basetype: type_name,
                             enumref: t.requires,
                         };
-                        let markup = match t.spec {
-                            TypeSpec::Code(TypeCode { markup, .. }) => markup,
-                            _ => panic!("Unexpected contents of bitmaks {:?}", t.spec),
-                        };
-                        for tag in markup {
-                            match tag {
-                                TypeCodeMarkup::Type(val) => bitmask.basetype = val,
-                                TypeCodeMarkup::Name(val) => bitmask.name = val,
-                                _ => panic!("Unexpected tag in typedef {:?}", tag),
-                            }
-                        }
                         return Some(vkxml::DefinitionsElement::Bitmask(bitmask));
                     }
 
-                    "handle" => {
-                        if t.name.is_some() || t.alias.is_some() {
-                            return None;
-                        }
-                        let mut handle = vkxml::Handle {
-                            name: String::new(),
+                    TypeSpec::Handle(TypeHandle { name, handle_type }) => {
+                        let handle = vkxml::Handle {
+                            name,
                             notation: t.comment,
                             parent: t.parent,
-                            ty: vkxml::HandleType::Dispatch,
+                            ty: match handle_type {
+                                HandleType::Dispatch => vkxml::HandleType::Dispatch,
+                                HandleType::NoDispatch => vkxml::HandleType::NoDispatch,
+                            },
                         };
-                        let markup = match t.spec {
-                            TypeSpec::Code(TypeCode { markup, .. }) => markup,
-                            _ => panic!("Unexpected contents of handle {:?}", t.spec),
-                        };
-                        for tag in markup {
-                            match tag {
-                                TypeCodeMarkup::Name(val) => handle.name = val,
-                                TypeCodeMarkup::Type(val) => {
-                                    handle.ty = match val.as_str() {
-                                        "VK_DEFINE_HANDLE" => vkxml::HandleType::Dispatch,
-                                        "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => {
-                                            vkxml::HandleType::NoDispatch
-                                        }
-                                        _ => panic!("Unexpected handle type: {}", val),
-                                    }
-                                }
-                                _ => panic!("Unexpected tag in typedef {:?}", tag),
-                            }
-                        }
                         return Some(vkxml::DefinitionsElement::Handle(handle));
                     }
 
-                    "enum" => {
+                    TypeSpec::Enumeration => {
                         // if alias.is_some() {
                         //     return None;
                         // }
@@ -341,22 +288,19 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                         ));
                     }
 
-                    "funcpointer" => {
-                        if let TypeSpec::FunctionPointer(defn, params) = t.spec {
-                            return Some(vkxml::DefinitionsElement::FuncPtr(
-                                vkxml::FunctionPointer {
-                                    name: defn.name.clone().into(),
-                                    notation: t.comment,
-                                    return_type: defn.into(),
-                                    param: params.into_iter().map(|p| p.into()).collect(),
-                                },
-                            ));
-                        } else {
-                            panic!("Unexpected contents of handle {:?}", t.spec)
-                        }
+                    TypeSpec::FunctionPointer(TypeFunctionPointer {
+                        proto: defn,
+                        params,
+                    }) => {
+                        return Some(vkxml::DefinitionsElement::FuncPtr(vkxml::FunctionPointer {
+                            name: defn.name.clone().into(),
+                            notation: t.comment,
+                            return_type: defn.into(),
+                            param: params.into_iter().map(|p| p.into()).collect(),
+                        }));
                     }
 
-                    "struct" => {
+                    TypeSpec::Struct(members) => {
                         if t.alias.is_some() {
                             return None;
                         }
@@ -367,42 +311,30 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             extends: t.structextends,
                             elements: Vec::new(),
                         };
-                        match t.spec {
-                            TypeSpec::Members(members) => {
-                                for member in members {
-                                    s.elements.push(member.into());
-                                }
-                            }
-                            _ => panic!("Unexpected contents of struct {:?}: {:?}", s.name, t.spec),
+                        for member in members {
+                            s.elements.push(member.into());
                         }
 
                         return Some(vkxml::DefinitionsElement::Struct(s));
                     }
 
-                    "union" => {
+                    TypeSpec::Union(members) => {
                         let mut u = vkxml::Union {
                             name: t.name.unwrap_or(String::new()),
                             notation: t.comment,
                             elements: Vec::new(),
                         };
-                        match t.spec {
-                            TypeSpec::Members(members) => {
-                                for member in members {
-                                    match member {
-                                        TypeMember::Comment(..) => (),
-                                        TypeMember::Definition(def) => {
-                                            u.elements.push(def.definition.into());
-                                        }
-                                    }
+                        for member in members {
+                            match member {
+                                TypeMember::Comment(..) => (),
+                                TypeMember::Definition(def) => {
+                                    u.elements.push(def.definition.into());
                                 }
                             }
-                            _ => panic!("Unexpected contents of union {:?}: {:?}", u.name, t.spec),
                         }
 
                         return Some(vkxml::DefinitionsElement::Union(u));
                     }
-
-                    _ => panic!("Unexpected category of type {:?}", category),
                 }
             }
         }
@@ -446,230 +378,6 @@ impl From<TypeMember> for vkxml::StructElement {
                 vkxml::StructElement::Member(field)
             }
         }
-    }
-}
-
-fn process_define_code(r: &mut vkxml::Define, code: String) {
-    fn consume_whitespace(chars: &mut std::str::Chars, mut current: Option<char>) -> Option<char> {
-        while let Some(c) = current {
-            if !c.is_whitespace() {
-                break;
-            }
-            current = chars.next();
-        }
-        current
-    }
-
-    {
-        enum State {
-            Initial,
-            LineComment,
-            BlockComment,
-            DefineName,
-            DefineArgs,
-            DefineExpression,
-            DefineValue,
-        }
-        let mut state = State::Initial;
-        let mut chars = code.chars();
-        loop {
-            match state {
-                State::Initial => {
-                    let mut current = chars.next();
-                    current = consume_whitespace(&mut chars, current);
-
-                    match current {
-                        Some('/') => {
-                            current = chars.next();
-                            match current {
-                                Some('/') => state = State::LineComment,
-                                Some('*') => state = State::BlockComment,
-                                Some(c) => panic!("Unexpected symbol {:?}", c),
-                                None => panic!("Unexpected end of code."),
-                            }
-                        }
-
-                        Some('#') => {
-                            let text = chars.as_str();
-                            let mut directive_len = 0;
-                            while let Some(c) = chars.next() {
-                                if c.is_whitespace() {
-                                    break;
-                                }
-                                if 'a' <= c && c <= 'z' {
-                                    directive_len += 1;
-                                } else {
-                                    panic!("Unexpected symbol in preprocessor directive: {:?}", c);
-                                }
-                            }
-
-                            let directive = &text[..directive_len];
-                            match directive {
-                                "define" => state = State::DefineName,
-                                _ => {
-                                    // Different directive. Whole text treated as c expression and replace set to true.
-                                    r.replace = true;
-                                    r.is_disabled = false;
-                                    break;
-                                }
-                            }
-                        }
-
-                        Some('s') => {
-                            let expected = "truct ";
-
-                            let text = chars.as_str();
-                            if text.starts_with(expected) {
-                                // mk:TODO Less hacky handling of define which is actually forward declaration.
-                                r.replace = true;
-                                break;
-                            } else {
-                                println!("Unexpected code segment {:?}", code);
-                            }
-                        }
-
-                        Some(c) => panic!("Unexpected symbol {:?}", c),
-                        None => panic!("Unexpected end of code."),
-                    }
-                }
-
-                State::LineComment => {
-                    let text = chars.as_str();
-                    if let Some(idx) = text.find('\n') {
-                        let comment = text[..idx].trim();
-                        if r.comment.is_none() {
-                            r.comment = Some(String::from(comment));
-                        }
-                        chars = text[idx + 1..].chars();
-                        state = State::Initial;
-                    } else {
-                        if r.comment.is_none() {
-                            r.comment = Some(String::from(text.trim()));
-                        }
-
-                        break;
-                    }
-                }
-
-                State::BlockComment => {
-                    let text = chars.as_str();
-                    if let Some(idx) = text.find("*/") {
-                        let comment = &text[..idx];
-                        if r.comment.is_none() {
-                            r.comment = Some(String::from(comment));
-                        }
-                        chars = text[idx + 2..].chars();
-                        state = State::Initial;
-                    } else {
-                        panic!("Unterminated block comment {:?}", text);
-                    }
-                }
-
-                State::DefineName => {
-                    r.is_disabled = false;
-                    let text = chars.as_str();
-                    let mut current = chars.next();
-                    let mut whitespace_len = 0;
-                    while let Some(c) = current {
-                        if !c.is_whitespace() {
-                            break;
-                        }
-                        current = chars.next();
-                        whitespace_len += 1;
-                    }
-
-                    let mut name_len = 0;
-                    while let Some(c) = current {
-                        if !c::is_c_identifier_char(c) {
-                            break;
-                        }
-                        name_len += 1;
-                        current = chars.next();
-                    }
-
-                    let name = &text[whitespace_len..whitespace_len + name_len];
-                    if name != r.name.as_str() {
-                        panic!("#define name mismatch. {:?} vs. {:?}", name, r.name);
-                    }
-
-                    match current {
-                        Some('(') => state = State::DefineArgs,
-                        Some(c) => {
-                            if c.is_whitespace() {
-                                state = State::DefineValue;
-                            } else {
-                                panic!("Unexpected char after #define name: {:?}", c);
-                            }
-                        }
-                        None => break,
-                    }
-                }
-
-                State::DefineArgs => {
-                    let mut text = chars.as_str();
-                    let mut current = chars.next();
-                    loop {
-                        let mut whitespace_len = 0;
-                        while let Some(c) = current {
-                            if !c.is_whitespace() {
-                                break;
-                            }
-                            whitespace_len += 1;
-                            current = chars.next();
-                        }
-
-                        let mut name_len = 0;
-                        while let Some(c) = current {
-                            if !c::is_c_identifier_char(c) {
-                                break;
-                            }
-                            current = chars.next();
-                            name_len += 1;
-                        }
-                        let name = &text[whitespace_len..whitespace_len + name_len];
-                        r.parameters.push(String::from(name));
-
-                        current = consume_whitespace(&mut chars, current);
-                        match current {
-                            Some(',') => {
-                                text = chars.as_str();
-                                current = chars.next();
-                            }
-                            Some(')') => {
-                                chars.next();
-                                break;
-                            }
-                            Some(c) => {
-                                panic!("Unexpected character in #define argument list: {:?}", c)
-                            }
-                            None => {
-                                panic!("End of text while in the middle of #define argument list.")
-                            }
-                        }
-                    }
-                    state = State::DefineExpression;
-                }
-
-                State::DefineExpression => {
-                    r.c_expression = Some(String::from(chars.as_str().trim()));
-                    break;
-                }
-
-                State::DefineValue => {
-                    let v = Some(String::from(chars.as_str().trim()));
-                    if r.defref.len() > 0 {
-                        r.c_expression = v;
-                    } else {
-                        r.value = v;
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    if r.replace {
-        r.c_expression = Some(code);
     }
 }
 
