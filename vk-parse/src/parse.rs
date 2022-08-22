@@ -674,7 +674,8 @@ fn parse_name_with_type<
             if let Some(rest) = trimmed_text.strip_prefix(':') {
                 (
                     Some(
-                        rest.parse()
+                        rest.trim_start()
+                            .parse()
                             .expect("after bitfield's ':' only a non-zero integer is expected"),
                     ),
                     None,

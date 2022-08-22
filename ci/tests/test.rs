@@ -9,6 +9,8 @@ extern crate xml;
 
 const URL_REPO: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs";
 const URL_MAIN: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml";
+const URL_MAIN_VIDEO: &str =
+    "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/video.xml";
 
 fn download<T: std::io::Write>(dst: &mut T, url: &str) {
     let resp = minreq::get(url)
@@ -66,6 +68,28 @@ fn test_main() {
     use std::io::Cursor;
     let mut buf = Cursor::new(vec![0; 15]);
     download(&mut buf, URL_MAIN);
+    buf.set_position(0);
+
+    match vk_parse::parse_stream(buf.clone()) {
+        Ok((_reg, errors)) => {
+            if !errors.is_empty() {
+                panic!("{:?}", errors);
+            }
+        }
+        Err(fatal_error) => panic!("{:?}", fatal_error),
+    }
+
+    match vk_parse::parse_stream_as_vkxml(buf) {
+        Ok(_) => (),
+        Err(fatal_error) => panic!("{:?}", fatal_error),
+    }
+}
+
+#[test]
+fn test_main_video() {
+    use std::io::Cursor;
+    let mut buf = Cursor::new(vec![0; 15]);
+    download(&mut buf, URL_MAIN_VIDEO);
     buf.set_position(0);
 
     match vk_parse::parse_stream(buf.clone()) {
