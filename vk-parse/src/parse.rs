@@ -509,8 +509,90 @@ fn parse_name_with_type<
 >(
     ctx: &mut ParseCtx<R>,
     code: &mut String,
+    len: Option<String>,
+    altlen: Option<String>,
+    externsync: Option<String>,
+    optional: Option<String>,
+    noautovalidity: Option<String>,
+    objecttype: Option<String>,
     mut handle_extra: F,
 ) -> Option<NameWithType> {
+    let dynamic_shape = if let Some(latex_expr) =
+        len.as_deref().and_then(|l| l.strip_prefix("latexmath:"))
+    {
+        // altlen was only added in version 61, and we support down to version 33
+        // let c_expr = altlen.expect("The `altlen` attribute is required when the `len` attribute is a latex expression");
+
+        if let Some(c_expr) = altlen {
+            Some(DynamicShapeKind::Expression {
+                latex_expr: Some(latex_expr.to_string()),
+                c_expr,
+            })
+        } else {
+            None
+        }
+    } else if let Some(c_expr) = altlen {
+        // only required/fixed in version >= 1.2.188(?)
+        // unreachable!("only expecting the `altlen` attribute when the `len` attribute is a latex expression");
+        Some(DynamicShapeKind::Expression {
+            latex_expr: None,
+            c_expr,
+        })
+    } else if let Some(len) = len {
+        let mut it = len.split(',').map(|v| {
+            if v == "null-terminated" {
+                DynamicLength::NullTerminated
+            } else if let Ok(n) = v.parse() {
+                DynamicLength::Static(n)
+            } else if let Some((parameter, field)) = v.split_once("->") {
+                DynamicLength::ParameterizedField {
+                    parameter: parameter.to_string(),
+                    field: field.to_string(),
+                }
+            } else {
+                DynamicLength::Parameterized(v.to_string())
+            }
+        });
+        let outer = it.next().expect("The `len` attribute must not be empty");
+        Some(match it.next() {
+            Some(inner) => {
+                let n = it.count();
+                if n != 0 {
+                    panic!(
+                        "Expected only 1 or 2 comma-seperated values in the `len` attribute, found {} values",
+                        2 + n
+                    );
+                }
+                DynamicShapeKind::Double(outer, inner)
+            }
+            None => DynamicShapeKind::Single(outer),
+        })
+    } else {
+        None
+    };
+    let optional = optional.as_deref().map(|v| {
+        let mut it = v.split(',').map(|v| match v.parse::<bool>() {
+            Err(_) => panic!("The comma-seperated values of the `optional` attribute must be either \"true\" | \"false\" not {:?}", v),
+            Ok(b) => b,
+        });
+        let outer = it.next().expect("The `optional` attribute must not be empty");
+        match it.next() {
+            Some(inner) => {
+                // broken in versions 1.2.162,1.2.163, & 1.2.164, see https://github.com/KhronosGroup/Vulkan-Docs/issues/1405
+                // assert_eq!(it.count(), 0, "Expected only 1 or 2 comma-seperated values in the `optional` attribute");
+                OptionalKind::Double(outer, inner)
+            },
+            None => OptionalKind::Single(outer)
+        }
+    });
+    let noautovalidity = match noautovalidity.as_deref() {
+        Some("true") => Some(()),
+        None => None,
+        Some(v) => panic!(
+            "The `noautovalidity` attribute must only be \"true\" and not {:?}",
+            v
+        ),
+    };
     let mut event = ctx.events.next();
     if let Some(Ok(XmlEvent::Whitespace(text))) = event {
         code.push_str(&text);
@@ -680,6 +762,29 @@ fn parse_name_with_type<
         event = ctx.events.next();
     }
 
+    let externsync = externsync.map(|v| {
+        if v == "true" {
+            ExternSyncKind::Value
+        } else {
+            let it = v.split(',').map(|value| {
+                let v = value.strip_prefix(name.as_str()).expect("");
+                if let Some(field) = v.strip_prefix("->") {
+                    field
+                } else if let Some(field) = v.strip_prefix("[].") {
+                    field
+                } else if let Some(field) = v.strip_prefix(".").or_else(|| v.strip_prefix("::")) {
+                    // these field seperators were phased out / fixed by version 138, and replaced with '->'
+                    // https://github.com/KhronosGroup/Vulkan-Docs/pull/1222
+                    field
+                } else {
+                    unreachable!("unspported field sperator found {:?}", value)
+                }
+                .to_string()
+            });
+            ExternSyncKind::Fields(it.collect())
+        }
+    });
+
     Some(NameWithType {
         type_name,
         pointer_kind,
@@ -687,6 +792,11 @@ fn parse_name_with_type<
         bitfield_size,
         name,
         array_shape,
+        dynamic_shape,
+        externsync,
+        optional,
+        noautovalidity,
+        objecttype,
     })
 }
 
@@ -740,6 +850,11 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
         is_struct: false,
         bitfield_size: None,
         array_shape: None,
+        dynamic_shape: None,
+        externsync: None,
+        optional: None,
+        noautovalidity: None,
+        objecttype: None,
     };
 
     let mut params = Vec::new();
@@ -798,6 +913,11 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
                 bitfield_size: None,
                 array_shape: None,
                 name: name.to_string(),
+                dynamic_shape: None,
+                externsync: None,
+                optional: None,
+                noautovalidity: None,
+                objecttype: None,
             });
             if let Some(rest) = rest {
                 parsed_pre = parse_pre_type_tag_text(rest.trim());
@@ -1140,7 +1260,15 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "limittype"             => limittype             = Some(a.value),
                 "objecttype"            => objecttype            = Some(a.value)
             }
-            if let Some(definition) = parse_name_with_type(ctx, &mut code, |ctx, _code, local_name, _| match local_name {
+            if let Some(definition) = parse_name_with_type(
+                ctx, &mut code,
+                len,
+                altlen,
+                externsync,
+                optional,
+                noautovalidity,
+                objecttype,
+                |ctx, _code, local_name, _| match local_name {
                 "comment" => {
                     let text = parse_text_element(ctx);
                     markup.push(TypeMemberMarkup::Comment(text));
@@ -1149,17 +1277,11 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 _ => ControlFlow::Break(())
             }) {
             members.push(TypeMember::Definition(TypeMemberDefinition {
-                len,
-                altlen,
-                externsync,
-                optional,
                 selector,
                 selection,
-                noautovalidity,
                 validextensionstructs,
                 values,
                 limittype,
-                objecttype,
                 code,
                 definition,
                 markup,
@@ -1247,6 +1369,11 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                     is_struct: false,
                     bitfield_size: None,
                     array_shape: None,
+                    dynamic_shape: None,
+                    externsync: None,
+                    optional: None,
+                    noautovalidity: None,
+                    objecttype: None,
                 }))
             }
         }
@@ -1339,7 +1466,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
 
         match_elements! {ctx, attributes,
             "proto" => {
-                proto = parse_name_with_type(ctx, &mut code, |_, _, _, _| ControlFlow::Break(()));
+                proto = parse_name_with_type(ctx, &mut code, None, None, None, None, None, None, |_, _, _, _| ControlFlow::Break(()));
                 code.push('(');
             },
 
@@ -1370,14 +1497,16 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 if !params.is_empty() {
                     code.push_str(", ");
                 }
-                if let Some(definition) = parse_name_with_type(ctx, &mut code, |_, _, _, _| ControlFlow::Break(())) {
+                if let Some(definition) = parse_name_with_type(ctx, &mut code,
+                    len,
+                    altlen,
+                    externsync,
+                    optional,
+                    noautovalidity,
+                    objecttype,
+
+                    |_, _, _, _| ControlFlow::Break(())) {
                     params.push(CommandParam {
-                        len,
-                        altlen,
-                        externsync,
-                        optional,
-                        noautovalidity,
-                        objecttype,
                         definition,
                         validstructs,
                     });

@@ -325,30 +325,6 @@ pub struct TypeMemberDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub len: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub altlen: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub externsync: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub optional: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
     pub selector: Option<String>,
 
     #[cfg_attr(
@@ -356,12 +332,6 @@ pub struct TypeMemberDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub selection: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub noautovalidity: Option<String>,
 
     #[cfg_attr(
         feature = "serialize",
@@ -380,12 +350,6 @@ pub struct TypeMemberDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub limittype: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub objecttype: Option<String>,
 
     #[cfg_attr(
         feature = "serialize",
@@ -787,47 +751,6 @@ pub struct CommandDefinition {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub struct CommandParam {
-    /// The expression which indicates the length of this array.
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub len: Option<String>,
-
-    /// Alternate description of the length of this parameter.
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub altlen: Option<String>,
-
-    /// Whether this parameter must be externally synchronised by the app.
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub externsync: Option<String>,
-
-    /// Whether this parameter must have a non-null value.
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub optional: Option<String>,
-
-    /// Disables automatic validity language being generated for this item.
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub noautovalidity: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub objecttype: Option<String>,
-
     /// The definition of this parameter.
     #[cfg_attr(
         feature = "serialize",
@@ -1199,9 +1122,48 @@ pub enum PointerKind {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub enum ArrayLength {
-    // TODO could probably make this smaller and/or NonZero
-    Static(usize),
+    Static(core::num::NonZeroUsize),
     Constant(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum DynamicLength {
+    NullTerminated,
+    // FIXME only found in VkAccelerationStructureBuildGeometryInfoKHR->ppGeometries, is this a mistake?
+    Static(core::num::NonZeroUsize),
+    Parameterized(String),
+    ParameterizedField { parameter: String, field: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum DynamicShapeKind {
+    Expression {
+        latex_expr: Option<String>,
+        c_expr: String,
+    },
+    Single(DynamicLength),
+    Double(DynamicLength, DynamicLength),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum OptionalKind {
+    Single(bool),
+    Double(bool, bool),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum ExternSyncKind {
+    /// externsync="true"
+    Value,
+    Fields(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -1243,6 +1205,40 @@ pub struct NameWithType {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub name: String,
+
+    /// combination of `len` and `altlen` attributes
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub dynamic_shape: Option<DynamicShapeKind>,
+
+    /// Whether this parameter must be externally synchronised by the app.
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub externsync: Option<ExternSyncKind>,
+
+    /// Whether this parameter must have a non-null value.
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub optional: Option<OptionalKind>,
+
+    /// Disables automatic validity language being generated for this item.
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub noautovalidity: Option<()>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub objecttype: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

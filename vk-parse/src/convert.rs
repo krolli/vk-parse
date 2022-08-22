@@ -347,28 +347,7 @@ impl From<TypeMember> for vkxml::StructElement {
             TypeMember::Comment(comment) => vkxml::StructElement::Notation(comment),
             TypeMember::Definition(def) => {
                 let mut field: vkxml::Field = def.definition.into();
-                field.c_size = def.altlen;
-                field.sync = def.externsync;
-                field.optional = def.optional;
                 field.type_enums = def.values;
-                match def.len {
-                    Some(mut value) => {
-                        let null_terminated_part = ",null-terminated";
-                        if value.as_str().ends_with(null_terminated_part) {
-                            field.null_terminate = true;
-                            let start = value.len() - null_terminated_part.len();
-                            value.drain(start..);
-                        }
-
-                        if value.as_str() == "null-terminated" {
-                            field.null_terminate = true;
-                        } else {
-                            field.size = Some(value);
-                        }
-                        field.array = Some(vkxml::ArrayType::Dynamic);
-                    }
-                    None => (),
-                }
                 for tag in def.markup {
                     match tag {
                         TypeMemberMarkup::Comment(comment) => field.notation = Some(comment),
@@ -454,42 +433,94 @@ impl From<NameWithType> for vkxml::Field {
             bitfield_size: _,
             array_shape,
             name,
+            dynamic_shape,
+            externsync,
+            optional,
+            noautovalidity,
+            objecttype: _,
         } = nt;
-        let mut r = new_field();
-        r.name = Some(name);
-        r.is_const = matches!(
-            pointer_kind,
-            Some(
-                PointerKind::Single { is_const: true } | PointerKind::Double { is_const: true, .. }
-            )
-        );
-        r.is_struct = is_struct;
-        r.basetype = type_name;
-        r.reference = match pointer_kind {
-            Some(PointerKind::Single { .. }) => Some(vkxml::ReferenceType::Pointer),
-            Some(PointerKind::Double {
-                inner_is_const: true,
-                ..
-            }) => Some(vkxml::ReferenceType::PointerToConstPointer),
-            Some(PointerKind::Double {
-                inner_is_const: false,
-                ..
-            }) => Some(vkxml::ReferenceType::PointerToPointer),
-            None => None,
-        };
-        if let Some(shape) = array_shape.as_deref() {
-            r.array = Some(vkxml::ArrayType::Static);
-            match shape {
-                [ArrayLength::Static(n), ..] => {
-                    r.size = Some(n.to_string());
-                }
-                [ArrayLength::Constant(c), ..] => {
-                    r.size_enumref = Some(c.clone());
-                }
-                [] => unreachable!(),
-            };
+        vkxml::Field {
+            array: if dynamic_shape.is_some() {
+                Some(vkxml::ArrayType::Dynamic)
+            } else if array_shape.is_some() {
+                Some(vkxml::ArrayType::Static)
+            } else {
+                None
+            },
+            auto_validity: noautovalidity.is_none(),
+            basetype: type_name,
+            c_size: match &dynamic_shape {
+                Some(DynamicShapeKind::Expression {
+                    latex_expr: _,
+                    c_expr,
+                }) => Some(c_expr.to_string()),
+                _ => None,
+            },
+            errorcodes: None,
+            is_const: matches!(
+                pointer_kind,
+                Some(
+                    PointerKind::Single { is_const: true }
+                        | PointerKind::Double { is_const: true, .. }
+                )
+            ),
+            is_struct,
+            sync: externsync.map(|es| match es {
+                ExternSyncKind::Value => "true".to_string(),
+                ExternSyncKind::Fields(fs) if dynamic_shape.is_some() => fs
+                    .iter()
+                    .map(|s| format!("{}[].{}", name, s))
+                    .collect::<Vec<_>>()
+                    .join(","),
+                ExternSyncKind::Fields(fs) => fs
+                    .iter()
+                    .map(|s| format!("{}->{}", name, s))
+                    .collect::<Vec<_>>()
+                    .join(","),
+            }),
+            name: Some(name),
+            notation: None,
+            null_terminate: matches!(
+                dynamic_shape,
+                Some(
+                    DynamicShapeKind::Single(DynamicLength::NullTerminated)
+                        | DynamicShapeKind::Double(DynamicLength::NullTerminated, _)
+                        | DynamicShapeKind::Double(_, DynamicLength::NullTerminated)
+                )
+            ),
+            optional: optional.map(|opt| match opt {
+                OptionalKind::Single(outer) => outer.to_string(),
+                OptionalKind::Double(outer, inner) => format!("{},{}", outer, inner),
+            }),
+            reference: pointer_kind.map(|kind| match kind {
+                PointerKind::Single { .. } => vkxml::ReferenceType::Pointer,
+                PointerKind::Double {
+                    inner_is_const: true,
+                    ..
+                } => vkxml::ReferenceType::PointerToConstPointer,
+                PointerKind::Double {
+                    inner_is_const: false,
+                    ..
+                } => vkxml::ReferenceType::PointerToPointer,
+            }),
+            size: match (&dynamic_shape, array_shape.as_deref()) {
+                (
+                    Some(
+                        DynamicShapeKind::Single(DynamicLength::Parameterized(p))
+                        | DynamicShapeKind::Double(DynamicLength::Parameterized(p), _),
+                    ),
+                    _,
+                ) => Some(p.to_string()),
+                (None, Some([ArrayLength::Static(n), ..])) => Some(n.to_string()),
+                _ => None,
+            },
+            size_enumref: match array_shape.as_deref() {
+                Some([ArrayLength::Constant(c), ..]) => Some(c.to_string()),
+                _ => None,
+            },
+            successcodes: None,
+            type_enums: None,
         }
-        r
     }
 }
 
@@ -885,25 +916,7 @@ impl From<Command> for Option<vkxml::Command> {
 
                 r.param.reserve(def.params.len());
                 for param in def.params {
-                    let mut p: vkxml::Field = param.definition.into();
-                    p.optional = param.optional;
-                    p.sync = param.externsync;
-                    if let Some(mut value) = param.len {
-                        let null_terminated_part = ",null-terminated";
-                        if value.as_str().ends_with(null_terminated_part) {
-                            p.null_terminate = true;
-                            let start = value.len() - null_terminated_part.len();
-                            value.drain(start..);
-                        }
-
-                        if value.as_str() == "null-terminated" {
-                            p.null_terminate = true;
-                        } else {
-                            p.size = Some(value);
-                        }
-                        p.array = Some(vkxml::ArrayType::Dynamic);
-                    }
-                    r.param.push(p);
+                    r.param.push(param.definition.into());
                 }
 
                 Some(r)
