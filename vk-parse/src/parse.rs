@@ -2,9 +2,7 @@ extern crate xml;
 
 use std;
 use std::io::Read;
-use std::ops::ControlFlow;
 use std::str::FromStr;
-use xml::attribute::OwnedAttribute;
 use xml::name::OwnedName;
 use xml::reader::XmlEvent;
 
@@ -503,10 +501,7 @@ fn parse_array_shape_text(text: &str, shape_vec: &mut Vec<ArrayLength>) -> bool 
     }
 }
 
-fn parse_name_with_type<
-    R: Read,
-    F: FnMut(&mut ParseCtx<R>, &mut String, &str, &[OwnedAttribute]) -> ControlFlow<()>,
->(
+fn parse_name_with_type<R: Read>(
     ctx: &mut ParseCtx<R>,
     code: &mut String,
     len: Option<String>,
@@ -515,7 +510,6 @@ fn parse_name_with_type<
     optional: Option<String>,
     noautovalidity: Option<String>,
     objecttype: Option<String>,
-    mut handle_extra: F,
 ) -> Option<NameWithType> {
     let dynamic_shape = if let Some(latex_expr) =
         len.as_deref().and_then(|l| l.strip_prefix("latexmath:"))
@@ -733,25 +727,28 @@ fn parse_name_with_type<
         };
     }
 
+    let mut comment = None;
     while let Some(Ok(e)) = event {
         match e {
             XmlEvent::Whitespace(text) => code.push_str(&text),
             XmlEvent::Characters(text) => code.push_str(&text),
             XmlEvent::StartElement {
-                name: elem_name,
-                attributes,
-                ..
+                name: elem_name, ..
             } => {
                 let elem_name = elem_name.local_name.as_str();
                 ctx.push_element(elem_name);
-                if let ControlFlow::Break(()) =
-                    handle_extra(ctx, code, elem_name, attributes.as_ref())
-                {
-                    ctx.errors.push(Error::UnexpectedElement {
-                        xpath: ctx.xpath.clone(),
-                        name: String::from(elem_name),
-                    });
-                    consume_current_element(ctx);
+                match elem_name {
+                    "comment" => {
+                        let text = parse_text_element(ctx);
+                        comment.replace(text);
+                    }
+                    _ => {
+                        ctx.errors.push(Error::UnexpectedElement {
+                            xpath: ctx.xpath.clone(),
+                            name: String::from(elem_name),
+                        });
+                        consume_current_element(ctx);
+                    }
                 }
             }
             XmlEvent::EndElement { .. } => {
@@ -798,6 +795,7 @@ fn parse_name_with_type<
         optional,
         noautovalidity,
         objecttype,
+        comment,
     })
 }
 
@@ -856,6 +854,7 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
         optional: None,
         noautovalidity: None,
         objecttype: None,
+        comment: None,
     };
 
     let mut params = Vec::new();
@@ -919,6 +918,7 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
                 optional: None,
                 noautovalidity: None,
                 objecttype: None,
+                comment: None,
             });
             if let Some(rest) = rest {
                 parsed_pre = parse_pre_type_tag_text(rest.trim());
@@ -1247,7 +1247,6 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let mut limittype = None;
             let mut objecttype = None;
             let mut code = String::new();
-            let mut markup = Vec::new();
             match_attributes!{ctx, a in attributes,
                 "len"                   => len                   = Some(a.value),
                 "altlen"                => altlen                = Some(a.value),
@@ -1268,15 +1267,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 externsync,
                 optional,
                 noautovalidity,
-                objecttype,
-                |ctx, _code, local_name, _| match local_name {
-                "comment" => {
-                    let text = parse_text_element(ctx);
-                    markup.push(TypeMemberMarkup::Comment(text));
-                    ControlFlow::Continue(())
-                },
-                _ => ControlFlow::Break(())
-            }) {
+                objecttype
+            ) {
             members.push(TypeMember::Definition(TypeMemberDefinition {
                 selector,
                 selection,
@@ -1285,7 +1277,6 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 limittype,
                 code,
                 definition,
-                markup,
             }))
         }
         },
@@ -1375,6 +1366,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                     optional: None,
                     noautovalidity: None,
                     objecttype: None,
+                    comment: None,
                 }))
             }
         }
@@ -1467,7 +1459,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
 
         match_elements! {ctx, attributes,
             "proto" => {
-                proto = parse_name_with_type(ctx, &mut code, None, None, None, None, None, None, |_, _, _, _| ControlFlow::Break(()));
+                proto = parse_name_with_type(ctx, &mut code, None, None, None, None, None, None);
                 code.push('(');
             },
 
@@ -1505,8 +1497,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     optional,
                     noautovalidity,
                     objecttype,
-
-                    |_, _, _, _| ControlFlow::Break(())) {
+                ) {
                     params.push(CommandParam {
                         definition,
                         validstructs,

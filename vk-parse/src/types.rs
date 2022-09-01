@@ -363,19 +363,6 @@ pub struct TypeMemberDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub definition: NameWithType,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub markup: Vec<TypeMemberMarkup>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[non_exhaustive]
-pub enum TypeMemberMarkup {
-    Comment(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -1239,6 +1226,12 @@ pub struct NameWithType {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub objecttype: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub comment: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

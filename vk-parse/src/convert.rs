@@ -348,11 +348,6 @@ impl From<TypeMember> for vkxml::StructElement {
             TypeMember::Definition(def) => {
                 let mut field: vkxml::Field = def.definition.into();
                 field.type_enums = def.values;
-                for tag in def.markup {
-                    match tag {
-                        TypeMemberMarkup::Comment(comment) => field.notation = Some(comment),
-                    }
-                }
 
                 vkxml::StructElement::Member(field)
             }
@@ -438,6 +433,7 @@ impl From<NameWithType> for vkxml::Field {
             optional,
             noautovalidity,
             objecttype: _,
+            comment,
         } = nt;
         vkxml::Field {
             array: if dynamic_shape.is_some() {
@@ -479,7 +475,7 @@ impl From<NameWithType> for vkxml::Field {
                     .join(","),
             }),
             name: Some(name),
-            notation: None,
+            notation: comment,
             null_terminate: matches!(
                 dynamic_shape,
                 Some(
