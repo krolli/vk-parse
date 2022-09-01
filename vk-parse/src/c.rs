@@ -18,11 +18,7 @@ impl<'a> Iterator for IterPhase1<'a> {
     fn next(&mut self) -> Option<char> {
         let mut iter = self.src.chars();
 
-        let c = if let Some(c) = iter.next() {
-            c
-        } else {
-            return None;
-        };
+        let c = iter.next()?;
 
         match c {
             // TODO: trigraphs and digraphs (probably not important)
@@ -95,7 +91,7 @@ impl<'a> IterPhase3a<'a> {
     }
 
     fn is_merged_whitespace(c: char) -> bool {
-        c == '\t' || ('\u{000B}' <= c && c <= '\u{000D}') || c == ' '
+        c == '\t' || ('\u{000B}'..='\u{000D}').contains(&c) || c == ' '
     }
 }
 
@@ -103,11 +99,7 @@ impl<'a> Iterator for IterPhase3a<'a> {
     type Item = char;
     fn next(&mut self) -> Option<char> {
         loop {
-            let c = if let Some(c) = self.peek {
-                c
-            } else {
-                return None;
-            };
+            let c = self.peek?;
 
             if c == '\n' {
                 self.peek = self.src.next();
@@ -125,7 +117,7 @@ impl<'a> Iterator for IterPhase3a<'a> {
 
                 if c == '/' {
                     self.peek = None;
-                    while let Some(c) = self.src.next() {
+                    for c in self.src.by_ref() {
                         if c == '\n' {
                             self.peek = Some(c);
                             break;
@@ -154,7 +146,7 @@ impl<'a> Iterator for IterPhase3a<'a> {
                 }
             } else if IterPhase3a::is_merged_whitespace(c) {
                 self.peek = None;
-                while let Some(c) = self.src.next() {
+                for c in self.src.by_ref() {
                     if !IterPhase3a::is_merged_whitespace(c) {
                         self.peek = Some(c);
                         break;
@@ -262,11 +254,7 @@ impl<'src> IterTokenInner<'src> {
     fn next(&mut self) -> Option<Token> {
         self.buf.clear();
         loop {
-            let c = if let Some(c) = self.peek {
-                c
-            } else {
-                return None;
-            };
+            let c = self.peek?;
             match (self.line, c) {
                 (LineState::Start, ' ') => self.peek = self.src.next(),
                 (LineState::Start, '\n') => self.peek = self.src.next(),
@@ -337,12 +325,12 @@ impl<'src> IterTokenInner<'src> {
                 (LineState::Normal, '\n') => {
                     self.peek = self.src.next();
                     self.line = LineState::Start;
-                    if self.buf.len() > 0 {
+                    if !self.buf.is_empty() {
                         return Some(Token::Identifier(&self.buf));
                     }
                 }
                 (LineState::Normal, ';') => {
-                    if self.buf.len() > 0 {
+                    if !self.buf.is_empty() {
                         return Some(Token::Identifier(&self.buf));
                     } else {
                         self.peek = self.src.next();
@@ -359,7 +347,7 @@ impl<'src> IterTokenInner<'src> {
 }
 
 fn is_number_start(c: char) -> bool {
-    '0' <= c && c <= '9'
+    c.is_ascii_digit()
 }
 
 fn is_number_part(c: char) -> bool {
@@ -368,17 +356,15 @@ fn is_number_part(c: char) -> bool {
         || c == '-'
         || c == 'x'
         || c == 'X'
-        || ('0' <= c && c <= '9')
-        || ('a' <= c && c <= 'f')
-        || ('A' <= c && c <= 'F')
+        || c.is_ascii_hexdigit()
 }
 
 fn is_identifier_start(c: char) -> bool {
-    c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
+    c == '_' || c.is_ascii_alphabetic()
 }
 
 fn is_identifier_part(c: char) -> bool {
-    c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9')
+    c == '_' || c.is_ascii_alphanumeric()
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -421,17 +407,7 @@ impl<'a> Iterator for TokenIter<'a> {
 }
 
 pub fn is_c_identifier_char(c: char) -> bool {
-    if '0' <= c && c <= '9' {
-        true
-    } else if 'a' <= c && c <= 'z' {
-        true
-    } else if 'A' <= c && c <= 'Z' {
-        true
-    } else if c == '_' {
-        true
-    } else {
-        false
-    }
+    c.is_ascii_alphanumeric() || c == '_'
 }
 
 pub fn is_c_identifier(s: &str) -> bool {
@@ -450,7 +426,7 @@ mod test {
 
     #[test]
     fn test() {
-        println!("");
+        println!();
         {
             let code = "typedef void // some comment    \n /* some other comment     */ (VKAPI_PTR *PFN_vkInternalAllocationNotification)(\\\r\n    void*                                       pUserData = M_PI/4,\r\n    size_t                                      size,\\\n    VkInternalAllocationType                    allocationType, \n    VkSystemAllocationScope                     allocationScope);";
 

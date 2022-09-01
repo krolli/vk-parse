@@ -185,7 +185,7 @@ pub type Types = CommentedChildren<TypesChild>;
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub enum TypesChild {
-    Type(Type),
+    Type(Box<Type>),
     Comment(String),
 }
 
@@ -314,7 +314,7 @@ pub enum TypeMember {
     Comment(String),
 
     /// A structure field definition.
-    Definition(TypeMemberDefinition),
+    Definition(Box<TypeMemberDefinition>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -641,7 +641,7 @@ pub enum Command {
     Alias { name: String, alias: String },
 
     /// Defines a new Vulkan function.
-    Definition(CommandDefinition),
+    Definition(Box<CommandDefinition>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

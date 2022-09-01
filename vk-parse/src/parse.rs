@@ -333,10 +333,7 @@ fn parse_vendorid<R: Read>(
         "name" => name = Some(a.value),
         "comment" => comment = Some(a.value),
         "id" => {
-            let mut v = None;
-            if a.value.starts_with("0x") {
-                v = u32::from_str_radix(&a.value.split_at(2).1, 16).ok();
-            }
+            let v = a.value.strip_prefix("0x").and_then(|v| u32::from_str_radix(v, 16).ok());
 
             if let Some(v) = v {
                 id = Some(v);
@@ -517,14 +514,10 @@ fn parse_name_with_type<R: Read>(
         // altlen was only added in version 61, and we support down to version 33
         // let c_expr = altlen.expect("The `altlen` attribute is required when the `len` attribute is a latex expression");
 
-        if let Some(c_expr) = altlen {
-            Some(DynamicShapeKind::Expression {
-                latex_expr: Some(latex_expr.to_string()),
-                c_expr,
-            })
-        } else {
-            None
-        }
+        altlen.map(|c_expr| DynamicShapeKind::Expression {
+            latex_expr: Some(latex_expr.to_string()),
+            c_expr,
+        })
     } else if let Some(c_expr) = altlen {
         // only required/fixed in version >= 1.2.188(?)
         // unreachable!("only expecting the `altlen` attribute when the `len` attribute is a latex expression");
@@ -716,7 +709,7 @@ fn parse_name_with_type<R: Read>(
 
             let trimmed_text = text
                 .trim()
-                .strip_prefix("]")
+                .strip_prefix(']')
                 .expect("Expected a ']' to denote the end of an element of a shape");
             hungry = parse_array_shape_text(trimmed_text.trim_start(), array_shape_vec);
         } else {
@@ -770,7 +763,7 @@ fn parse_name_with_type<R: Read>(
                     field
                 } else if let Some(field) = v.strip_prefix("[].") {
                     field
-                } else if let Some(field) = v.strip_prefix(".").or_else(|| v.strip_prefix("::")) {
+                } else if let Some(field) = v.strip_prefix('.').or_else(|| v.strip_prefix("::")) {
                     // these field seperators were phased out / fixed by version 138, and replaced with '->'
                     // https://github.com/KhronosGroup/Vulkan-Docs/pull/1222
                     field
@@ -829,9 +822,9 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
             ..
         })) if local_name == "name" => {
             ctx.push_element(&local_name);
-            let text = parse_text_element(ctx);
+            
 
-            text
+            parse_text_element(ctx)
         }
         _ => {
             ctx.errors.push(Error::MissingElement {
@@ -886,9 +879,9 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
                 ..
             })) if local_name == "type" => {
                 ctx.push_element(&local_name);
-                let text = parse_text_element(ctx);
+                
 
-                text
+                parse_text_element(ctx)
             }
             _ => {
                 ctx.errors.push(Error::MissingElement {
@@ -989,11 +982,11 @@ fn process_define_code(code: String, name_: String, defref: Vec<String>) -> Type
                         Some('#') => {
                             let text = chars.as_str();
                             let mut directive_len = 0;
-                            while let Some(c) = chars.next() {
+                            for c in chars.by_ref() {
                                 if c.is_whitespace() {
                                     break;
                                 }
-                                if 'a' <= c && c <= 'z' {
+                                if ('a'..='z').contains(&c) {
                                     directive_len += 1;
                                 } else {
                                     panic!("Unexpected symbol in preprocessor directive: {:?}", c);
@@ -1269,7 +1262,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 noautovalidity,
                 objecttype
             ) {
-            members.push(TypeMember::Definition(TypeMemberDefinition {
+            members.push(TypeMember::Definition(Box::new(TypeMemberDefinition {
                 selector,
                 selection,
                 validextensionstructs,
@@ -1277,7 +1270,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 limittype,
                 code,
                 definition,
-            }))
+            })))
         }
         },
         "comment" if has_members => members.push(TypeMember::Comment(parse_text_element(ctx))),
@@ -1304,7 +1297,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 TypeCodeMarkup::Name(name) => Some(name.clone()),
                 _ => None,
             }),
-            quoted: !code.contains("<"),
+            quoted: !code.contains('<'),
         },
         Some("define") => {
             let name_ = name
@@ -1405,7 +1398,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         Some(c) => unreachable!("Unexpected category of type {:?}", c),
     };
 
-    TypesChild::Type(Type {
+    TypesChild::Type(Box::new(Type {
         api,
         alias,
         requires,
@@ -1418,7 +1411,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         bitvalues,
         comment,
         spec,
-    })
+    }))
 }
 
 fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Command> {
@@ -1531,7 +1524,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             return None;
         };
 
-        Some(Command::Definition(CommandDefinition {
+        Some(Command::Definition(Box::new(CommandDefinition {
             queues,
             successcodes,
             errorcodes,
@@ -1546,7 +1539,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             description,
             implicitexternsyncparams,
             code,
-        }))
+        })))
     }
 }
 
@@ -1963,7 +1956,7 @@ fn parse_interface_item<R: Read>(
             consume_current_element(ctx);
             Some(InterfaceItem::Type { name, comment })
         }
-        "enum" => parse_enum(ctx, attributes).map(|v| InterfaceItem::Enum(v)),
+        "enum" => parse_enum(ctx, attributes).map(InterfaceItem::Enum),
         "command" => {
             let mut name = None;
             let mut comment = None;
@@ -1980,7 +1973,7 @@ fn parse_interface_item<R: Read>(
                 xpath: ctx.xpath.clone(),
                 name: String::from(name),
             });
-            return None;
+            None
         }
     }
 }
@@ -2311,10 +2304,10 @@ fn parse_enable<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -
 }
 
 fn parse_integer<R: Read>(ctx: &mut ParseCtx<R>, text: &str) -> Option<i64> {
-    let parse_res = if text.starts_with("0x") {
-        i64::from_str_radix(text.split_at(2).1, 16)
+    let parse_res = if let Some(hex) = text.strip_prefix("0x") {
+        i64::from_str_radix(hex, 16)
     } else {
-        i64::from_str_radix(text, 10)
+        text.parse::<i64>()
     };
 
     if let Ok(v) = parse_res {
@@ -2338,7 +2331,7 @@ fn parse_int_attribute<I: FromStr<Err = std::num::ParseIntError>, R: Read>(
         Err(e) => {
             ctx.errors.push(Error::ParseIntError {
                 xpath: xpath_attribute(&ctx.xpath, attribute_name),
-                text: text,
+                text,
                 error: e,
             });
             None

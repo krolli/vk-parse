@@ -109,7 +109,7 @@ impl From<Registry> for vkxml::Registry {
                     }
                     Some(kind) => {
                         let enumeration = vkxml::Enumeration {
-                            name: e.name.unwrap_or(String::new()),
+                            name: e.name.unwrap_or_default(),
                             notation: e.comment,
                             purpose: if kind.as_str() == "bitmask" {
                                 Some(vkxml::EnumerationPurpose::Bitmask)
@@ -180,15 +180,15 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
             TypesChild::Type(t) => {
                 match t.spec {
                     TypeSpec::None => {
-                        let name = t.name.unwrap_or(String::new());
-                        return Some(vkxml::DefinitionsElement::Reference(vkxml::Reference {
+                        let name = t.name.unwrap_or_default();
+                        Some(vkxml::DefinitionsElement::Reference(vkxml::Reference {
                             name,
                             notation: t.comment,
                             include: t.requires,
-                        }));
+                        }))
                     }
                     TypeSpec::Include { name, quoted } => {
-                        let name = t.name.or(name).unwrap_or(String::new());
+                        let name = t.name.or(name).unwrap_or_default();
                         let need_ext = !name.ends_with(".h");
                         let include = vkxml::Include {
                             name,
@@ -200,7 +200,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             need_ext,
                         };
 
-                        return Some(vkxml::DefinitionsElement::Include(include));
+                        Some(vkxml::DefinitionsElement::Include(include))
                     }
 
                     TypeSpec::Define(TypeDefine {
@@ -212,7 +212,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                         replace,
                     }) => {
                         let mut define = vkxml::Define {
-                            name: name,
+                            name,
                             notation: t.comment,
                             is_disabled,
                             comment,
@@ -235,7 +235,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                                 define.c_expression = Some(expression);
                             }
                         }
-                        return Some(vkxml::DefinitionsElement::Define(define));
+                        Some(vkxml::DefinitionsElement::Define(define))
                     }
 
                     TypeSpec::Typedef { name, basetype } => {
@@ -244,11 +244,11 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             notation: t.comment,
                             basetype: basetype.unwrap_or_default(),
                         };
-                        return Some(vkxml::DefinitionsElement::Typedef(typedef));
+                        Some(vkxml::DefinitionsElement::Typedef(typedef))
                     }
 
                     TypeSpec::Bitmask(None) => {
-                        return None;
+                        None
                     }
                     TypeSpec::Bitmask(Some(name_val)) => {
                         let NameWithType {
@@ -260,7 +260,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             basetype: type_name,
                             enumref: t.requires,
                         };
-                        return Some(vkxml::DefinitionsElement::Bitmask(bitmask));
+                        Some(vkxml::DefinitionsElement::Bitmask(bitmask))
                     }
 
                     TypeSpec::Handle(TypeHandle { name, handle_type }) => {
@@ -273,31 +273,31 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                                 HandleType::NoDispatch => vkxml::HandleType::NoDispatch,
                             },
                         };
-                        return Some(vkxml::DefinitionsElement::Handle(handle));
+                        Some(vkxml::DefinitionsElement::Handle(handle))
                     }
 
                     TypeSpec::Enumeration => {
                         // if alias.is_some() {
                         //     return None;
                         // }
-                        return Some(vkxml::DefinitionsElement::Enumeration(
+                        Some(vkxml::DefinitionsElement::Enumeration(
                             vkxml::EnumerationDeclaration {
-                                name: t.name.unwrap_or(String::new()),
+                                name: t.name.unwrap_or_default(),
                                 notation: t.comment,
                             },
-                        ));
+                        ))
                     }
 
                     TypeSpec::FunctionPointer(TypeFunctionPointer {
                         proto: defn,
                         params,
                     }) => {
-                        return Some(vkxml::DefinitionsElement::FuncPtr(vkxml::FunctionPointer {
-                            name: defn.name.clone().into(),
+                        Some(vkxml::DefinitionsElement::FuncPtr(vkxml::FunctionPointer {
+                            name: defn.name.clone(),
                             notation: t.comment,
                             return_type: defn.into(),
                             param: params.into_iter().map(|p| p.into()).collect(),
-                        }));
+                        }))
                     }
 
                     TypeSpec::Struct(members) => {
@@ -305,9 +305,9 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             return None;
                         }
                         let mut s = vkxml::Struct {
-                            name: t.name.unwrap_or(String::new()),
+                            name: t.name.unwrap_or_default(),
                             notation: t.comment,
-                            is_return: t.returnedonly.unwrap_or(String::new()).as_str() == "true",
+                            is_return: t.returnedonly.unwrap_or_default().as_str() == "true",
                             extends: t.structextends,
                             elements: Vec::new(),
                         };
@@ -315,12 +315,12 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             s.elements.push(member.into());
                         }
 
-                        return Some(vkxml::DefinitionsElement::Struct(s));
+                        Some(vkxml::DefinitionsElement::Struct(s))
                     }
 
                     TypeSpec::Union(members) => {
                         let mut u = vkxml::Union {
-                            name: t.name.unwrap_or(String::new()),
+                            name: t.name.unwrap_or_default(),
                             notation: t.comment,
                             elements: Vec::new(),
                         };
@@ -333,7 +333,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             }
                         }
 
-                        return Some(vkxml::DefinitionsElement::Union(u));
+                        Some(vkxml::DefinitionsElement::Union(u))
                     }
                 }
             }
@@ -368,11 +368,7 @@ impl From<EnumsChild> for Option<vkxml::EnumerationElement> {
     fn from(orig: EnumsChild) -> Self {
         match orig {
             EnumsChild::Enum(e) => {
-                if let Some(constant) = e.into() {
-                    Some(vkxml::EnumerationElement::Enum(constant))
-                } else {
-                    None
-                }
+                Option::<vkxml::Constant>::from(e).map(vkxml::EnumerationElement::Enum)
             }
             EnumsChild::Unused(unused) => {
                 Some(vkxml::EnumerationElement::UnusedRange(vkxml::Range {
@@ -405,10 +401,10 @@ impl From<Enum> for Option<vkxml::Constant> {
                     bitpos: None,
                     c_expression: None,
                 };
-                if let Ok(value) = i32::from_str_radix(&value, 10) {
+                if let Ok(value) = value.parse::<i32>() {
                     r.number = Some(value);
-                } else if value.starts_with("0x") {
-                    r.hex = Some(String::from(value.split_at(2).1))
+                } else if let Some(value) = value.strip_prefix("0x") {
+                    r.hex = Some(String::from(value))
                 } else {
                     r.c_expression = Some(value)
                 }
@@ -595,36 +591,34 @@ impl From<Extensions> for vkxml::Extensions {
 }
 
 impl From<Extension> for vkxml::Extension {
-    fn from(mut orig: Extension) -> Self {
+    fn from(orig: Extension) -> Self {
+        let Extension { name, comment, number, protect, platform: _, author, contact, ext_type, requires, requires_core: _, supported, deprecatedby: _, promotedto: _, obsoletedby: _, provisional: _, specialuse: _, sortorder: _, children } = orig;
         let mut disabled = false;
         let mut match_api = None;
-        let supported = orig.supported.take();
-        match supported {
-            Some(text) => {
-                if text == "disabled" {
-                    disabled = true;
-                } else {
-                    match_api = Some(text);
-                }
+
+        if let Some(text) = supported{
+            if text == "disabled" {
+                disabled = true;
+            } else {
+                match_api = Some(text);
             }
-            None => (),
         }
 
         let mut elements = Vec::new();
-        for item in orig.children {
+        for item in children {
             elements.push(item.into());
         }
 
         vkxml::Extension {
-            name: orig.name,
-            notation: orig.comment,
-            number: match orig.number {
+            name,
+            notation: comment,
+            number: match number {
                 Some(val) => val as i32,
                 None => 0,
             },
             disabled,
             match_api,
-            ty: match orig.ext_type {
+            ty: match ext_type {
                 Some(text) => match text.as_str() {
                     "instance" => Some(vkxml::ExtensionType::Instance),
                     "device" => Some(vkxml::ExtensionType::Device),
@@ -635,10 +629,10 @@ impl From<Extension> for vkxml::Extension {
                 },
                 None => None,
             },
-            define: orig.protect,
-            requires: orig.requires,
-            author: orig.author,
-            contact: orig.contact,
+            define: protect,
+            requires,
+            author,
+            contact,
             elements,
         }
     }
@@ -788,7 +782,7 @@ impl From<InterfaceItem> for Option<vkxml::ExtensionSpecificationElement> {
                     let mut text = None;
                     let mut number = None;
                     let mut enumref = None;
-                    if let Ok(val) = i32::from_str_radix(&value, 10) {
+                    if let Ok(val) = value.parse::<i32>() {
                         number = Some(val);
                     } else if value.starts_with('"') && value.ends_with('"') {
                         let end = value.len() - 1;

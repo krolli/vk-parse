@@ -15,7 +15,7 @@ const URL_MAIN_VIDEO: &str =
 fn download<T: std::io::Write>(dst: &mut T, url: &str) {
     let resp = minreq::get(url)
         .send()
-        .expect(&format!("Failed to GET resource: {:?}", url));
+        .unwrap_or_else(|_| panic!("Failed to GET resource: {:?}", url));
 
     let is_success = 200 <= resp.status_code && resp.status_code < 300;
     if !is_success {
