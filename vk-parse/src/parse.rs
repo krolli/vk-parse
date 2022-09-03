@@ -135,7 +135,7 @@ macro_rules! match_elements {
 }
 
 macro_rules! match_elements_combine_text {
-    ( $ctx:expr, $attributes:ident, $buffer:ident, $($p:pat $(if $g:expr)? => $e:expr),+) => {
+    ( $ctx:expr, $attributes:ident, $buffer:ident, $($p:pat $(if $g:expr)? => $e:expr),+ $(,)?) => {
         while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::Characters(text) => $buffer.push_str(&text),
@@ -165,7 +165,7 @@ macro_rules! match_elements_combine_text {
         }
     };
 
-    ( $ctx:expr, $buffer:ident, $($p:pat => $e:expr),+) => {
+    ( $ctx:expr, $buffer:ident, $($p:pat => $e:expr),+ $(,)?) => {
         match_elements_combine_text!{ $ctx, _attributes, $buffer, $($p => $e),+ }
     };
 }
@@ -500,7 +500,6 @@ fn parse_array_shape_text(text: &str, shape_vec: &mut Vec<ArrayLength>) -> bool 
 
 fn parse_name_with_type<R: Read>(
     ctx: &mut ParseCtx<R>,
-    code: &mut String,
     len: Option<String>,
     altlen: Option<String>,
     externsync: Option<String>,
@@ -581,12 +580,10 @@ fn parse_name_with_type<R: Read>(
         ),
     };
     let mut event = ctx.events.next();
-    if let Some(Ok(XmlEvent::Whitespace(text))) = event {
-        code.push_str(&text);
+    if let Some(Ok(XmlEvent::Whitespace(_))) = event {
         event = ctx.events.next();
     }
     let parsed_pre = if let Some(Ok(XmlEvent::Characters(text))) = event {
-        code.push_str(&text);
         event = ctx.events.next();
 
         parse_pre_type_tag_text(&text)
@@ -601,7 +598,6 @@ fn parse_name_with_type<R: Read>(
         })) if local_name == "type" => {
             ctx.push_element(&local_name);
             let text = parse_text_element(ctx);
-            code.push_str(&text);
             event = ctx.events.next();
 
             text
@@ -615,12 +611,10 @@ fn parse_name_with_type<R: Read>(
         }
     };
 
-    if let Some(Ok(XmlEvent::Whitespace(text))) = event {
-        code.push_str(&text);
+    if let Some(Ok(XmlEvent::Whitespace(_))) = event {
         event = ctx.events.next();
     }
     let pointer_kind = if let Some(Ok(XmlEvent::Characters(text))) = event {
-        code.push_str(&text);
         event = ctx.events.next();
 
         let (kind, rest) = parse_post_type_tag_text(&text, parsed_pre);
@@ -637,7 +631,6 @@ fn parse_name_with_type<R: Read>(
         })) if local_name == "name" => {
             ctx.push_element(&local_name);
             let text = parse_text_element(ctx);
-            code.push_str(&text);
             event = ctx.events.next();
 
             text
@@ -653,7 +646,6 @@ fn parse_name_with_type<R: Read>(
 
     let (bitfield_size, mut array_shape, mut hungry) =
         if let Some(Ok(XmlEvent::Characters(text))) = event {
-            code.push_str(&text);
             event = ctx.events.next();
 
             let trimmed_text = text.trim();
@@ -689,7 +681,6 @@ fn parse_name_with_type<R: Read>(
             })) if local_name == "enum" => {
                 ctx.push_element(&local_name);
                 let text = parse_text_element(ctx);
-                code.push_str(&text);
                 event = ctx.events.next();
 
                 array_shape_vec.push(ArrayLength::Constant(text));
@@ -704,7 +695,6 @@ fn parse_name_with_type<R: Read>(
         };
         //
         if let Some(Ok(XmlEvent::Characters(text))) = event {
-            code.push_str(&text);
             event = ctx.events.next();
 
             let trimmed_text = text
@@ -723,8 +713,12 @@ fn parse_name_with_type<R: Read>(
     let mut comment = None;
     while let Some(Ok(e)) = event {
         match e {
-            XmlEvent::Whitespace(text) => code.push_str(&text),
-            XmlEvent::Characters(text) => code.push_str(&text),
+            XmlEvent::Whitespace(_) => {},
+            XmlEvent::Characters(text) => {
+                if !text.trim().is_empty() {
+                    todo!("wasn't prepared for characters {}", text)
+                }
+            },
             XmlEvent::StartElement {
                 name: elem_name, ..
             } => {
@@ -932,7 +926,7 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
     })
 }
 
-fn process_define_code(code: String, name_: String, defref: Vec<String>) -> TypeDefine {
+fn process_define_code(code: String, name_: String, defref: Option<String>) -> TypeDefine {
     fn consume_whitespace(chars: &mut std::str::Chars, mut current: Option<char>) -> Option<char> {
         while let Some(c) = current {
             if !c.is_whitespace() {
@@ -1147,7 +1141,7 @@ fn process_define_code(code: String, name_: String, defref: Vec<String>) -> Type
 
                 State::DefineValue => {
                     let v = String::from(chars.as_str().trim());
-                    if !defref.is_empty() {
+                    if defref.is_some() {
                         c_expr_.replace(v);
                     } else {
                         value_.replace(v);
@@ -1185,6 +1179,51 @@ fn process_define_code(code: String, name_: String, defref: Vec<String>) -> Type
     }
 }
 
+fn parse_type_member<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Box<TypeMemberDefinition>> {
+    let mut len = None;
+    let mut altlen = None;
+    let mut externsync = None;
+    let mut optional = None;
+    let mut selector = None;
+    let mut selection = None;
+    let mut noautovalidity = None;
+    let mut validextensionstructs = None;
+    let mut values = None;
+    let mut limittype = None;
+    let mut objecttype = None;
+    match_attributes!{ctx, a in attributes,
+        "len"                   => len                   = Some(a.value),
+        "altlen"                => altlen                = Some(a.value),
+        "externsync"            => externsync            = Some(a.value),
+        "optional"              => optional              = Some(a.value),
+        "selector"              => selector              = Some(a.value),
+        "selection"             => selection             = Some(a.value),
+        "noautovalidity"        => noautovalidity        = Some(a.value),
+        "validextensionstructs" => validextensionstructs = Some(a.value),
+        "values"                => values                = Some(a.value),
+        "limittype"             => limittype             = Some(a.value),
+        "objecttype"            => objecttype            = Some(a.value)
+    }
+    parse_name_with_type(
+        ctx,
+        len,
+        altlen,
+        externsync,
+        optional,
+        noautovalidity,
+        objecttype
+    ).map(|definition|
+        Box::new(TypeMemberDefinition {
+            selector,
+            selection,
+            validextensionstructs,
+            values,
+            limittype,
+            definition,
+        })
+    )
+}
+
 fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> TypesChild {
     let mut api = None;
     let mut alias = None;
@@ -1200,7 +1239,6 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut comment = None;
 
     let mut code = String::new();
-    let mut markup = Vec::new();
     let mut members = Vec::new();
 
     match_attributes! {ctx, a in attributes,
@@ -1218,138 +1256,104 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         "comment"        => comment        = Some(a.value)
     }
 
+    assert!(api.is_none());
+    if alias.is_some() {
+        assert!(matches!(category.as_deref(), None | Some("bitmask" | "handle" | "enum" | "struct")), "category was {:?}", category);
+    }
+    if requires.is_some() {
+        assert!(matches!(category.as_deref(), None | Some("define" | "funcpointer" | "bitmask")) || (matches!(category.as_deref(), Some("struct")) && name.as_deref() == Some("StdVideoDecodeH264PictureInfo")), "category was {:?}", category);
+    }
+    if name.is_some() {
+        assert!(matches!(category.as_deref(), None | Some("enum" | "struct" | "union" | "include" | "define")) || (matches!(category.as_deref(), Some("bitmask" | "handle")) && alias.is_some()), "category was {:?}; name was {:?}", category, name);
+    }
+    if parent.is_some() {
+        assert_eq!(category.as_deref(), Some("handle"), "category was {:?}", category);
+    }
+    if returnedonly.is_some() {
+        assert!(matches!(category.as_deref(), Some("struct" | "union")), "category was {:?}", category);
+    }
+    if structextends.is_some() {
+        assert!(matches!(category.as_deref(), Some("struct")), "category was {:?}", category);
+    }
+    if allowduplicate.is_some() {
+        assert!(matches!(category.as_deref(), Some("struct")), "category was {:?}", category);
+    }
+    if objtypeenum.is_some() {
+        assert!(matches!(category.as_deref(), Some("handle")), "category was {:?}", category);
+    }
+    if bitvalues.is_some() {
+        assert!(requires.is_none());
+        assert!(matches!(category.as_deref(), Some("bitmask")), "category was {:?}", category);
+    }
+
     let fn_ptr_spec = if let Some("funcpointer") = category.as_deref() {
-        parse_type_funcptr(ctx)
+        let fn_ptr_spec = parse_type_funcptr(ctx);
+        name = fn_ptr_spec.as_ref().map(|fp| fp.proto.name.clone());
+        fn_ptr_spec
     } else {
         None
     };
+    // support versions older than 1.0.70 where <name> was found inside <type category="include">
+    const SUPPORT_OLD: bool = true;
 
     let has_members = matches!(category.as_deref(), Some("struct" | "union"));
+    let is_empty_tag = matches!(category.as_deref(), Some("enum")) || alias.is_some();
+    let is_empty_or_txt_tag = is_empty_tag || (matches!(category.as_deref(), Some("include")) && !SUPPORT_OLD);
+    let has_inner_tags = !is_empty_or_txt_tag;
+    let mut name_tag = None;
+    let mut type_tag = None;
 
     match_elements_combine_text! {ctx, attributes, code,
-        "member" if has_members => {
-            let mut len = None;
-            let mut altlen = None;
-            let mut externsync = None;
-            let mut optional = None;
-            let mut selector = None;
-            let mut selection = None;
-            let mut noautovalidity = None;
-            let mut validextensionstructs = None;
-            let mut values = None;
-            let mut limittype = None;
-            let mut objecttype = None;
-            let mut code = String::new();
-            match_attributes!{ctx, a in attributes,
-                "len"                   => len                   = Some(a.value),
-                "altlen"                => altlen                = Some(a.value),
-                "externsync"            => externsync            = Some(a.value),
-                "optional"              => optional              = Some(a.value),
-                "selector"              => selector              = Some(a.value),
-                "selection"             => selection             = Some(a.value),
-                "noautovalidity"        => noautovalidity        = Some(a.value),
-                "validextensionstructs" => validextensionstructs = Some(a.value),
-                "values"                => values                = Some(a.value),
-                "limittype"             => limittype             = Some(a.value),
-                "objecttype"            => objecttype            = Some(a.value)
+        "member" if has_members && has_inner_tags => {
+            if let Some(defn) = parse_type_member(ctx, attributes) {
+                members.push(TypeMember::Definition(defn));
             }
-            if let Some(definition) = parse_name_with_type(
-                ctx, &mut code,
-                len,
-                altlen,
-                externsync,
-                optional,
-                noautovalidity,
-                objecttype
-            ) {
-            members.push(TypeMember::Definition(Box::new(TypeMemberDefinition {
-                selector,
-                selection,
-                validextensionstructs,
-                values,
-                limittype,
-                code,
-                definition,
-            })))
-        }
         },
-        "comment" if has_members => members.push(TypeMember::Comment(parse_text_element(ctx))),
-        "name" => {
+        "comment" if has_members && has_inner_tags => members.push(TypeMember::Comment(parse_text_element(ctx))),
+        "name" if !has_members && has_inner_tags => {
             let text = parse_text_element(ctx);
             code.push_str(&text);
-            markup.push(TypeCodeMarkup::Name(text));
+            name_tag.replace(text);
         },
-        "type" => {
+        "type" if !has_members && has_inner_tags => {
             let text = parse_text_element(ctx);
             code.push_str(&text);
-            markup.push(TypeCodeMarkup::Type(text));
+            type_tag.replace(text);
         },
-        "apientry" => {
-            let text = parse_text_element(ctx);
-            code.push_str(&text);
-            markup.push(TypeCodeMarkup::ApiEntry(text));
-        }
+        "apientry" if has_inner_tags => consume_current_element(ctx),
     }
+    assert!(!(name.is_some() && name_tag.is_some()));
+    let name = name.or(name_tag);
+    assert!(name.is_some(), "category was {:?}", category);
 
     let spec = match category.as_deref() {
         Some("include") => TypeSpec::Include {
-            name: markup.iter().find_map(|m| match m {
-                TypeCodeMarkup::Name(name) => Some(name.clone()),
-                _ => None,
-            }),
-            quoted: !code.contains('<'),
+            name: name.clone().unwrap(),
+            quoted: if code.is_empty() { None } else { Some(!code.contains('<')) },
         },
         Some("define") => {
-            let name_ = name
-                .clone()
-                .or_else(|| {
-                    markup.iter().find_map(|m| match m {
-                        TypeCodeMarkup::Name(name) => Some(name.clone()),
-                        _ => None,
-                    })
-                })
-                .unwrap();
-            let defref = markup
-                .iter()
-                .filter_map(|m| match m {
-                    TypeCodeMarkup::Type(ty) => Some(ty.clone()),
-                    _ => None,
-                })
-                .collect();
+            let name_ = name.clone().unwrap();
+            let defref = type_tag;
             TypeSpec::Define(process_define_code(code, name_, defref))
         }
         Some("basetype") => TypeSpec::Typedef {
-            name: markup
-                .iter()
-                .find_map(|m| match m {
-                    TypeCodeMarkup::Name(name) => Some(name.clone()),
-                    _ => None,
-                })
-                .unwrap(),
-            basetype: markup.iter().find_map(|m| match m {
-                TypeCodeMarkup::Type(ty) => Some(ty.clone()),
-                _ => None,
-            }),
+            name: name.clone().unwrap(),
+            basetype: type_tag,
         },
         Some("bitmask") => {
-            if name.is_some() || alias.is_some() {
+            if let Some(req) = requires.as_deref() {
+                assert_eq!(req.split_once("FlagBits"), name.as_deref().unwrap().split_once("Flags"))
+            };
+            if let Some(vals) = bitvalues.as_deref() {
+                assert_eq!(vals.split_once("FlagBits"), name.as_deref().unwrap().split_once("Flags"))
+            };
+            if alias.is_some() {
+                assert!(requires.is_none() && bitvalues.is_none());
                 TypeSpec::Bitmask(None)
             } else {
                 TypeSpec::Bitmask(Some(NameWithType {
-                    name: markup
-                        .iter()
-                        .find_map(|m| match m {
-                            TypeCodeMarkup::Name(name) => Some(name.clone()),
-                            _ => None,
-                        })
-                        .unwrap(),
-                    type_name: markup
-                        .iter()
-                        .find_map(|m| match m {
-                            TypeCodeMarkup::Type(ty) => Some(ty.clone()),
-                            _ => None,
-                        })
-                        .unwrap(),
+                    name: name.clone().unwrap(),
+                    type_name: type_tag.unwrap(),
                     pointer_kind: None,
                     is_struct: false,
                     bitfield_size: None,
@@ -1364,24 +1368,12 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             }
         }
         Some("handle") => {
-            if name.is_some() || alias.is_some() {
+            if alias.is_some() {
                 TypeSpec::None
             } else {
                 TypeSpec::Handle(TypeHandle {
-                    name: markup
-                        .iter()
-                        .find_map(|m| match m {
-                            TypeCodeMarkup::Name(name) => Some(name.clone()),
-                            _ => None,
-                        })
-                        .unwrap(),
-                    handle_type: match markup
-                        .iter()
-                        .find_map(|m| match m {
-                            TypeCodeMarkup::Type(val) => Some(val.as_str()),
-                            _ => None,
-                        })
-                        .unwrap()
+                    name: name.clone().unwrap(),
+                    handle_type: match type_tag.as_deref().unwrap()
                     {
                         "VK_DEFINE_HANDLE" => HandleType::Dispatch,
                         "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => HandleType::NoDispatch,
@@ -1444,7 +1436,6 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         consume_current_element(ctx);
         Some(Command::Alias { alias, name })
     } else {
-        let mut code = String::new();
         let mut proto = None;
         let mut params = Vec::new();
         let mut description = None;
@@ -1452,8 +1443,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
 
         match_elements! {ctx, attributes,
             "proto" => {
-                proto = parse_name_with_type(ctx, &mut code, None, None, None, None, None, None);
-                code.push('(');
+                proto = parse_name_with_type(ctx, None, None, None, None, None, None);
             },
 
             "param" => {
@@ -1480,10 +1470,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     |structs| structs.split(',').map(|s| s.to_owned()).collect()
                 );
 
-                if !params.is_empty() {
-                    code.push_str(", ");
-                }
-                if let Some(definition) = parse_name_with_type(ctx, &mut code,
+                if let Some(definition) = parse_name_with_type(ctx,
                     len,
                     altlen,
                     externsync,
@@ -1512,7 +1499,6 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 }
             }
         }
-        code.push_str(");");
 
         let proto = if let Some(v) = proto {
             v
@@ -1538,7 +1524,6 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             alias,
             description,
             implicitexternsyncparams,
-            code,
         })))
     }
 }

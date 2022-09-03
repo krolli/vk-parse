@@ -273,8 +273,8 @@ pub struct Type {
 pub enum TypeSpec {
     None,
     Include {
-        name: Option<String>,
-        quoted: bool,
+        name: String,
+        quoted: Option<bool>,
     },
     Define(TypeDefine),
     Typedef {
@@ -351,12 +351,6 @@ pub struct TypeMemberDefinition {
     )]
     pub limittype: Option<String>,
 
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub code: String,
-
     /// The definition of this member.
     #[cfg_attr(
         feature = "serialize",
@@ -401,7 +395,7 @@ pub enum HandleType {
 pub struct TypeDefine {
     pub name: String,
     pub comment: Option<String>,
-    pub defref: Vec<String>,
+    pub defref: Option<String>,
     pub is_disabled: bool,
     pub replace: bool,
     pub value: TypeDefineValue,
@@ -725,12 +719,6 @@ pub struct CommandDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub implicitexternsyncparams: Vec<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub code: String,
 }
 
 /// Parameter for this Vulkan function.

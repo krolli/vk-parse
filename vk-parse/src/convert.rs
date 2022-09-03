@@ -188,14 +188,13 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                         }))
                     }
                     TypeSpec::Include { name, quoted } => {
-                        let name = t.name.or(name).unwrap_or_default();
                         let need_ext = !name.ends_with(".h");
                         let include = vkxml::Include {
                             name,
                             notation: t.comment,
                             style: match quoted {
-                                true => vkxml::IncludeStyle::Quote,
-                                false => vkxml::IncludeStyle::Bracket,
+                                Some(true) | None => vkxml::IncludeStyle::Quote,
+                                Some(false) => vkxml::IncludeStyle::Bracket,
                             },
                             need_ext,
                         };
@@ -217,7 +216,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             is_disabled,
                             comment,
                             replace,
-                            defref,
+                            defref: defref.into_iter().collect(),
                             parameters: Vec::new(),
                             c_expression: None,
                             value: None,
