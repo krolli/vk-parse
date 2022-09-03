@@ -177,165 +177,178 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
     fn from(orig: TypesChild) -> Self {
         match orig {
             TypesChild::Comment(text) => Some(vkxml::DefinitionsElement::Notation(text)),
-            TypesChild::Type(t) => {
-                match t.spec {
-                    TypeSpec::None => {
-                        let name = t.name.unwrap_or_default();
-                        Some(vkxml::DefinitionsElement::Reference(vkxml::Reference {
-                            name,
-                            notation: t.comment,
-                            include: t.requires,
-                        }))
-                    }
-                    TypeSpec::Include { name, quoted } => {
-                        let need_ext = !name.ends_with(".h");
-                        let include = vkxml::Include {
-                            name,
-                            notation: t.comment,
-                            style: match quoted {
-                                Some(true) | None => vkxml::IncludeStyle::Quote,
-                                Some(false) => vkxml::IncludeStyle::Bracket,
-                            },
-                            need_ext,
-                        };
-
-                        Some(vkxml::DefinitionsElement::Include(include))
-                    }
-
-                    TypeSpec::Define(TypeDefine {
+            TypesChild::Type {
+                definition,
+                comment: notation,
+            } => match *definition {
+                TypeDefinition::None {
+                    name,
+                    requires: include,
+                } => Some(vkxml::DefinitionsElement::Reference(vkxml::Reference {
+                    name,
+                    notation,
+                    include,
+                })),
+                TypeDefinition::Include { name, quoted } => {
+                    let need_ext = !name.ends_with(".h");
+                    let include = vkxml::Include {
                         name,
-                        value,
-                        comment,
-                        defref,
-                        is_disabled,
-                        replace,
-                    }) => {
-                        let mut define = vkxml::Define {
-                            name,
-                            notation: t.comment,
-                            is_disabled,
-                            comment,
-                            replace,
-                            defref: defref.into_iter().collect(),
-                            parameters: Vec::new(),
-                            c_expression: None,
-                            value: None,
-                        };
-                        match value {
-                            TypeDefineValue::Empty => {}
-                            TypeDefineValue::Value(v) => {
-                                define.value = Some(v);
-                            }
-                            TypeDefineValue::Expression(e) => {
-                                define.c_expression = Some(e);
-                            }
-                            TypeDefineValue::Function { params, expression } => {
-                                define.parameters = params;
-                                define.c_expression = Some(expression);
-                            }
-                        }
-                        Some(vkxml::DefinitionsElement::Define(define))
-                    }
+                        notation,
+                        style: match quoted {
+                            Some(true) | None => vkxml::IncludeStyle::Quote,
+                            Some(false) => vkxml::IncludeStyle::Bracket,
+                        },
+                        need_ext,
+                    };
 
-                    TypeSpec::Typedef { name, basetype } => {
-                        let typedef = vkxml::Typedef {
-                            name,
-                            notation: t.comment,
-                            basetype: basetype.unwrap_or_default(),
-                        };
-                        Some(vkxml::DefinitionsElement::Typedef(typedef))
-                    }
-
-                    TypeSpec::Bitmask(None) => {
-                        None
-                    }
-                    TypeSpec::Bitmask(Some(name_val)) => {
-                        let NameWithType {
-                            type_name, name, ..
-                        } = name_val;
-                        let bitmask = vkxml::Bitmask {
-                            name,
-                            notation: t.comment,
-                            basetype: type_name,
-                            enumref: t.requires,
-                        };
-                        Some(vkxml::DefinitionsElement::Bitmask(bitmask))
-                    }
-
-                    TypeSpec::Handle(TypeHandle { name, handle_type }) => {
-                        let handle = vkxml::Handle {
-                            name,
-                            notation: t.comment,
-                            parent: t.parent,
-                            ty: match handle_type {
-                                HandleType::Dispatch => vkxml::HandleType::Dispatch,
-                                HandleType::NoDispatch => vkxml::HandleType::NoDispatch,
-                            },
-                        };
-                        Some(vkxml::DefinitionsElement::Handle(handle))
-                    }
-
-                    TypeSpec::Enumeration => {
-                        // if alias.is_some() {
-                        //     return None;
-                        // }
-                        Some(vkxml::DefinitionsElement::Enumeration(
-                            vkxml::EnumerationDeclaration {
-                                name: t.name.unwrap_or_default(),
-                                notation: t.comment,
-                            },
-                        ))
-                    }
-
-                    TypeSpec::FunctionPointer(TypeFunctionPointer {
-                        proto: defn,
-                        params,
-                    }) => {
-                        Some(vkxml::DefinitionsElement::FuncPtr(vkxml::FunctionPointer {
-                            name: defn.name.clone(),
-                            notation: t.comment,
-                            return_type: defn.into(),
-                            param: params.into_iter().map(|p| p.into()).collect(),
-                        }))
-                    }
-
-                    TypeSpec::Struct(members) => {
-                        if t.alias.is_some() {
-                            return None;
-                        }
-                        let mut s = vkxml::Struct {
-                            name: t.name.unwrap_or_default(),
-                            notation: t.comment,
-                            is_return: t.returnedonly.unwrap_or_default().as_str() == "true",
-                            extends: t.structextends,
-                            elements: Vec::new(),
-                        };
-                        for member in members {
-                            s.elements.push(member.into());
-                        }
-
-                        Some(vkxml::DefinitionsElement::Struct(s))
-                    }
-
-                    TypeSpec::Union(members) => {
-                        let mut u = vkxml::Union {
-                            name: t.name.unwrap_or_default(),
-                            notation: t.comment,
-                            elements: Vec::new(),
-                        };
-                        for member in members {
-                            match member {
-                                TypeMember::Comment(..) => (),
-                                TypeMember::Definition(def) => {
-                                    u.elements.push(def.definition.into());
-                                }
-                            }
-                        }
-
-                        Some(vkxml::DefinitionsElement::Union(u))
-                    }
+                    Some(vkxml::DefinitionsElement::Include(include))
                 }
-            }
+
+                TypeDefinition::Define(TypeDefine {
+                    name,
+                    value,
+                    comment,
+                    defref,
+                    is_disabled,
+                    replace,
+                    ..
+                }) => {
+                    let mut define = vkxml::Define {
+                        name,
+                        notation,
+                        is_disabled,
+                        comment,
+                        replace,
+                        defref: defref.into_iter().collect(),
+                        parameters: Vec::new(),
+                        c_expression: None,
+                        value: None,
+                    };
+                    match value {
+                        TypeDefineValue::Empty => {}
+                        TypeDefineValue::Value(v) => {
+                            define.value = Some(v);
+                        }
+                        TypeDefineValue::Expression(e) => {
+                            define.c_expression = Some(e);
+                        }
+                        TypeDefineValue::Function { params, expression } => {
+                            define.parameters = params;
+                            define.c_expression = Some(expression);
+                        }
+                    }
+                    Some(vkxml::DefinitionsElement::Define(define))
+                }
+
+                TypeDefinition::Typedef { name, basetype } => {
+                    let typedef = vkxml::Typedef {
+                        name,
+                        notation,
+                        basetype: basetype.unwrap_or_default(),
+                    };
+                    Some(vkxml::DefinitionsElement::Typedef(typedef))
+                }
+
+                TypeDefinition::Bitmask(TypeBitmask::Alias { .. }) => None,
+                TypeDefinition::Bitmask(TypeBitmask::Definition {
+                    definition,
+                    has_bitvalues,
+                }) => {
+                    let NameWithType {
+                        type_name, name, ..
+                    } = *definition;
+                    let enumref = if has_bitvalues {
+                        Some(name.replacen("Flags", "FlagBits", 1))
+                    } else {
+                        None
+                    };
+                    let bitmask = vkxml::Bitmask {
+                        name,
+                        notation,
+                        basetype: type_name,
+                        enumref,
+                    };
+                    Some(vkxml::DefinitionsElement::Bitmask(bitmask))
+                }
+                TypeDefinition::Handle(TypeHandle::Alias { .. }) => None,
+                TypeDefinition::Handle(TypeHandle::Definition {
+                    name,
+                    handle_type,
+                    parent,
+                    ..
+                }) => {
+                    let handle = vkxml::Handle {
+                        name,
+                        notation,
+                        parent,
+                        ty: match handle_type {
+                            HandleType::Dispatch => vkxml::HandleType::Dispatch,
+                            HandleType::NoDispatch => vkxml::HandleType::NoDispatch,
+                        },
+                    };
+                    Some(vkxml::DefinitionsElement::Handle(handle))
+                }
+
+                TypeDefinition::Enumeration { alias: Some(_), .. } => None,
+                TypeDefinition::Enumeration { name, alias: None } => {
+                    Some(vkxml::DefinitionsElement::Enumeration(
+                        vkxml::EnumerationDeclaration { name, notation },
+                    ))
+                }
+                TypeDefinition::FunctionPointer(TypeFunctionPointer {
+                    proto: defn,
+                    params,
+                    ..
+                }) => Some(vkxml::DefinitionsElement::FuncPtr(vkxml::FunctionPointer {
+                    name: defn.name.clone(),
+                    notation,
+                    return_type: defn.into(),
+                    param: params.into_iter().map(|p| p.into()).collect(),
+                })),
+                TypeDefinition::Struct(TypeStruct::Alias { .. }) => None,
+                TypeDefinition::Struct(TypeStruct::Definition {
+                    name,
+                    members,
+                    returned_only,
+                    struct_extends,
+                    ..
+                }) => {
+                    let mut s = vkxml::Struct {
+                        name,
+                        notation,
+                        is_return: returned_only.is_some(),
+                        extends: if struct_extends.is_empty() {
+                            None
+                        } else {
+                            Some(struct_extends.join(","))
+                        },
+                        elements: Vec::new(),
+                    };
+                    for member in members {
+                        s.elements.push(member.into());
+                    }
+
+                    Some(vkxml::DefinitionsElement::Struct(s))
+                }
+
+                TypeDefinition::Union(TypeUnion { name, members, .. }) => {
+                    let mut u = vkxml::Union {
+                        name,
+                        notation,
+                        elements: Vec::new(),
+                    };
+                    for member in members {
+                        match member {
+                            TypeMember::Comment(..) => (),
+                            TypeMember::Definition(def) => {
+                                u.elements.push(def.definition.into());
+                            }
+                        }
+                    }
+
+                    Some(vkxml::DefinitionsElement::Union(u))
+                }
+            },
         }
     }
 }
@@ -591,11 +604,30 @@ impl From<Extensions> for vkxml::Extensions {
 
 impl From<Extension> for vkxml::Extension {
     fn from(orig: Extension) -> Self {
-        let Extension { name, comment, number, protect, platform: _, author, contact, ext_type, requires, requires_core: _, supported, deprecatedby: _, promotedto: _, obsoletedby: _, provisional: _, specialuse: _, sortorder: _, children } = orig;
+        let Extension {
+            name,
+            comment,
+            number,
+            protect,
+            platform: _,
+            author,
+            contact,
+            ext_type,
+            requires,
+            requires_core: _,
+            supported,
+            deprecatedby: _,
+            promotedto: _,
+            obsoletedby: _,
+            provisional: _,
+            specialuse: _,
+            sortorder: _,
+            children,
+        } = orig;
         let mut disabled = false;
         let mut match_api = None;
 
-        if let Some(text) = supported{
+        if let Some(text) = supported {
             if text == "disabled" {
                 disabled = true;
             } else {

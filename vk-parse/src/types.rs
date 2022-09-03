@@ -185,93 +185,26 @@ pub type Types = CommentedChildren<TypesChild>;
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub enum TypesChild {
-    Type(Box<Type>),
+    Type {
+        definition: Box<TypeDefinition>,
+        comment: Option<String>,
+    },
     Comment(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[non_exhaustive]
-pub struct Type {
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub name: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub alias: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub api: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub requires: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub comment: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub parent: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub returnedonly: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub structextends: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub allowduplicate: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub objtypeenum: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub bitvalues: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub spec: TypeSpec,
-}
-
-/// The contents of a type definition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
-pub enum TypeSpec {
-    None,
+pub enum TypeDefinition {
+    /// When the `category` attribute is missing
+    None {
+        name: String,
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        requires: Option<String>,
+    },
     Include {
         name: String,
         quoted: Option<bool>,
@@ -282,18 +215,34 @@ pub enum TypeSpec {
         // FIXME doesn't include all of the necessary information to recreate
         basetype: Option<String>,
     },
-    Bitmask(Option<NameWithType>),
+    Bitmask(TypeBitmask),
     Handle(TypeHandle),
-    Enumeration,
+    Enumeration {
+        name: String,
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        alias: Option<String>,
+    },
     FunctionPointer(TypeFunctionPointer),
-    Struct(Vec<TypeMember>),
-    Union(Vec<TypeMember>),
+    Struct(TypeStruct),
+    Union(TypeUnion),
 }
 
-impl Default for TypeSpec {
-    fn default() -> Self {
-        TypeSpec::None
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum TypeBitmask {
+    Alias {
+        name: String,
+        alias: String,
+    },
+
+    Definition {
+        definition: Box<NameWithType>,
+        has_bitvalues: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -370,15 +319,33 @@ pub struct TypeFunctionPointer {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub params: Vec<NameWithType>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub requires: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
-pub struct TypeHandle {
-    pub name: String,
+pub enum TypeHandle {
+    Alias {
+        name: String,
+        alias: String,
+    },
 
-    pub handle_type: HandleType,
+    Definition {
+        name: String,
+        handle_type: HandleType,
+        objtypeenum: String,
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        parent: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -394,8 +361,21 @@ pub enum HandleType {
 #[non_exhaustive]
 pub struct TypeDefine {
     pub name: String,
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub comment: Option<String>,
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub defref: Option<String>,
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub requires: Option<String>,
     pub is_disabled: bool,
     pub replace: bool,
     pub value: TypeDefineValue,
@@ -412,6 +392,49 @@ pub enum TypeDefineValue {
         params: Vec<String>,
         expression: String,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum TypeStruct {
+    Alias {
+        name: String,
+        alias: String,
+    },
+
+    Definition {
+        name: String,
+        members: Vec<TypeMember>,
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        returned_only: Option<()>,
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        struct_extends: Vec<String>,
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        allow_duplicate: Option<bool>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct TypeUnion {
+    pub name: String,
+    pub members: Vec<TypeMember>,
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub returned_only: Option<()>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

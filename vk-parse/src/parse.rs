@@ -713,12 +713,12 @@ fn parse_name_with_type<R: Read>(
     let mut comment = None;
     while let Some(Ok(e)) = event {
         match e {
-            XmlEvent::Whitespace(_) => {},
+            XmlEvent::Whitespace(_) => {}
             XmlEvent::Characters(text) => {
                 if !text.trim().is_empty() {
                     todo!("wasn't prepared for characters {}", text)
                 }
-            },
+            }
             XmlEvent::StartElement {
                 name: elem_name, ..
             } => {
@@ -786,7 +786,10 @@ fn parse_name_with_type<R: Read>(
     })
 }
 
-fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPointer> {
+fn parse_type_funcptr<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    requires: Option<String>,
+) -> Option<TypeFunctionPointer> {
     let (type_name, pointer_kind) = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next()
     {
         let trimmed_text = text.trim();
@@ -816,7 +819,6 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
             ..
         })) if local_name == "name" => {
             ctx.push_element(&local_name);
-            
 
             parse_text_element(ctx)
         }
@@ -853,6 +855,7 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
             return Some(TypeFunctionPointer {
                 proto: fnptr_defn,
                 params,
+                requires,
             });
         }
 
@@ -873,7 +876,6 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
                 ..
             })) if local_name == "type" => {
                 ctx.push_element(&local_name);
-                
 
                 parse_text_element(ctx)
             }
@@ -923,10 +925,16 @@ fn parse_type_funcptr<R: Read>(ctx: &mut ParseCtx<R>) -> Option<TypeFunctionPoin
     Some(TypeFunctionPointer {
         proto: fnptr_defn,
         params,
+        requires,
     })
 }
 
-fn process_define_code(code: String, name_: String, defref: Option<String>) -> TypeDefine {
+fn process_define_code(
+    code: String,
+    name_: String,
+    defref: Option<String>,
+    requires: Option<String>,
+) -> TypeDefine {
     fn consume_whitespace(chars: &mut std::str::Chars, mut current: Option<char>) -> Option<char> {
         while let Some(c) = current {
             if !c.is_whitespace() {
@@ -1173,13 +1181,17 @@ fn process_define_code(code: String, name_: String, defref: Option<String>) -> T
         name: name_,
         comment: comment_,
         defref,
+        requires,
         is_disabled,
         replace,
         value,
     }
 }
 
-fn parse_type_member<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Box<TypeMemberDefinition>> {
+fn parse_type_member<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<Box<TypeMemberDefinition>> {
     let mut len = None;
     let mut altlen = None;
     let mut externsync = None;
@@ -1191,7 +1203,7 @@ fn parse_type_member<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribut
     let mut values = None;
     let mut limittype = None;
     let mut objecttype = None;
-    match_attributes!{ctx, a in attributes,
+    match_attributes! {ctx, a in attributes,
         "len"                   => len                   = Some(a.value),
         "altlen"                => altlen                = Some(a.value),
         "externsync"            => externsync            = Some(a.value),
@@ -1211,8 +1223,9 @@ fn parse_type_member<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribut
         externsync,
         optional,
         noautovalidity,
-        objecttype
-    ).map(|definition|
+        objecttype,
+    )
+    .map(|definition| {
         Box::new(TypeMemberDefinition {
             selector,
             selection,
@@ -1221,7 +1234,7 @@ fn parse_type_member<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribut
             limittype,
             definition,
         })
-    )
+    })
 }
 
 fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> TypesChild {
@@ -1258,47 +1271,114 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
 
     assert!(api.is_none());
     if alias.is_some() {
-        assert!(matches!(category.as_deref(), None | Some("bitmask" | "handle" | "enum" | "struct")), "category was {:?}", category);
+        assert!(
+            matches!(
+                category.as_deref(),
+                Some("bitmask" | "handle" | "enum" | "struct")
+            ),
+            "category was {:?}",
+            category
+        );
     }
     if requires.is_some() {
-        assert!(matches!(category.as_deref(), None | Some("define" | "funcpointer" | "bitmask")) || (matches!(category.as_deref(), Some("struct")) && name.as_deref() == Some("StdVideoDecodeH264PictureInfo")), "category was {:?}", category);
+        assert!(
+            matches!(
+                category.as_deref(),
+                None | Some("define" | "funcpointer" | "bitmask")
+            ) || (matches!(category.as_deref(), Some("struct"))
+                && name.as_deref() == Some("StdVideoDecodeH264PictureInfo")),
+            "category was {:?}",
+            category
+        );
     }
     if name.is_some() {
-        assert!(matches!(category.as_deref(), None | Some("enum" | "struct" | "union" | "include" | "define")) || (matches!(category.as_deref(), Some("bitmask" | "handle")) && alias.is_some()), "category was {:?}; name was {:?}", category, name);
+        assert!(
+            matches!(
+                category.as_deref(),
+                None | Some("enum" | "struct" | "union" | "include" | "define")
+            ) || (matches!(category.as_deref(), Some("bitmask" | "handle")) && alias.is_some()),
+            "category was {:?}; name was {:?}",
+            category,
+            name
+        );
     }
     if parent.is_some() {
-        assert_eq!(category.as_deref(), Some("handle"), "category was {:?}", category);
+        assert_eq!(
+            category.as_deref(),
+            Some("handle"),
+            "category was {:?}",
+            category
+        );
     }
     if returnedonly.is_some() {
-        assert!(matches!(category.as_deref(), Some("struct" | "union")), "category was {:?}", category);
+        assert!(
+            matches!(category.as_deref(), Some("struct" | "union")),
+            "category was {:?}",
+            category
+        );
     }
     if structextends.is_some() {
-        assert!(matches!(category.as_deref(), Some("struct")), "category was {:?}", category);
+        assert!(
+            matches!(category.as_deref(), Some("struct")),
+            "category was {:?}",
+            category
+        );
     }
     if allowduplicate.is_some() {
-        assert!(matches!(category.as_deref(), Some("struct")), "category was {:?}", category);
+        assert!(
+            matches!(category.as_deref(), Some("struct")),
+            "category was {:?}",
+            category
+        );
     }
     if objtypeenum.is_some() {
-        assert!(matches!(category.as_deref(), Some("handle")), "category was {:?}", category);
+        assert!(
+            matches!(category.as_deref(), Some("handle")),
+            "category was {:?}",
+            category
+        );
     }
     if bitvalues.is_some() {
         assert!(requires.is_none());
-        assert!(matches!(category.as_deref(), Some("bitmask")), "category was {:?}", category);
+        assert!(
+            matches!(category.as_deref(), Some("bitmask")),
+            "category was {:?}",
+            category
+        );
     }
+    // returned_only
+    let returned_only = returnedonly.as_deref().map(|s| match s {
+        "true" => (),
+        _ => unreachable!(
+            "Expected the `returnedonly` attribute to either be missing or always `true`"
+        ),
+    });
+    let struct_extends =
+        structextends.map(|s| s.split(',').map(|s| s.to_string()).collect::<Vec<String>>());
+    let allow_duplicate = allowduplicate.as_deref().map(|s| match s {
+        "true" => true,
+        "false" => false,
+        _ => unreachable!(
+            "Expected the `allowduplicate` attribute to either be missing, `true`, or `false`"
+        ),
+    });
 
-    let fn_ptr_spec = if let Some("funcpointer") = category.as_deref() {
-        let fn_ptr_spec = parse_type_funcptr(ctx);
-        name = fn_ptr_spec.as_ref().map(|fp| fp.proto.name.clone());
-        fn_ptr_spec
-    } else {
-        None
-    };
+    if let Some("funcpointer") = category.as_deref() {
+        let fn_ptr_spec = parse_type_funcptr(ctx, requires).unwrap();
+        // might want to ensure the next event is the tag end
+        consume_current_element(ctx);
+        return TypesChild::Type {
+            definition: Box::new(TypeDefinition::FunctionPointer(fn_ptr_spec)),
+            comment,
+        };
+    }
     // support versions older than 1.0.70 where <name> was found inside <type category="include">
     const SUPPORT_OLD: bool = true;
 
     let has_members = matches!(category.as_deref(), Some("struct" | "union"));
     let is_empty_tag = matches!(category.as_deref(), Some("enum")) || alias.is_some();
-    let is_empty_or_txt_tag = is_empty_tag || (matches!(category.as_deref(), Some("include")) && !SUPPORT_OLD);
+    let is_empty_or_txt_tag =
+        is_empty_tag || (matches!(category.as_deref(), Some("include")) && !SUPPORT_OLD);
     let has_inner_tags = !is_empty_or_txt_tag;
     let mut name_tag = None;
     let mut type_tag = None;
@@ -1325,85 +1405,95 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     assert!(!(name.is_some() && name_tag.is_some()));
     let name = name.or(name_tag);
     assert!(name.is_some(), "category was {:?}", category);
+    let name = name.unwrap();
 
-    let spec = match category.as_deref() {
-        Some("include") => TypeSpec::Include {
-            name: name.clone().unwrap(),
-            quoted: if code.is_empty() { None } else { Some(!code.contains('<')) },
-        },
-        Some("define") => {
-            let name_ = name.clone().unwrap();
-            let defref = type_tag;
-            TypeSpec::Define(process_define_code(code, name_, defref))
-        }
-        Some("basetype") => TypeSpec::Typedef {
-            name: name.clone().unwrap(),
-            basetype: type_tag,
-        },
-        Some("bitmask") => {
-            if let Some(req) = requires.as_deref() {
-                assert_eq!(req.split_once("FlagBits"), name.as_deref().unwrap().split_once("Flags"))
-            };
-            if let Some(vals) = bitvalues.as_deref() {
-                assert_eq!(vals.split_once("FlagBits"), name.as_deref().unwrap().split_once("Flags"))
-            };
-            if alias.is_some() {
-                assert!(requires.is_none() && bitvalues.is_none());
-                TypeSpec::Bitmask(None)
-            } else {
-                TypeSpec::Bitmask(Some(NameWithType {
-                    name: name.clone().unwrap(),
-                    type_name: type_tag.unwrap(),
-                    pointer_kind: None,
-                    is_struct: false,
-                    bitfield_size: None,
-                    array_shape: None,
-                    dynamic_shape: None,
-                    externsync: None,
-                    optional: None,
-                    noautovalidity: None,
-                    objecttype: None,
-                    comment: None,
-                }))
+    TypesChild::Type {
+        definition: Box::new(match category.as_deref() {
+            Some("include") => TypeDefinition::Include {
+                name,
+                quoted: if code.is_empty() {
+                    None
+                } else {
+                    Some(!code.contains('<'))
+                },
+            },
+            Some("define") => {
+                let defref = type_tag;
+                TypeDefinition::Define(process_define_code(code, name, defref, requires))
             }
-        }
-        Some("handle") => {
-            if alias.is_some() {
-                TypeSpec::None
-            } else {
-                TypeSpec::Handle(TypeHandle {
-                    name: name.clone().unwrap(),
-                    handle_type: match type_tag.as_deref().unwrap()
-                    {
-                        "VK_DEFINE_HANDLE" => HandleType::Dispatch,
-                        "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => HandleType::NoDispatch,
-                        h => unreachable!("Unexpected handle type {:?}", h),
-                    },
-                })
+            Some("basetype") => TypeDefinition::Typedef {
+                name,
+                basetype: type_tag,
+            },
+            Some("bitmask") => {
+                if let Some(req) = requires.as_deref() {
+                    assert_eq!(req.split_once("FlagBits"), name.split_once("Flags"))
+                };
+                if let Some(vals) = bitvalues.as_deref() {
+                    assert_eq!(vals.split_once("FlagBits"), name.split_once("Flags"))
+                };
+                if let Some(alias) = alias {
+                    assert!(requires.is_none() && bitvalues.is_none());
+                    TypeDefinition::Bitmask(TypeBitmask::Alias { name, alias })
+                } else {
+                    TypeDefinition::Bitmask(TypeBitmask::Definition {
+                        definition: Box::new(NameWithType {
+                            name,
+                            type_name: type_tag.unwrap(),
+                            pointer_kind: None,
+                            is_struct: false,
+                            bitfield_size: None,
+                            array_shape: None,
+                            dynamic_shape: None,
+                            externsync: None,
+                            optional: None,
+                            noautovalidity: None,
+                            objecttype: None,
+                            comment: None,
+                        }),
+                        has_bitvalues: requires.is_some() || bitvalues.is_some(),
+                    })
+                }
             }
-        }
-        Some("enum") => TypeSpec::Enumeration,
-        Some("funcpointer") => TypeSpec::FunctionPointer(fn_ptr_spec.unwrap()),
-        Some("struct") => TypeSpec::Struct(members),
-        Some("union") => TypeSpec::Union(members),
-        None => TypeSpec::None,
-        Some(c) => unreachable!("Unexpected category of type {:?}", c),
-    };
-
-    TypesChild::Type(Box::new(Type {
-        api,
-        alias,
-        requires,
-        name,
-        parent,
-        returnedonly,
-        structextends,
-        allowduplicate,
-        objtypeenum,
-        bitvalues,
+            Some("handle") => {
+                if let Some(alias) = alias {
+                    TypeDefinition::Handle(TypeHandle::Alias { name, alias })
+                } else {
+                    TypeDefinition::Handle(TypeHandle::Definition {
+                        name,
+                        handle_type: match type_tag.as_deref().unwrap() {
+                            "VK_DEFINE_HANDLE" => HandleType::Dispatch,
+                            "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => HandleType::NoDispatch,
+                            h => unreachable!("Unexpected handle type {:?}", h),
+                        },
+                        // only required starting in version 164
+                        objtypeenum: objtypeenum.unwrap_or_default(),
+                        parent,
+                    })
+                }
+            }
+            Some("enum") => TypeDefinition::Enumeration { name, alias },
+            Some("struct") => TypeDefinition::Struct(if let Some(alias) = alias {
+                TypeStruct::Alias { name, alias }
+            } else {
+                TypeStruct::Definition {
+                    name,
+                    members,
+                    returned_only,
+                    struct_extends: struct_extends.unwrap_or_default(),
+                    allow_duplicate,
+                }
+            }),
+            Some("union") => TypeDefinition::Union(TypeUnion {
+                name,
+                members,
+                returned_only,
+            }),
+            None => TypeDefinition::None { name, requires },
+            Some(c) => unreachable!("Unexpected category of type {:?}", c),
+        }),
         comment,
-        spec,
-    }))
+    }
 }
 
 fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Command> {
