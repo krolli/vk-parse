@@ -1496,6 +1496,23 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     }
 }
 
+impl FromStr for CommandQueue {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "graphics" => Ok(Self::GRAPHICS),
+            "compute" => Ok(Self::COMPUTE),
+            "transfer" => Ok(Self::TRANSFER),
+            "sparse_binding" => Ok(Self::SPARSE_BINDING),
+            // "protected" => Ok(Self::PROTECTED),
+            "decode" => Ok(Self::VIDEO_DECODE),
+            "encode" => Ok(Self::VIDEO_ENCODE),
+            _ => Err(()),
+        }
+    }
+}
+
 fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Command> {
     let mut name = None;
     let mut alias = None;
@@ -1600,14 +1617,72 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             return None;
         };
 
+        // support versions older than 1.2.180 where the `pipeline` attribute for <command> was removed
+        //
+        // Remove the `pipeline` attribute from `vk.xml`, and the corresponding
+        // "`Pipeline Types`" column from the generated command properties tables.
+        // The `queues` attribute should be used instead (internal merge request
+        // 4594).
+        const SUPPORT_OLD: bool = true;
+
+        assert!(SUPPORT_OLD || pipeline.is_none());
+        // if let Some(pipeline) = pipeline.as_deref() {
+        //     if let Some(queues) = queues.as_deref() {
+        //         assert!(proto.name == "vkCmdBlitImage" || queues.split(',').any(|q| q == pipeline), "name {:?} w/ {:?} v {:?}", proto, pipeline, queues)
+        //     } else {
+        //         panic!("pipeline attr {:?} without queues attr", pipeline);
+        //     }
+        // }
+
+        let successcodes = successcodes.map(|s| {
+            if "VK_SUCCESS" == s {
+                CommandSuccessCodes::DefaultSuccess
+            } else {
+                CommandSuccessCodes::Codes(s.split(',').map(|c| c.to_string()).collect())
+            }
+        });
+        let renderpass = renderpass.map(|rp| match rp.as_str() {
+            "inside" => CommandRenderpass::Inside,
+            "outside" => CommandRenderpass::Outside,
+            "both" => CommandRenderpass::Both,
+            _ => unreachable!(),
+        });
+        let videocoding = videocoding.map(|vc| match vc.as_str() {
+            "inside" => CommandVideoCoding::Inside,
+            "outside" => CommandVideoCoding::Outside,
+            "both" => CommandVideoCoding::Both,
+            _ => unreachable!(),
+        });
+        let cmdbufferlevel = cmdbufferlevel
+            .map(|level| match level.as_str() {
+                "primary,secondary" => Ok(CommandBufferLevel::Both),
+                "primary" => Ok(CommandBufferLevel::PrimaryOnly),
+                "secondary" => {
+                    assert!(
+                        proto.name.contains("Reserve"),
+                        "Invalid cmdbufferlevel for {:?}",
+                        proto
+                    );
+                    Err(())
+                }
+                _ => unreachable!("level {:?} was not expected for command `{}`", level, proto.name),
+            })
+            .transpose()
+            .ok()?;
+        // I'm so sorry about the 'Option<Result>' -> 'Result<Option>' -> 'Option<Option>', weirdness it was the only way I could figure out how to do this
+
         Some(Command::Definition(Box::new(CommandDefinition {
-            queues,
+            queues: queues.map(|qs| {
+                qs.split(',')
+                    .map(|s| s.parse::<CommandQueue>())
+                    .collect::<Result<_, _>>()
+                    .unwrap()
+            }),
             successcodes,
-            errorcodes,
+            errorcodes: errorcodes.map(|es| es.split(',').map(|e| e.to_string()).collect()),
             renderpass,
             videocoding,
             cmdbufferlevel,
-            pipeline,
             comment,
             proto,
             params,

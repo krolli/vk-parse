@@ -661,6 +661,108 @@ pub enum Command {
     Definition(Box<CommandDefinition>),
 }
 
+bitflags::bitflags! {
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+    pub struct CommandQueue: u32 {
+        const GRAPHICS = 1 << 0;
+        const COMPUTE = 1 << 1;
+        const TRANSFER = 1 << 2;
+        const SPARSE_BINDING = 1 << 3;
+        const PROTECTED = 1 << 4;
+        const VIDEO_DECODE = 1 << 5;
+        const VIDEO_ENCODE = 1 << 6;
+    }
+}
+
+impl core::fmt::Display for CommandQueue {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut prepend_comma = false;
+        if self.contains(CommandQueue::GRAPHICS) {
+            f.write_str("graphics")?;
+            prepend_comma = true;
+        }
+        if self.contains(CommandQueue::COMPUTE) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("compute")?;
+            prepend_comma = true;
+        }
+        if self.contains(CommandQueue::TRANSFER) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("transfer")?;
+            prepend_comma = true;
+        }
+        if self.contains(CommandQueue::SPARSE_BINDING) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("sparse_binding")?;
+            prepend_comma = true;
+        }
+        // this isn't found in the
+        if self.contains(CommandQueue::PROTECTED) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("protected")?;
+            prepend_comma = true;
+        }
+        if self.contains(CommandQueue::VIDEO_DECODE) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("decode")?;
+            prepend_comma = true;
+        }
+        if self.contains(CommandQueue::VIDEO_ENCODE) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("encode")?;
+            // prepend_comma = true;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum CommandSuccessCodes {
+    /// `successcodes="VK_SUCCESS"`
+    DefaultSuccess,
+    Codes(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum CommandRenderpass {
+    Inside,
+    Outside,
+    Both,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum CommandVideoCoding {
+    Inside,
+    Outside,
+    Both,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum CommandBufferLevel {
+    PrimaryOnly,
+    Both,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
@@ -669,43 +771,37 @@ pub struct CommandDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub queues: Option<String>,
+    pub queues: Option<CommandQueue>,
 
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub successcodes: Option<String>,
+    pub successcodes: Option<CommandSuccessCodes>,
 
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub errorcodes: Option<String>,
+    pub errorcodes: Option<Vec<String>>,
 
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub renderpass: Option<String>,
+    pub renderpass: Option<CommandRenderpass>,
 
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub videocoding: Option<String>,
+    pub videocoding: Option<CommandVideoCoding>,
 
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub cmdbufferlevel: Option<String>,
-
-    #[cfg_attr(
-        feature = "serialize",
-        serde(default, skip_serializing_if = "is_default")
-    )]
-    pub pipeline: Option<String>,
+    pub cmdbufferlevel: Option<CommandBufferLevel>,
 
     #[cfg_attr(
         feature = "serialize",

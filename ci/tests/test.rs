@@ -60,7 +60,7 @@ macro_rules! test_version {
             #[test]
             fn [< test_v $major _ $minor _ $patch >] () {
                 parsing_test($major, $minor, $patch, $url_suffix);
-            }    
+            }
         }
     };
 }

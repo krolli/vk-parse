@@ -351,12 +351,7 @@ fn is_number_start(c: char) -> bool {
 }
 
 fn is_number_part(c: char) -> bool {
-    c == '.'
-        || c == '+'
-        || c == '-'
-        || c == 'x'
-        || c == 'X'
-        || c.is_ascii_hexdigit()
+    c == '.' || c == '+' || c == '-' || c == 'x' || c == 'X' || c.is_ascii_hexdigit()
 }
 
 fn is_identifier_start(c: char) -> bool {

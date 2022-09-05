@@ -907,33 +907,41 @@ impl From<Command> for Option<vkxml::Command> {
                     return_type: new_field(),
                     param: Vec::new(),
                     external_sync: None,
-                    cmdbufferlevel: def.cmdbufferlevel,
+                    cmdbufferlevel: def.cmdbufferlevel.map(|level| {
+                        match level {
+                            CommandBufferLevel::PrimaryOnly => "primary",
+                            CommandBufferLevel::Both => "primary,secondary",
+                        }
+                        .to_string()
+                    }),
                     pipeline: None,
-                    queues: def.queues,
+                    queues: def.queues.map(|qs| qs.to_string()),
                     renderpass: None,
                 };
                 r.return_type.basetype = def.proto.type_name;
-                r.return_type.successcodes = def.successcodes;
-                r.return_type.errorcodes = def.errorcodes;
+                r.return_type.successcodes = def.successcodes.map(|sc| match sc {
+                    CommandSuccessCodes::DefaultSuccess => "VK_SUCCESS".to_string(),
+                    CommandSuccessCodes::Codes(cs) => cs.join(","),
+                });
+                r.return_type.errorcodes = def.errorcodes.map(|ec| ec.join(","));
                 for text in def.implicitexternsyncparams {
                     r.external_sync = Some(vkxml::ExternalSync { sync: text })
                 }
                 if let Some(renderpass) = def.renderpass {
-                    r.renderpass = match renderpass.as_str() {
-                        "both" => Some(vkxml::Renderpass::Both),
-                        "inside" => Some(vkxml::Renderpass::Inside),
-                        "outside" => Some(vkxml::Renderpass::Outside),
-                        _ => panic!("Unexpected renderpass value {:?}", renderpass),
+                    r.renderpass = match renderpass {
+                        CommandRenderpass::Both => Some(vkxml::Renderpass::Both),
+                        CommandRenderpass::Inside => Some(vkxml::Renderpass::Inside),
+                        CommandRenderpass::Outside => Some(vkxml::Renderpass::Outside),
                     };
                 }
-                if let Some(pipeline) = def.pipeline {
-                    r.pipeline = match pipeline.as_str() {
-                        "graphics" => Some(vkxml::Pipeline::Graphics),
-                        "compute" => Some(vkxml::Pipeline::Compute),
-                        "transfer" => Some(vkxml::Pipeline::Transfer),
-                        _ => panic!("Unexpected pipeline value {:?}", pipeline),
-                    };
-                }
+                // if let Some(pipeline) = def.pipeline {
+                //     r.pipeline = match pipeline.as_str() {
+                //         "graphics" => Some(vkxml::Pipeline::Graphics),
+                //         "compute" => Some(vkxml::Pipeline::Compute),
+                //         "transfer" => Some(vkxml::Pipeline::Transfer),
+                //         _ => panic!("Unexpected pipeline value {:?}", pipeline),
+                //     };
+                // }
 
                 r.param.reserve(def.params.len());
                 for param in def.params {
