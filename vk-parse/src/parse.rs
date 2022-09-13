@@ -672,6 +672,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 let mut noautovalidity = None;
                 let mut objecttype = None;
                 let mut validstructs = None;
+                let mut stride = None;
 
                 match_attributes!{ctx, a in attributes,
                     "len"            => len            = Some(a.value),
@@ -681,6 +682,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     "noautovalidity" => noautovalidity = Some(a.value),
                     "objecttype"     => objecttype     = Some(a.value),
                     "validstructs"   => validstructs   = Some(a.value),
+                    "stride"         => stride         = Some(a.value),
                 }
 
                 let validstructs = validstructs.map_or(
@@ -701,6 +703,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                         objecttype,
                         definition,
                         validstructs,
+                        stride
                     });
                 }
             },

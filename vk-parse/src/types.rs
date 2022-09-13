@@ -787,6 +787,12 @@ pub struct CommandParam {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub validstructs: Vec<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub stride: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
