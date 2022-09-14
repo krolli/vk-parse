@@ -27,6 +27,99 @@ fn download<T: std::io::Write>(dst: &mut T, url: &str) {
         .expect("Failed to write response body.");
 }
 
+#[allow(dead_code)]
+fn write_code(path: &str, reg: &vk_parse::Registry) {
+    use std::io::Write;
+
+    let mut file = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
+
+    for child in reg.0.iter() {
+        match child {
+            vk_parse::RegistryChild::Types(types) => {
+                for type_child in types.children.iter() {
+                    match type_child {
+                        vk_parse::TypesChild::Type(t) => match &t.spec {
+                            vk_parse::TypeSpec::Code(c) => {
+                                writeln!(&mut file, "").unwrap();
+                                write!(&mut file, "// --- xpath: /registry/types/type",).unwrap();
+                                match (&t.name, &t.alias) {
+                                    (&Some(ref name), &Some(ref alias)) => {
+                                        write!(&mut file, "[@name='{}', @alias='{}']", name, alias)
+                                            .unwrap()
+                                    }
+                                    (&None, &Some(ref alias)) => {
+                                        write!(&mut file, "[@alias='{}']", alias).unwrap()
+                                    }
+                                    (&Some(ref name), &None) => {
+                                        write!(&mut file, "[@name='{}']", name).unwrap()
+                                    }
+                                    (&None, &None) => (),
+                                }
+                                writeln!(&mut file, " ---").unwrap();
+                                writeln!(&mut file, "{}", c.code).unwrap();
+                            }
+
+                            vk_parse::TypeSpec::Members(members) => {
+                                writeln!(&mut file, "").unwrap();
+                                write!(&mut file, "// --- xpath: /registry/types/type",).unwrap();
+                                match (&t.name, &t.alias) {
+                                    (&Some(ref name), &Some(ref alias)) => {
+                                        write!(&mut file, "[@name='{}', @alias='{}']", name, alias)
+                                            .unwrap()
+                                    }
+                                    (&None, &Some(ref alias)) => {
+                                        write!(&mut file, "[@alias='{}']", alias).unwrap()
+                                    }
+                                    (&Some(ref name), &None) => {
+                                        write!(&mut file, "[@name='{}']", name).unwrap()
+                                    }
+                                    (&None, &None) => (),
+                                }
+                                writeln!(&mut file, " ---").unwrap();
+                                for member in members.iter() {
+                                    match member {
+                                        vk_parse::TypeMember::Definition(def) => {
+                                            writeln!(&mut file, "/**/{}", def.code).unwrap();
+                                        }
+                                        _ => (),
+                                    }
+                                }
+                            }
+
+                            _ => (),
+                        },
+
+                        _ => (),
+                    }
+                }
+            }
+
+            vk_parse::RegistryChild::Commands(commands) => {
+                for command in commands.children.iter() {
+                    match command {
+                        vk_parse::Command::Definition(cmd_def) => {
+                            writeln!(&mut file, "").unwrap();
+                            writeln!(
+                                &mut file,
+                                "// --- /registry/commands/command/proto/name['{}'] ---",
+                                cmd_def.proto.name
+                            )
+                            .unwrap();
+                            writeln!(&mut file, "{}", cmd_def.code).unwrap();
+                            for param in cmd_def.params.iter() {
+                                writeln!(&mut file, "\t// {}", param.definition.code).unwrap();
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            }
+
+            _ => (),
+        }
+    }
+}
+
 fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
     let src = format!(
         "{}/v{}.{}.{}{}/vk.xml",
@@ -39,6 +132,7 @@ fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
 
     match vk_parse::parse_stream(buf.clone()) {
         Ok((_reg, errors)) => {
+            // write_code(&format!("v{}.{}.{}.c", major, minor, patch), &_reg);
             if !errors.is_empty() {
                 panic!("{:?}", errors);
             }
@@ -70,6 +164,7 @@ fn test_main() {
 
     match vk_parse::parse_stream(buf.clone()) {
         Ok((_reg, errors)) => {
+            // write_code("main.c", &_reg);
             if !errors.is_empty() {
                 panic!("{:?}", errors);
             }
