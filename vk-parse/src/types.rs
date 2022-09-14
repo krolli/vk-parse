@@ -1146,6 +1146,12 @@ pub struct NameWithType {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub name: String,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub code: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

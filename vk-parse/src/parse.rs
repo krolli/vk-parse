@@ -140,7 +140,6 @@ macro_rules! match_elements_combine_text {
                 XmlEvent::Characters(text) => $buffer.push_str(&text),
                 XmlEvent::Whitespace(text) => $buffer.push_str(&text),
                 XmlEvent::StartElement { name, .. } => {
-                    $buffer.push(' ');
                     let name = name.local_name.as_str();
                     $ctx.push_element(name);
                     match name {
@@ -157,7 +156,6 @@ macro_rules! match_elements_combine_text {
                     }
                 }
                 XmlEvent::EndElement { .. } => {
-                    $buffer.push(' ');
                     $ctx.pop_element();
                     break;
                 },
@@ -633,15 +631,16 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         ) -> Option<NameWithType> {
             let mut name = None;
             let mut type_name = None;
-            match_elements_combine_text! {ctx, buffer,
+            let mut code = String::new();
+            match_elements_combine_text! {ctx, code,
                 "type" => {
                     let text = parse_text_element(ctx);
-                    buffer.push_str(&text);
+                    code.push_str(&text);
                     type_name = Some(text);
                 },
                 "name" => {
                     let text = parse_text_element(ctx);
-                    buffer.push_str(&text);
+                    code.push_str(&text);
                     name = Some(text);
                 }
             }
@@ -655,7 +654,12 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 return None;
             };
 
-            Some(NameWithType { name, type_name })
+            buffer.push_str(&code);
+            Some(NameWithType {
+                name,
+                type_name,
+                code,
+            })
         }
 
         match_elements! {ctx, attributes,
