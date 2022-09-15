@@ -644,6 +644,12 @@ pub struct CommandDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub tasks: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub queues: Option<String>,
 
     #[cfg_attr(

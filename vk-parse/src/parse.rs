@@ -592,6 +592,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
 fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> Option<Command> {
     let mut name = None;
     let mut alias = None;
+    let mut tasks = None;
     let mut queues = None;
     let mut successcodes = None;
     let mut errorcodes = None;
@@ -604,6 +605,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
     match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
         "alias" => alias = Some(a.value),
+        "tasks" => tasks = Some(a.value),
         "queues" => queues = Some(a.value),
         "successcodes" => successcodes = Some(a.value),
         "errorcodes" => errorcodes = Some(a.value),
@@ -739,6 +741,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         };
 
         Some(Command::Definition(CommandDefinition {
+            tasks,
             queues,
             successcodes,
             errorcodes,
