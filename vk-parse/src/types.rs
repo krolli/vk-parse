@@ -178,6 +178,20 @@ pub struct Tag {
     pub contact: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct SemVarVersion {
+    pub major: usize,
+
+    pub minor: usize,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub patch: Option<usize>,
+}
+
 pub type Types = CommentedChildren<TypesChild>;
 
 /// An item making up a type definition.
@@ -187,6 +201,10 @@ pub type Types = CommentedChildren<TypesChild>;
 pub enum TypesChild {
     Type {
         definition: Box<TypeDefinition>,
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
         comment: Option<String>,
     },
     Comment(String),
@@ -240,18 +258,10 @@ pub enum TypeBitmask {
     },
 
     Definition {
-        definition: Box<NameWithType>,
+        name: String,
+        is_64bit: bool,
         has_bitvalues: bool,
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[non_exhaustive]
-pub(crate) enum TypeCodeMarkup {
-    Name(String),
-    Type(String),
-    ApiEntry(String),
 }
 
 /// A member of a type definition, i.e. a struct member.
@@ -266,6 +276,32 @@ pub enum TypeMember {
     Definition(Box<TypeMemberDefinition>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum TypeMemberSelector {
+    Type,
+    Format,
+    GeometryType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum TypeMemberLimitType {
+    Min,
+    Max,
+    Exact,
+    Bits,
+    Bitmask,
+    Range,
+    Struct,
+    NoAuto,
+    MinPot,
+    MaxPot,
+    MinMul,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
@@ -274,7 +310,7 @@ pub struct TypeMemberDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub selector: Option<String>,
+    pub selector: Option<TypeMemberSelector>,
 
     #[cfg_attr(
         feature = "serialize",
@@ -282,6 +318,7 @@ pub struct TypeMemberDefinition {
     )]
     pub selection: Option<String>,
 
+    // FIXME: only here for back-compat
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
@@ -298,7 +335,7 @@ pub struct TypeMemberDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub limittype: Option<String>,
+    pub limittype: Option<TypeMemberLimitType>,
 
     /// The definition of this member.
     #[cfg_attr(
@@ -437,6 +474,14 @@ pub struct TypeUnion {
     pub returned_only: Option<()>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum EnumsKind {
+    Enum,
+    Bitmask,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
@@ -451,7 +496,7 @@ pub struct Enums {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub kind: Option<String>,
+    pub kind: Option<EnumsKind>,
 
     #[cfg_attr(
         feature = "serialize",
@@ -535,6 +580,30 @@ pub struct Unused {
     pub comment: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum EnumType {
+    U32,
+    U64,
+    F32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum EnumTypeValue {
+    I32(i32),
+    U32(u32),
+    U64(u64),
+    F32(f32),
+    Text(String),
+    Refrence(String),
+}
+
+// Safety: EnumTypeValue::F32 will only ever contain a finite number
+impl core::cmp::Eq for EnumTypeValue {}
+
 /// An item of an enumeration type.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -554,7 +623,7 @@ pub struct Enum {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub type_suffix: Option<String>,
+    pub type_suffix: Option<EnumType>,
 
     #[cfg_attr(
         feature = "serialize",
@@ -630,7 +699,7 @@ pub enum EnumSpec {
     /// An enum value.
     Value {
         /// Hard coded value for an enum.
-        value: String, // rnc says this is an Integer, but validates it as text, and that's what it sometimes really is.
+        value: EnumTypeValue,
 
         /// Which structure this enum extends.
         #[cfg_attr(
@@ -861,6 +930,21 @@ pub struct CommandParam {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub validstructs: Vec<String>,
+
+    /// name of param that has this param's stride
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub stride: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum FeatureApi {
+    #[default]
+    Vulkan,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -871,7 +955,7 @@ pub struct Feature {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub api: String,
+    pub api: FeatureApi,
 
     #[cfg_attr(
         feature = "serialize",
@@ -883,7 +967,7 @@ pub struct Feature {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub number: String,
+    pub number: SemVarVersion,
 
     #[cfg_attr(
         feature = "serialize",
@@ -907,6 +991,23 @@ pub struct Feature {
 pub type FeatureChild = ExtensionChild;
 
 pub type Extensions = CommentedChildren<Extension>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum ExtensionType {
+    Instance,
+    Device,
+    // PhysicalDevice,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum ExtensionSupport {
+    Vulkan,
+    Disabled,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -961,8 +1062,9 @@ pub struct Extension {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub ext_type: Option<String>,
+    pub ext_type: Option<ExtensionType>,
 
+    // FIXME split along comma
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
@@ -973,13 +1075,13 @@ pub struct Extension {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub requires_core: Option<String>,
+    pub requires_core: Option<SemVarVersion>,
 
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub supported: Option<String>, // mk:TODO StringGroup?
+    pub supported: Option<ExtensionSupport>,
 
     #[cfg_attr(
         feature = "serialize",
@@ -1000,6 +1102,7 @@ pub struct Extension {
     )]
     pub obsoletedby: Option<String>,
 
+    // FIXME since either provisional attr is not included when false, could change the type to `Option<()>` a flag-like type
     /// 'true' if this extension is released provisionally
     #[cfg_attr(
         feature = "serialize",
@@ -1038,18 +1141,21 @@ pub struct Extension {
 pub enum ExtensionChild {
     /// Indicates the items which this extension requires to work.
     Require {
+        // FIXME only here for backcompat
         #[cfg_attr(
             feature = "serialize",
             serde(default, skip_serializing_if = "is_default")
         )]
         api: Option<String>,
 
+        // FIXME only here for backcompat
         #[cfg_attr(
             feature = "serialize",
             serde(default, skip_serializing_if = "is_default")
         )]
         profile: Option<String>,
 
+        // FIXME It's not always a single extension, but multiple sperated by a `+`
         /// The extension which provides these required items, if any.
         #[cfg_attr(
             feature = "serialize",
@@ -1073,6 +1179,7 @@ pub enum ExtensionChild {
         items: Vec<InterfaceItem>,
     },
 
+    // FIXME only here for backcompat (?)
     /// Indicates the items this extension removes.
     Remove {
         #[cfg_attr(
@@ -1148,7 +1255,7 @@ pub struct Format {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub blockExtent: Option<String>,
+    pub blockExtent: Option<[u8; 3]>,
 
     #[cfg_attr(
         feature = "serialize",
@@ -1160,13 +1267,13 @@ pub struct Format {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub compressed: Option<String>,
+    pub compressed: Option<FormatCompressionType>,
 
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub chroma: Option<String>,
+    pub chroma: Option<FormatChroma>,
 
     pub children: Vec<FormatChild>,
 }
@@ -1177,9 +1284,9 @@ pub struct Format {
 pub enum FormatChild {
     #[non_exhaustive]
     Component {
-        name: String,
-        bits: String,
-        numericFormat: String,
+        name: FormatComponentName,
+        bits: FormatComponentBits,
+        numericFormat: FormatComponentNumericFormat,
         #[cfg_attr(
             feature = "serialize",
             serde(default, skip_serializing_if = "is_default")
@@ -1197,6 +1304,72 @@ pub enum FormatChild {
 
     #[non_exhaustive]
     SpirvImageFormat { name: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum FormatChroma {
+    #[cfg_attr(feature = "serialize", serde(rename = "420"))]
+    Type420,
+    #[cfg_attr(feature = "serialize", serde(rename = "422"))]
+    Type422,
+    #[cfg_attr(feature = "serialize", serde(rename = "444"))]
+    Type444,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum FormatCompressionType {
+    BC,
+    ETC2,
+    EAC,
+    // FIXME I'm really not sure what else to name these
+    /// Adaptive Scalable Texture Compression (ASTC) Low Dynamic Range (LDR)
+    #[allow(non_camel_case_types)]
+    #[cfg_attr(feature = "serialize", serde(rename = "ASTC LDR"))]
+    ASTC_LDR,
+    /// Adaptive Scalable Texture Compression (ASTC) High Dynamic Range (HDR)
+    #[allow(non_camel_case_types)]
+    #[cfg_attr(feature = "serialize", serde(rename = "ASTC HDR"))]
+    ASTC_HDR,
+    PVRTC,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum FormatComponentBits {
+    Compressed,
+    Bits(core::num::NonZeroU8),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum FormatComponentNumericFormat {
+    SRGB,
+    UNORM,
+    SNORM,
+    UINT,
+    SINT,
+    USCALED,
+    SSCALED,
+    UFLOAT,
+    SFLOAT,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum FormatComponentName {
+    A,
+    R,
+    G,
+    B,
+    S,
+    D,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

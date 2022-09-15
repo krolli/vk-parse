@@ -111,7 +111,7 @@ impl From<Registry> for vkxml::Registry {
                         let enumeration = vkxml::Enumeration {
                             name: e.name.unwrap_or_default(),
                             notation: e.comment,
-                            purpose: if kind.as_str() == "bitmask" {
+                            purpose: if kind == EnumsKind::Bitmask {
                                 Some(vkxml::EnumerationPurpose::Bitmask)
                             } else {
                                 None
@@ -251,12 +251,11 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
 
                 TypeDefinition::Bitmask(TypeBitmask::Alias { .. }) => None,
                 TypeDefinition::Bitmask(TypeBitmask::Definition {
-                    definition,
+                    name,
+                    is_64bit,
                     has_bitvalues,
                 }) => {
-                    let NameWithType {
-                        type_name, name, ..
-                    } = *definition;
+                    let basetype = (if is_64bit { "VkFlags64" } else { "VkFlags" }).to_string();
                     let enumref = if has_bitvalues {
                         Some(name.replacen("Flags", "FlagBits", 1))
                     } else {
@@ -265,7 +264,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                     let bitmask = vkxml::Bitmask {
                         name,
                         notation,
-                        basetype: type_name,
+                        basetype,
                         enumref,
                     };
                     Some(vkxml::DefinitionsElement::Bitmask(bitmask))
@@ -413,12 +412,13 @@ impl From<Enum> for Option<vkxml::Constant> {
                     bitpos: None,
                     c_expression: None,
                 };
-                if let Ok(value) = value.parse::<i32>() {
-                    r.number = Some(value);
-                } else if let Some(value) = value.strip_prefix("0x") {
-                    r.hex = Some(String::from(value))
-                } else {
-                    r.c_expression = Some(value)
+                match value {
+                    EnumTypeValue::I32(v) => r.number = Some(v),
+                    EnumTypeValue::U32(v) => r.hex = Some(format!("{:X}", v)),
+                    EnumTypeValue::U64(v) => r.hex = Some(format!("{:X}", v)),
+                    EnumTypeValue::F32(v) => r.c_expression = Some(v.to_string()),
+                    EnumTypeValue::Text(_) => todo!(),
+                    EnumTypeValue::Refrence(refr) => r.c_expression = Some(refr),
                 }
                 Some(r)
             }
@@ -627,13 +627,13 @@ impl From<Extension> for vkxml::Extension {
         let mut disabled = false;
         let mut match_api = None;
 
-        if let Some(text) = supported {
-            if text == "disabled" {
+        match supported {
+            Some(ExtensionSupport::Vulkan) => match_api = Some("vulkan".to_string()),
+            Some(ExtensionSupport::Disabled) => {
                 disabled = true;
-            } else {
-                match_api = Some(text);
             }
-        }
+            None => {}
+        };
 
         let mut elements = Vec::new();
         for item in children {
@@ -649,17 +649,10 @@ impl From<Extension> for vkxml::Extension {
             },
             disabled,
             match_api,
-            ty: match ext_type {
-                Some(text) => match text.as_str() {
-                    "instance" => Some(vkxml::ExtensionType::Instance),
-                    "device" => Some(vkxml::ExtensionType::Device),
-                    _ => panic!(
-                        "Unexpected value of type attribute on extension: {:?}",
-                        text
-                    ),
-                },
-                None => None,
-            },
+            ty: ext_type.map(|e| match e {
+                ExtensionType::Instance => vkxml::ExtensionType::Instance,
+                ExtensionType::Device => vkxml::ExtensionType::Device,
+            }),
             define: protect,
             requires,
             author,
@@ -809,19 +802,19 @@ impl From<InterfaceItem> for Option<vkxml::ExtensionSpecificationElement> {
                     }
                 }
 
-                EnumSpec::Value { mut value, extends } => {
+                EnumSpec::Value { value, extends } => {
                     let mut text = None;
                     let mut number = None;
                     let mut enumref = None;
-                    if let Ok(val) = value.parse::<i32>() {
-                        number = Some(val);
-                    } else if value.starts_with('"') && value.ends_with('"') {
-                        let end = value.len() - 1;
-                        value.remove(end);
-                        value.remove(0);
-                        text = Some(value);
-                    } else {
-                        enumref = Some(value);
+                    match value {
+                        EnumTypeValue::I32(v) => {
+                            number = Some(v);
+                        }
+                        EnumTypeValue::U32(v) => enumref = Some(format!("{:X}", v)),
+                        EnumTypeValue::U64(v) => enumref = Some(format!("{:X}", v)),
+                        EnumTypeValue::F32(v) => enumref = Some(v.to_string()),
+                        EnumTypeValue::Text(t) => text = Some(t),
+                        EnumTypeValue::Refrence(_) => {}
                     }
 
                     if let Some(extends) = extends {
@@ -960,8 +953,11 @@ impl From<Feature> for vkxml::Feature {
         Self {
             name: orig.name,
             notation: orig.comment,
-            api: orig.api,
-            version: f32::from_str(&orig.number).unwrap(),
+            api: match orig.api {
+                FeatureApi::Vulkan => "vulkan".to_string(),
+            },
+            version: f32::from_str(&format!("{}.{}", orig.number.major, orig.number.minor))
+                .unwrap(),
             define: orig.protect,
             elements: {
                 let mut elements = Vec::with_capacity(orig.children.len());

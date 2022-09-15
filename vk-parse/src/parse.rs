@@ -273,6 +273,11 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
             let start = start.and_then(|val| parse_integer(ctx, &val));
             let end = end.and_then(|val| parse_integer(ctx, &val));
             let bitwidth = bitwidth.and_then(|val| parse_integer(ctx, &val)).map(|val| val as u32);
+            let kind = kind.map(|k| match k.as_str() {
+                "enum" => EnumsKind::Enum,
+                "bitmask" => EnumsKind::Bitmask,
+                _ => unimplemented!("Unexpected <enums> `type` attribute value of {:?}", k),
+            });
 
             registry.0.push(RegistryChild::Enums(Enums{ name, kind, start, end, vendor, comment, children, bitwidth }));
         },
@@ -1173,6 +1178,7 @@ fn process_define_code(
             }
         }
     } else if let Some(value) = value_ {
+        // FIXME parse value as a constant int or float, and if not consider it to be an `TypeDefineValue::Expression` instead
         TypeDefineValue::Value(value)
     } else {
         TypeDefineValue::Empty
@@ -1216,6 +1222,29 @@ fn parse_type_member<R: Read>(
         "limittype"             => limittype             = Some(a.value),
         "objecttype"            => objecttype            = Some(a.value)
     }
+
+    let selector = selector.map(|s| match s.as_str() {
+        "type" => TypeMemberSelector::Type,
+        "format" => TypeMemberSelector::Format,
+        "geometryType" => TypeMemberSelector::GeometryType,
+        _ => panic!("unrecongized selector {:?}", s),
+    });
+
+    let limittype = limittype.map(|lt| match lt.as_str() {
+        "min" => TypeMemberLimitType::Min,
+        "max" => TypeMemberLimitType::Max,
+        "exact" => TypeMemberLimitType::Exact,
+        "bits" => TypeMemberLimitType::Bits,
+        "range" => TypeMemberLimitType::Range,
+        "bitmask" => TypeMemberLimitType::Bitmask,
+        "struct" => TypeMemberLimitType::Struct,
+        "noauto" => TypeMemberLimitType::NoAuto,
+        "min,pot" => TypeMemberLimitType::MinPot,
+        "max,pot" => TypeMemberLimitType::MaxPot,
+        "min,mul" => TypeMemberLimitType::MinMul,
+        _ => panic!("unrecongized limittype {:?}", lt),
+    });
+
     parse_name_with_type(
         ctx,
         len,
@@ -1436,21 +1465,10 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                     assert!(requires.is_none() && bitvalues.is_none());
                     TypeDefinition::Bitmask(TypeBitmask::Alias { name, alias })
                 } else {
+                    assert!(matches!(type_tag.as_deref(), Some("VkFlags" | "VkFlags64")));
                     TypeDefinition::Bitmask(TypeBitmask::Definition {
-                        definition: Box::new(NameWithType {
-                            name,
-                            type_name: type_tag.unwrap(),
-                            pointer_kind: None,
-                            is_struct: false,
-                            bitfield_size: None,
-                            array_shape: None,
-                            dynamic_shape: None,
-                            externsync: None,
-                            optional: None,
-                            noautovalidity: None,
-                            objecttype: None,
-                            comment: None,
-                        }),
+                        name,
+                        is_64bit: matches!(type_tag.as_deref(), Some("VkFlags64")),
                         has_bitvalues: requires.is_some() || bitvalues.is_some(),
                     })
                 }
@@ -1561,6 +1579,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 let mut noautovalidity = None;
                 let mut objecttype = None;
                 let mut validstructs = None;
+                let mut stride = None;
 
                 match_attributes!{ctx, a in attributes,
                     "len"            => len            = Some(a.value),
@@ -1570,6 +1589,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     "noautovalidity" => noautovalidity = Some(a.value),
                     "objecttype"     => objecttype     = Some(a.value),
                     "validstructs"   => validstructs   = Some(a.value),
+                    "stride"         => stride         = Some(a.value),
                 }
 
                 let validstructs = validstructs.map_or(
@@ -1588,6 +1608,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     params.push(CommandParam {
                         definition,
                         validstructs,
+                        stride,
                     });
                 }
             },
@@ -1625,7 +1646,10 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         // 4594).
         const SUPPORT_OLD: bool = true;
 
-        assert!(SUPPORT_OLD || pipeline.is_none());
+        #[allow(clippy::assertions_on_constants)]
+        {
+            assert!(SUPPORT_OLD || pipeline.is_none())
+        };
         // if let Some(pipeline) = pipeline.as_deref() {
         //     if let Some(queues) = queues.as_deref() {
         //         assert!(proto.name == "vkCmdBlitImage" || queues.split(',').any(|q| q == pipeline), "name {:?} w/ {:?} v {:?}", proto, pipeline, queues)
@@ -1665,7 +1689,10 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     );
                     Err(())
                 }
-                _ => unreachable!("level {:?} was not expected for command `{}`", level, proto.name),
+                _ => unreachable!(
+                    "level {:?} was not expected for command `{}`",
+                    level, proto.name
+                ),
             })
             .transpose()
             .ok()?;
@@ -1690,6 +1717,66 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             description,
             implicitexternsyncparams,
         })))
+    }
+}
+
+fn parse_simple_cexpr<T: FromStr + core::ops::Not<Output = T>>(expr: &str) -> T
+where
+    <T as FromStr>::Err: core::fmt::Debug,
+{
+    if let Some(inner) = expr.strip_prefix('(') {
+        let inner = inner.strip_suffix(')').unwrap();
+        parse_simple_cexpr(inner)
+    } else if let Some(inner) = expr.strip_prefix('~') {
+        !parse_simple_cexpr::<T>(inner)
+    } else if let Some(inner) = expr.strip_suffix('U') {
+        parse_simple_cexpr(inner)
+    } else if let Some(inner) = expr.strip_suffix("ULL") {
+        parse_simple_cexpr(inner)
+    } else if let Ok(v) = expr.parse() {
+        v
+    } else {
+        todo!("{:?}", expr)
+    }
+}
+
+fn parse_enum_type_value(value: &str, type_suffix: Option<EnumType>) -> EnumTypeValue {
+    match type_suffix {
+        Some(EnumType::U32) => EnumTypeValue::U32(if let Ok(v) = value.parse::<u32>() {
+            v
+        } else if let Some(v) = value.strip_prefix("0x") {
+            u32::from_str_radix(v, 16).unwrap()
+        } else {
+            parse_simple_cexpr(value)
+        }),
+        Some(EnumType::U64) => EnumTypeValue::U64(if let Ok(v) = value.parse::<u64>() {
+            v
+        } else if let Some(v) = value.strip_prefix("0x") {
+            u64::from_str_radix(v, 16).unwrap()
+        } else {
+            parse_simple_cexpr(value)
+        }),
+        Some(EnumType::F32) => {
+            let value = value.strip_suffix('F').unwrap_or(value);
+            EnumTypeValue::F32(if let Ok(v) = value.parse::<f32>() {
+                v
+            } else {
+                todo!()
+            })
+        }
+        None => {
+            if let Ok(v) = value.parse::<i32>() {
+                EnumTypeValue::I32(v)
+            } else if let Some(v) = value.strip_prefix("0x") {
+                EnumTypeValue::U32(u32::from_str_radix(v, 16).unwrap())
+            } else if let Some(v) = value.strip_prefix('"') {
+                EnumTypeValue::Text(v.strip_suffix('"').unwrap().to_string())
+            } else {
+                // FIXME this might be a refrence to a constant in case of vulkan video xml with the provisional version value
+                // todo!("{:?}", value)
+                EnumTypeValue::Refrence(value.to_string())
+            }
+        }
     }
 }
 
@@ -1759,6 +1846,13 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         return None;
     }
 
+    let type_suffix = type_suffix.map(|t| match t.as_str() {
+        "uint32_t" => EnumType::U32,
+        "uint64_t" => EnumType::U64,
+        "float" => EnumType::F32,
+        _ => unreachable!("Unexpected type of {:?}", t),
+    });
+
     let spec = if let Some(alias) = alias {
         EnumSpec::Alias { alias, extends }
     } else if let Some(offset) = offset {
@@ -1797,7 +1891,10 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         };
         EnumSpec::Bitpos { bitpos, extends }
     } else if let Some(value) = value {
-        EnumSpec::Value { value, extends }
+        EnumSpec::Value {
+            value: parse_enum_type_value(&value, type_suffix),
+            extends,
+        }
     } else {
         EnumSpec::None
     };
@@ -1870,6 +1967,17 @@ fn parse_feature<R: Read>(
     unwrap_attribute!(ctx, feature, api);
     unwrap_attribute!(ctx, feature, name);
     unwrap_attribute!(ctx, feature, number);
+    let api = match api.as_str() {
+        "vulkan" => FeatureApi::Vulkan,
+        _ => todo!("{:?}", api),
+    };
+    // FIXME better error message
+    let (major, minor) = number.split_once('.').unwrap();
+    let number = SemVarVersion {
+        major: major.parse().unwrap(),
+        minor: minor.parse().unwrap(),
+        patch: None,
+    };
 
     Some(RegistryChild::Feature(Feature {
         api,
@@ -1948,6 +2056,30 @@ fn parse_extension<R: Read>(
         Some(text) => parse_integer(ctx, &text),
         None => None,
     };
+
+    let ext_type = ext_type.map(|e| match e.as_str() {
+        "device" => ExtensionType::Device,
+        "instance" => ExtensionType::Instance,
+        _ => unimplemented!(),
+    });
+
+    let requires_core = requires_core.map(|rq| {
+        // FIXME better error message
+        let (major, minor) = rq.split_once('.').unwrap();
+        SemVarVersion {
+            major: major.parse().unwrap(),
+            minor: minor.parse().unwrap(),
+            patch: None,
+        }
+    });
+
+    let supported = supported.map(|s| match s.as_str() {
+        "vulkan" => ExtensionSupport::Vulkan,
+        "disabled" => ExtensionSupport::Disabled,
+        // FIXME only for backpat
+        "disable" => ExtensionSupport::Disabled,
+        _ => todo!("{:?}", s),
+    });
 
     let provisional = match provisional {
         Some(value) => {
@@ -2197,6 +2329,33 @@ fn parse_format<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -
         None => None,
     };
 
+    let blockExtent = blockExtent.map(|s| {
+        let (n1, r) = s.split_once(',').unwrap();
+        let (n2, n3) = r.split_once(',').unwrap();
+        [
+            n1.parse().unwrap(),
+            n2.parse().unwrap(),
+            n3.parse().unwrap(),
+        ]
+    });
+
+    let compressed = compressed.map(|c| match c.as_str() {
+        "BC" => FormatCompressionType::BC,
+        "ETC2" => FormatCompressionType::ETC2,
+        "EAC" => FormatCompressionType::EAC,
+        "ASTC LDR" => FormatCompressionType::ASTC_LDR,
+        "ASTC HDR" => FormatCompressionType::ASTC_HDR,
+        "PVRTC" => FormatCompressionType::PVRTC,
+        _ => panic!(""),
+    });
+
+    let chroma = chroma.map(|c| match c.as_str() {
+        "420" => FormatChroma::Type420,
+        "422" => FormatChroma::Type422,
+        "444" => FormatChroma::Type444,
+        _ => panic!(""),
+    });
+
     Some(Format {
         name,
         class,
@@ -2240,6 +2399,38 @@ fn parse_format_component<R: Read>(
         Some(Some(v)) => Some(v),
         Some(None) => return None, // Attribute present, but parse error occurred.
         None => None,
+    };
+
+    let name = match name.as_str() {
+        "A" => FormatComponentName::A,
+        "R" => FormatComponentName::R,
+        "G" => FormatComponentName::G,
+        "B" => FormatComponentName::B,
+        "S" => FormatComponentName::S,
+        "D" => FormatComponentName::D,
+        _ => panic!("unhandled format componet name {:?}", name),
+    };
+
+    let bits = if let Ok(n) = bits.parse() {
+        FormatComponentBits::Bits(n)
+    } else {
+        match bits.as_str() {
+            "compressed" => FormatComponentBits::Compressed,
+            _ => panic!(),
+        }
+    };
+
+    let numericFormat = match numericFormat.as_str() {
+        "SRGB" => FormatComponentNumericFormat::SRGB,
+        "UNORM" => FormatComponentNumericFormat::UNORM,
+        "SNORM" => FormatComponentNumericFormat::SNORM,
+        "UINT" => FormatComponentNumericFormat::UINT,
+        "SINT" => FormatComponentNumericFormat::SINT,
+        "USCALED" => FormatComponentNumericFormat::USCALED,
+        "SSCALED" => FormatComponentNumericFormat::SSCALED,
+        "SFLOAT" => FormatComponentNumericFormat::SFLOAT,
+        "UFLOAT" => FormatComponentNumericFormat::UFLOAT,
+        _ => panic!("unhandled numeric-format {:?}", numericFormat),
     };
 
     Some(FormatChild::Component {
