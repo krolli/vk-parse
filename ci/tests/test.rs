@@ -373,3 +373,4 @@ test_version! {test_v1_3_224, 1, 3, 224, "/xml"}
 test_version! {test_v1_3_225, 1, 3, 225, "/xml"}
 test_version! {test_v1_3_226, 1, 3, 226, "/xml"}
 test_version! {test_v1_3_227, 1, 3, 227, "/xml"}
+test_version! {test_v1_3_228, 1, 3, 228, "/xml"}
