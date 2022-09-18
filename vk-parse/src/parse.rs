@@ -1518,16 +1518,30 @@ impl FromStr for CommandQueue {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "graphics" => Ok(Self::GRAPHICS),
-            "compute" => Ok(Self::COMPUTE),
-            "transfer" => Ok(Self::TRANSFER),
-            "sparse_binding" => Ok(Self::SPARSE_BINDING),
-            // "protected" => Ok(Self::PROTECTED),
-            "decode" => Ok(Self::VIDEO_DECODE),
-            "encode" => Ok(Self::VIDEO_ENCODE),
-            _ => Err(()),
-        }
+        Ok(match s {
+            "graphics" => Self::GRAPHICS,
+            "compute" => Self::COMPUTE,
+            "transfer" => Self::TRANSFER,
+            "sparse_binding" => Self::SPARSE_BINDING,
+            // "protected" => Self::PROTECTED,
+            "decode" => Self::VIDEO_DECODE,
+            "encode" => Self::VIDEO_ENCODE,
+            _ => return Err(()),
+        })
+    }
+}
+
+impl FromStr for CommandTask {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "action" => CommandTask::ACTION,
+            "state" => CommandTask::STATE,
+            "synchronization" => CommandTask::SYNCHRONIZATION,
+            "indirection" => CommandTask::INDIRECTION,
+            _ => return Err(()),
+        })
     }
 }
 
@@ -1540,6 +1554,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
     let mut renderpass = None;
     let mut videocoding = None;
     let mut cmdbufferlevel = None;
+    let mut tasks = None;
     let mut pipeline = None;
     let mut comment = None;
 
@@ -1552,6 +1567,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         "renderpass" => renderpass = Some(a.value),
         "videocoding" => videocoding = Some(a.value),
         "cmdbufferlevel" => cmdbufferlevel = Some(a.value),
+        "tasks" => tasks = Some(a.value),
         "pipeline" => pipeline = Some(a.value),
         "comment" => comment = Some(a.value)
     }
@@ -1716,6 +1732,12 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             alias,
             description,
             implicitexternsyncparams,
+            tasks: tasks.map(|ts| {
+                ts.split(',')
+                    .map(|s| s.parse::<CommandTask>())
+                    .collect::<Result<_, _>>()
+                    .unwrap()
+            }),
         })))
     }
 }

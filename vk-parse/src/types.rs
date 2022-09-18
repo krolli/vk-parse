@@ -832,6 +832,16 @@ pub enum CommandBufferLevel {
     Both,
 }
 
+bitflags::bitflags! {
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+    pub struct CommandTask: u32 {
+        const ACTION = 1 << 0;
+        const STATE = 1 << 1;
+        const SYNCHRONIZATION = 1 << 2;
+        const INDIRECTION = 1 << 3;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
@@ -907,6 +917,12 @@ pub struct CommandDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub implicitexternsyncparams: Vec<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub tasks: Option<CommandTask>,
 }
 
 /// Parameter for this Vulkan function.
