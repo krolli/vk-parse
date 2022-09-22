@@ -1077,7 +1077,7 @@ fn process_define_code(
 
                     let mut name_len = 0;
                     while let Some(c) = current {
-                        if !crate::c::is_c_identifier_char(c) {
+                        if !(c.is_ascii_alphanumeric() || c == '_') {
                             break;
                         }
                         name_len += 1;
@@ -1117,7 +1117,7 @@ fn process_define_code(
 
                         let mut name_len = 0;
                         while let Some(c) = current {
-                            if !crate::c::is_c_identifier_char(c) {
+                            if !(c.is_ascii_alphanumeric() || c == '_') {
                                 break;
                             }
                             current = chars.next();

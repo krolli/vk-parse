@@ -17,7 +17,6 @@ extern crate vkxml;
 
 #[macro_use]
 mod parse;
-mod c;
 #[cfg(feature = "vkxml-convert")]
 mod convert;
 mod types;
