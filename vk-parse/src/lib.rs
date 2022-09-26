@@ -4,22 +4,17 @@
 //! return a `Registry` object. This object contains all the information contained
 //! in the Vulkan API registry.
 
-extern crate xml;
-
 #[cfg(feature = "serialize")]
 #[macro_use]
 extern crate serde_derive;
-#[cfg(feature = "serialize")]
-extern crate serde;
-
-#[cfg(feature = "vkxml-convert")]
-extern crate vkxml;
 
 #[macro_use]
 mod parse;
 #[cfg(feature = "vkxml-convert")]
 mod convert;
 mod types;
+
+mod c_parser;
 
 #[cfg(feature = "vkxml-convert")]
 pub use convert::parse_file_as_vkxml;

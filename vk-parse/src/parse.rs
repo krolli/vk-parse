@@ -1,12 +1,10 @@
-extern crate xml;
-
-use std;
 use std::io::Read;
 use std::str::FromStr;
 use xml::name::OwnedName;
 use xml::reader::XmlEvent;
 
-use types::*;
+use crate::c_parser::parse_cexpr;
+use crate::types::*;
 
 type XmlEvents<R> = xml::reader::Events<R>;
 type XmlAttribute = xml::attribute::OwnedAttribute;
@@ -520,14 +518,14 @@ fn parse_name_with_type<R: Read>(
 
         altlen.map(|c_expr| DynamicShapeKind::Expression {
             latex_expr: Some(latex_expr.to_string()),
-            c_expr,
+            c_expr: parse_cexpr(c_expr.as_str(), true).unwrap(),
         })
     } else if let Some(c_expr) = altlen {
         // only required/fixed in version >= 1.2.188(?)
         // unreachable!("only expecting the `altlen` attribute when the `len` attribute is a latex expression");
         Some(DynamicShapeKind::Expression {
             latex_expr: None,
-            c_expr,
+            c_expr: parse_cexpr(c_expr.as_str(), true).unwrap(),
         })
     } else if let Some(len) = len {
         let mut it = len.split(',').map(|v| {
@@ -934,264 +932,180 @@ fn parse_type_funcptr<R: Read>(
     })
 }
 
-fn process_define_code(
-    code: String,
-    name_: String,
-    defref: Option<String>,
-    requires: Option<String>,
-) -> TypeDefine {
-    fn consume_whitespace(chars: &mut std::str::Chars, mut current: Option<char>) -> Option<char> {
-        while let Some(c) = current {
-            if !c.is_whitespace() {
-                break;
-            }
-            current = chars.next();
-        }
-        current
-    }
-
-    let mut is_disabled = true;
-    let mut replace = false;
-    let mut parameters = Vec::new();
-    let mut value_ = None;
-    let mut c_expr_ = None;
-    let mut comment_ = None;
-
-    {
-        enum State {
-            Initial,
-            LineComment,
-            BlockComment,
-            DefineName,
-            DefineArgs,
-            DefineExpression,
-            DefineValue,
-        }
-        let mut state = State::Initial;
-        let mut chars = code.chars();
-        loop {
-            match state {
-                State::Initial => {
-                    let mut current = chars.next();
-                    current = consume_whitespace(&mut chars, current);
-
-                    match current {
-                        Some('/') => {
-                            current = chars.next();
-                            match current {
-                                Some('/') => state = State::LineComment,
-                                Some('*') => state = State::BlockComment,
-                                Some(c) => panic!("Unexpected symbol {:?}", c),
-                                None => panic!("Unexpected end of code."),
-                            }
-                        }
-
-                        Some('#') => {
-                            let text = chars.as_str();
-                            let mut directive_len = 0;
-                            for c in chars.by_ref() {
-                                if c.is_whitespace() {
-                                    break;
-                                }
-                                if ('a'..='z').contains(&c) {
-                                    directive_len += 1;
-                                } else {
-                                    panic!("Unexpected symbol in preprocessor directive: {:?}", c);
-                                }
-                            }
-
-                            let directive = &text[..directive_len];
-                            match directive {
-                                "define" => state = State::DefineName,
-                                _ => {
-                                    // Different directive. Whole text treated as c expression and replace set to true.
-                                    replace = true;
-                                    is_disabled = false;
-                                    break;
-                                }
-                            }
-                        }
-
-                        Some('s') => {
-                            let expected = "truct ";
-
-                            let text = chars.as_str();
-                            if text.starts_with(expected) {
-                                // mk:TODO Less hacky handling of define which is actually forward declaration.
-                                replace = true;
-                                break;
-                            } else {
-                                println!("Unexpected code segment {:?}", code);
-                            }
-                        }
-
-                        Some(c) => panic!("Unexpected symbol {:?}", c),
-                        None => panic!("Unexpected end of code."),
-                    }
-                }
-
-                State::LineComment => {
-                    let text = chars.as_str();
-                    if let Some(idx) = text.find('\n') {
-                        let comment = text[..idx].trim();
-                        if comment_.is_none() {
-                            comment_.replace(String::from(comment));
-                        }
-                        chars = text[idx + 1..].chars();
-                        state = State::Initial;
-                    } else {
-                        if comment_.is_none() {
-                            comment_.replace(String::from(text.trim()));
-                        }
-
-                        break;
-                    }
-                }
-
-                State::BlockComment => {
-                    let text = chars.as_str();
-                    if let Some(idx) = text.find("*/") {
-                        let comment = &text[..idx];
-                        if comment_.is_none() {
-                            comment_.replace(String::from(comment));
-                        }
-                        chars = text[idx + 2..].chars();
-                        state = State::Initial;
-                    } else {
-                        panic!("Unterminated block comment {:?}", text);
-                    }
-                }
-
-                State::DefineName => {
-                    is_disabled = false;
-                    let text = chars.as_str();
-                    let mut current = chars.next();
-                    let mut whitespace_len = 0;
-                    while let Some(c) = current {
-                        if !c.is_whitespace() {
-                            break;
-                        }
-                        current = chars.next();
-                        whitespace_len += 1;
-                    }
-
-                    let mut name_len = 0;
-                    while let Some(c) = current {
-                        if !(c.is_ascii_alphanumeric() || c == '_') {
-                            break;
-                        }
-                        name_len += 1;
-                        current = chars.next();
-                    }
-
-                    let name = &text[whitespace_len..whitespace_len + name_len];
-                    if name != name_ {
-                        panic!("#define name mismatch. {:?} vs. {:?}", name, name_);
-                    }
-
-                    match current {
-                        Some('(') => state = State::DefineArgs,
-                        Some(c) => {
-                            if c.is_whitespace() {
-                                state = State::DefineValue;
-                            } else {
-                                panic!("Unexpected char after #define name: {:?}", c);
-                            }
-                        }
-                        None => break,
-                    }
-                }
-
-                State::DefineArgs => {
-                    let mut text = chars.as_str();
-                    let mut current = chars.next();
-                    loop {
-                        let mut whitespace_len = 0;
-                        while let Some(c) = current {
-                            if !c.is_whitespace() {
-                                break;
-                            }
-                            whitespace_len += 1;
-                            current = chars.next();
-                        }
-
-                        let mut name_len = 0;
-                        while let Some(c) = current {
-                            if !(c.is_ascii_alphanumeric() || c == '_') {
-                                break;
-                            }
-                            current = chars.next();
-                            name_len += 1;
-                        }
-                        let name = &text[whitespace_len..whitespace_len + name_len];
-                        parameters.push(String::from(name));
-
-                        current = consume_whitespace(&mut chars, current);
-                        match current {
-                            Some(',') => {
-                                text = chars.as_str();
-                                current = chars.next();
-                            }
-                            Some(')') => {
-                                chars.next();
-                                break;
-                            }
-                            Some(c) => {
-                                panic!("Unexpected character in #define argument list: {:?}", c)
-                            }
-                            None => {
-                                panic!("End of text while in the middle of #define argument list.")
-                            }
-                        }
-                    }
-                    state = State::DefineExpression;
-                }
-
-                State::DefineExpression => {
-                    c_expr_.replace(String::from(chars.as_str().trim()));
-                    break;
-                }
-
-                State::DefineValue => {
-                    let v = String::from(chars.as_str().trim());
-                    if defref.is_some() {
-                        c_expr_.replace(v);
-                    } else {
-                        value_.replace(v);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    if replace {
-        c_expr_.replace(code);
-    }
-    let value = if let Some(expression) = c_expr_ {
-        if parameters.is_empty() {
-            TypeDefineValue::Expression(expression)
-        } else {
-            TypeDefineValue::Function {
-                params: parameters,
-                expression,
-            }
-        }
-    } else if let Some(value) = value_ {
-        // FIXME parse value as a constant int or float, and if not consider it to be an `TypeDefineValue::Expression` instead
-        TypeDefineValue::Value(value)
-    } else {
-        TypeDefineValue::Empty
+mod text_parsing {
+    use crate::c_parser::{argument_exp_list, expr, identifier, line_comment, ws, Expression};
+    use nom::{
+        branch::alt,
+        bytes::complete::tag,
+        character::complete::{char, multispace1, space0, space1},
+        combinator::{recognize, value},
+        multi::{many0_count, many1_count, separated_list0},
+        sequence::{delimited, terminated, tuple},
+        Finish, Parser,
     };
-    TypeDefine {
-        name: name_,
-        comment: comment_,
-        defref,
+
+    pub fn parse_type_define_text_0(input: &str) -> (bool, bool) {
+        match delimited(
+            many0_count(alt((multispace1, line_comment))),
+            alt((value(false, tag("#define")), value(true, tag("//#define")))),
+            space1,
+        )(input)
+        .finish()
+        {
+            Ok(("", is_disabled)) => (true, is_disabled),
+            _ => (false, false),
+        }
+    }
+
+    pub enum TypeDefineText1Res {
+        Simple(Expression),
+        Function(Vec<String>, String),
+    }
+
+    pub fn parse_type_define_text_1(input: &str) -> Option<TypeDefineText1Res> {
+        match alt((
+            // Simple Expresion
+            delimited(space1, expr, space0).map(TypeDefineText1Res::Simple),
+            // Function
+            terminated(
+                delimited(
+                    char('('),
+                    separated_list0(ws(char(',')), identifier),
+                    char(')'),
+                ),
+                many1_count(alt((
+                    space1,
+                    recognize(tuple((char('\\'), space0, char('\n')))),
+                ))),
+            )
+            .map(|args| {
+                TypeDefineText1Res::Function(
+                    args.into_iter().map(|s| s.to_owned()).collect(),
+                    String::new(),
+                )
+            }),
+        ))(input)
+        .finish()
+        {
+            Ok((expr, TypeDefineText1Res::Function(args, _))) => {
+                Some(TypeDefineText1Res::Function(args, expr.to_owned()))
+            }
+            Ok((_rest, r)) => {
+                debug_assert!(_rest.chars().all(|c| c.is_whitespace()));
+                Some(r)
+            }
+            Err(_) => None,
+        }
+    }
+
+    pub fn parse_type_define_text_2(input: &str) -> Vec<Expression> {
+        let (_rest, args) = delimited(char('('), ws(argument_exp_list), char(')'))(input)
+            .expect("Expected function args after inner <type> of <type category=\"define\">");
+        args
+    }
+}
+use text_parsing::*;
+
+fn parse_type_define<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    name: Option<String>,
+    requires: Option<String>,
+) -> Option<TypeDefine> {
+    // TODO should we parse any comments found inside or not?
+    let comment = None;
+    let ((is_simple_define, is_disabled), code) =
+        if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
+            (parse_type_define_text_0(text.as_str()), text)
+        } else {
+            ctx.errors.push(Error::MissingCharacters {
+                xpath: ctx.xpath.clone(),
+            });
+            return None;
+        };
+
+    if !is_simple_define {
+        debug_assert_ne!(name, None, "code: {:?}", code);
+        return Some(TypeDefine { name: name.expect("If no name is found inside the tag <type category=\"define\"> then it must be an attribute"), comment, requires, is_disabled, value: TypeDefineValue::Code(code) });
+    }
+
+    let name = match ctx.events.next() {
+        Some(Ok(XmlEvent::StartElement {
+            name: OwnedName { local_name, .. },
+            ..
+        })) if local_name == "name" => {
+            ctx.push_element(&local_name);
+
+            parse_text_element(ctx)
+        }
+        _ => {
+            ctx.errors.push(Error::MissingElement {
+                xpath: ctx.xpath.clone(),
+                name: String::from("name"),
+            });
+            return None;
+        }
+    };
+
+    let res1 = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
+        parse_type_define_text_1(text.as_str())
+    } else {
+        None
+    };
+
+    if let Some(res1) = res1 {
+        let value = match res1 {
+            TypeDefineText1Res::Simple(value) => TypeDefineValue::Expression(value),
+            TypeDefineText1Res::Function(params, expr) => TypeDefineValue::FunctionDefine {
+                params,
+                expression: expr,
+            },
+        };
+        return Some(TypeDefine {
+            name,
+            comment,
+            requires,
+            is_disabled,
+            value,
+        });
+    }
+
+    let macro_name = match ctx.events.next() {
+        Some(Ok(XmlEvent::StartElement {
+            name: OwnedName { local_name, .. },
+            ..
+        })) if local_name == "type" => {
+            ctx.push_element(&local_name);
+
+            parse_text_element(ctx)
+        }
+        _ => {
+            ctx.errors.push(Error::MissingElement {
+                xpath: ctx.xpath.clone(),
+                name: String::from("type"),
+            });
+            return None;
+        }
+    };
+
+    let args = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
+        parse_type_define_text_2(text.as_str())
+    } else {
+        ctx.errors.push(Error::MissingCharacters {
+            xpath: ctx.xpath.clone(),
+        });
+        return None;
+    };
+    let value = TypeDefineValue::MacroFunctionCall {
+        name: macro_name,
+        args,
+    };
+    Some(TypeDefine {
+        name,
+        comment,
         requires,
         is_disabled,
-        replace,
         value,
-    }
+    })
 }
 
 fn parse_type_member<R: Read>(
@@ -1401,6 +1315,16 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             comment,
         };
     }
+    if let Some("define") = category.as_deref() {
+        let ty_define = parse_type_define(ctx, name, requires).unwrap();
+        // might want to ensure the next event is the tag end
+        consume_current_element(ctx);
+        return TypesChild::Type {
+            definition: Box::new(TypeDefinition::Define(ty_define)),
+            comment,
+        };
+    }
+
     // support versions older than 1.0.70 where <name> was found inside <type category="include">
     const SUPPORT_OLD: bool = true;
 
@@ -1446,10 +1370,6 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                     Some(!code.contains('<'))
                 },
             },
-            Some("define") => {
-                let defref = type_tag;
-                TypeDefinition::Define(process_define_code(code, name, defref, requires))
-            }
             Some("basetype") => TypeDefinition::Typedef {
                 name,
                 basetype: type_tag,

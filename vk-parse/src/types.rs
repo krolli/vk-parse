@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use crate::c_parser::Expression;
+
 /// Errors from which parser cannot recover.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -407,14 +409,12 @@ pub struct TypeDefine {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub defref: Option<String>,
+    pub requires: Option<String>,
     #[cfg_attr(
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub requires: Option<String>,
     pub is_disabled: bool,
-    pub replace: bool,
     pub value: TypeDefineValue,
 }
 
@@ -422,13 +422,16 @@ pub struct TypeDefine {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub enum TypeDefineValue {
-    Empty,
-    Value(String),
-    Expression(String),
-    Function {
+    Expression(Expression),
+    FunctionDefine {
         params: Vec<String>,
         expression: String,
     },
+    MacroFunctionCall {
+        name: String,
+        args: Vec<Expression>,
+    },
+    Code(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -839,6 +842,38 @@ bitflags::bitflags! {
         const STATE = 1 << 1;
         const SYNCHRONIZATION = 1 << 2;
         const INDIRECTION = 1 << 3;
+    }
+}
+
+impl core::fmt::Display for CommandTask {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut prepend_comma = false;
+        if self.contains(CommandTask::ACTION) {
+            f.write_str("action")?;
+            prepend_comma = true;
+        }
+        if self.contains(CommandTask::STATE) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("state")?;
+            prepend_comma = true;
+        }
+        if self.contains(CommandTask::SYNCHRONIZATION) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("synchronization")?;
+            prepend_comma = true;
+        }
+        if self.contains(CommandTask::INDIRECTION) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("indirection")?;
+            // prepend_comma = true;
+        }
+        Ok(())
     }
 }
 
@@ -1426,7 +1461,7 @@ pub enum DynamicLength {
 pub enum DynamicShapeKind {
     Expression {
         latex_expr: Option<String>,
-        c_expr: String,
+        c_expr: Expression,
     },
     Single(DynamicLength),
     Double(DynamicLength, DynamicLength),

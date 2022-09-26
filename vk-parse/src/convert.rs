@@ -1,8 +1,5 @@
-extern crate vkxml;
-
-use parse::*;
-use std;
-use types::*;
+use crate::parse::*;
+use crate::types::*;
 
 //--------------------------------------------------------------------------------------------------
 fn new_field() -> vkxml::Field {
@@ -208,9 +205,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                     name,
                     value,
                     comment,
-                    defref,
                     is_disabled,
-                    replace,
                     ..
                 }) => {
                     let mut define = vkxml::Define {
@@ -218,23 +213,33 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                         notation,
                         is_disabled,
                         comment,
-                        replace,
-                        defref: defref.into_iter().collect(),
+                        replace: false,
+                        defref: Vec::new(),
                         parameters: Vec::new(),
                         c_expression: None,
                         value: None,
                     };
                     match value {
-                        TypeDefineValue::Empty => {}
-                        TypeDefineValue::Value(v) => {
-                            define.value = Some(v);
-                        }
                         TypeDefineValue::Expression(e) => {
-                            define.c_expression = Some(e);
+                            define.value = Some(e.to_string());
                         }
-                        TypeDefineValue::Function { params, expression } => {
+                        TypeDefineValue::FunctionDefine { params, expression } => {
                             define.parameters = params;
                             define.c_expression = Some(expression);
+                        }
+                        TypeDefineValue::MacroFunctionCall { name, args } => {
+                            define.defref = vec![name];
+                            define.c_expression = Some(format!(
+                                "({})",
+                                args.into_iter()
+                                    .map(|e| e.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(",")
+                            ));
+                        }
+                        TypeDefineValue::Code(code) => {
+                            define.replace = true;
+                            define.c_expression = Some(code);
                         }
                     }
                     Some(vkxml::DefinitionsElement::Define(define))
