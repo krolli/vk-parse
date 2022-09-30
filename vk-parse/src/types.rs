@@ -429,7 +429,7 @@ pub enum TypeDefineValue {
     },
     MacroFunctionCall {
         name: String,
-        args: Vec<Expression>,
+        args: Box<[Expression]>,
     },
     Code(String),
 }
@@ -600,6 +600,7 @@ pub enum EnumTypeValue {
     U32(u32),
     U64(u64),
     F32(f32),
+    Expression(Expression),
     Text(String),
     Refrence(String),
 }
@@ -743,6 +744,7 @@ bitflags::bitflags! {
         const PROTECTED = 1 << 4;
         const VIDEO_DECODE = 1 << 5;
         const VIDEO_ENCODE = 1 << 6;
+        const OPTICAL_FLOW = 1 << 7;
     }
 }
 
@@ -794,6 +796,13 @@ impl core::fmt::Display for CommandQueue {
                 f.write_str(",")?;
             }
             f.write_str("encode")?;
+            prepend_comma = true;
+        }
+        if self.contains(CommandQueue::OPTICAL_FLOW) {
+            if prepend_comma {
+                f.write_str(",")?;
+            }
+            f.write_str("opticalflow")?;
             // prepend_comma = true;
         }
         Ok(())

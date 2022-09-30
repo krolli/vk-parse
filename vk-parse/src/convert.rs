@@ -424,6 +424,7 @@ impl From<Enum> for Option<vkxml::Constant> {
                     EnumTypeValue::F32(v) => r.c_expression = Some(v.to_string()),
                     EnumTypeValue::Text(_) => todo!(),
                     EnumTypeValue::Refrence(refr) => r.c_expression = Some(refr),
+                    EnumTypeValue::Expression(e) => r.c_expression = Some(e.to_string()),
                 }
                 Some(r)
             }
@@ -820,6 +821,7 @@ impl From<InterfaceItem> for Option<vkxml::ExtensionSpecificationElement> {
                         EnumTypeValue::F32(v) => enumref = Some(v.to_string()),
                         EnumTypeValue::Text(t) => text = Some(t),
                         EnumTypeValue::Refrence(_) => {}
+                        EnumTypeValue::Expression(e) => enumref = Some(e.to_string()),
                     }
 
                     if let Some(extends) = extends {

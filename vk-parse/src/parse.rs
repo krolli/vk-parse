@@ -518,14 +518,14 @@ fn parse_name_with_type<R: Read>(
 
         altlen.map(|c_expr| DynamicShapeKind::Expression {
             latex_expr: Some(latex_expr.to_string()),
-            c_expr: parse_cexpr(c_expr.as_str(), true).unwrap(),
+            c_expr: parse_cexpr(c_expr.as_str()).unwrap(),
         })
     } else if let Some(c_expr) = altlen {
         // only required/fixed in version >= 1.2.188(?)
         // unreachable!("only expecting the `altlen` attribute when the `len` attribute is a latex expression");
         Some(DynamicShapeKind::Expression {
             latex_expr: None,
-            c_expr: parse_cexpr(c_expr.as_str(), true).unwrap(),
+            c_expr: parse_cexpr(c_expr.as_str()).unwrap(),
         })
     } else if let Some(len) = len {
         let mut it = len.split(',').map(|v| {
@@ -932,101 +932,39 @@ fn parse_type_funcptr<R: Read>(
     })
 }
 
-mod text_parsing {
-    use crate::c_parser::{argument_exp_list, expr, identifier, line_comment, ws, Expression};
-    use nom::{
-        branch::alt,
-        bytes::complete::tag,
-        character::complete::{char, multispace1, space0, space1},
-        combinator::{recognize, value},
-        multi::{many0_count, many1_count, separated_list0},
-        sequence::{delimited, terminated, tuple},
-        Finish, Parser,
-    };
-
-    pub fn parse_type_define_text_0(input: &str) -> (bool, bool) {
-        match delimited(
-            many0_count(alt((multispace1, line_comment))),
-            alt((value(false, tag("#define")), value(true, tag("//#define")))),
-            space1,
-        )(input)
-        .finish()
-        {
-            Ok(("", is_disabled)) => (true, is_disabled),
-            _ => (false, false),
-        }
-    }
-
-    pub enum TypeDefineText1Res {
-        Simple(Expression),
-        Function(Vec<String>, String),
-    }
-
-    pub fn parse_type_define_text_1(input: &str) -> Option<TypeDefineText1Res> {
-        match alt((
-            // Simple Expresion
-            delimited(space1, expr, space0).map(TypeDefineText1Res::Simple),
-            // Function
-            terminated(
-                delimited(
-                    char('('),
-                    separated_list0(ws(char(',')), identifier),
-                    char(')'),
-                ),
-                many1_count(alt((
-                    space1,
-                    recognize(tuple((char('\\'), space0, char('\n')))),
-                ))),
-            )
-            .map(|args| {
-                TypeDefineText1Res::Function(
-                    args.into_iter().map(|s| s.to_owned()).collect(),
-                    String::new(),
-                )
-            }),
-        ))(input)
-        .finish()
-        {
-            Ok((expr, TypeDefineText1Res::Function(args, _))) => {
-                Some(TypeDefineText1Res::Function(args, expr.to_owned()))
-            }
-            Ok((_rest, r)) => {
-                debug_assert!(_rest.chars().all(|c| c.is_whitespace()));
-                Some(r)
-            }
-            Err(_) => None,
-        }
-    }
-
-    pub fn parse_type_define_text_2(input: &str) -> Vec<Expression> {
-        let (_rest, args) = delimited(char('('), ws(argument_exp_list), char(')'))(input)
-            .expect("Expected function args after inner <type> of <type category=\"define\">");
-        args
-    }
-}
-use text_parsing::*;
-
 fn parse_type_define<R: Read>(
     ctx: &mut ParseCtx<R>,
     name: Option<String>,
     requires: Option<String>,
 ) -> Option<TypeDefine> {
+    use crate::c_parser::{
+        c_with_vk_ext::{type_define_text_0, type_define_text_1, type_define_text_2},
+        TypeDefineText1Res,
+    };
+
     // TODO should we parse any comments found inside or not?
     let comment = None;
-    let ((is_simple_define, is_disabled), code) =
-        if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-            (parse_type_define_text_0(text.as_str()), text)
+    let is_disabled = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
+        if text.contains("//#define") {
+            true
         } else {
-            ctx.errors.push(Error::MissingCharacters {
-                xpath: ctx.xpath.clone(),
-            });
-            return None;
-        };
-
-    if !is_simple_define {
-        debug_assert_ne!(name, None, "code: {:?}", code);
-        return Some(TypeDefine { name: name.expect("If no name is found inside the tag <type category=\"define\"> then it must be an attribute"), comment, requires, is_disabled, value: TypeDefineValue::Code(code) });
-    }
+            match type_define_text_0(text.as_str()) {
+                Ok(()) => false,
+                Err(_) => {
+                    debug_assert_ne!(name, None, "code: {:?}", text);
+                    return Some(TypeDefine {
+                        name: name.expect("If no name is found inside the tag <type category=\"define\"> then it must be an attribute"),
+                        comment, requires, is_disabled: false, value: TypeDefineValue::Code(text)
+                    });
+                }
+            }
+        }
+    } else {
+        ctx.errors.push(Error::MissingCharacters {
+            xpath: ctx.xpath.clone(),
+        });
+        return None;
+    };
 
     let name = match ctx.events.next() {
         Some(Ok(XmlEvent::StartElement {
@@ -1047,7 +985,7 @@ fn parse_type_define<R: Read>(
     };
 
     let res1 = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-        parse_type_define_text_1(text.as_str())
+        (type_define_text_1((text.as_str())).ok())
     } else {
         None
     };
@@ -1088,7 +1026,8 @@ fn parse_type_define<R: Read>(
     };
 
     let args = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-        parse_type_define_text_2(text.as_str())
+        type_define_text_2(text.as_str())
+            .expect("Expected function args after inner <type> of <type category=\"define\">")
     } else {
         ctx.errors.push(Error::MissingCharacters {
             xpath: ctx.xpath.clone(),
@@ -1316,7 +1255,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         };
     }
     if let Some("define") = category.as_deref() {
-        let ty_define = parse_type_define(ctx, name, requires).unwrap();
+        let ty_define =
+            parse_type_define(ctx, name, requires).unwrap_or_else(|| panic!("{:?}", ctx.errors));
         // might want to ensure the next event is the tag end
         consume_current_element(ctx);
         return TypesChild::Type {
@@ -1435,7 +1375,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
 }
 
 impl FromStr for CommandQueue {
-    type Err = ();
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
@@ -1446,7 +1386,8 @@ impl FromStr for CommandQueue {
             // "protected" => Self::PROTECTED,
             "decode" => Self::VIDEO_DECODE,
             "encode" => Self::VIDEO_ENCODE,
-            _ => return Err(()),
+            "opticalflow" => Self::OPTICAL_FLOW,
+            _ => return Err(format!("Unknown value for <command queue=...> attribute {:?} is not in the set {{graphics, compute, transfer, sparse_binding, decode, encode, opticalflow}}", s)),
         })
     }
 }
@@ -1662,42 +1603,26 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
     }
 }
 
-fn parse_simple_cexpr<T: FromStr + core::ops::Not<Output = T>>(expr: &str) -> T
-where
-    <T as FromStr>::Err: core::fmt::Debug,
-{
-    if let Some(inner) = expr.strip_prefix('(') {
-        let inner = inner.strip_suffix(')').unwrap();
-        parse_simple_cexpr(inner)
-    } else if let Some(inner) = expr.strip_prefix('~') {
-        !parse_simple_cexpr::<T>(inner)
-    } else if let Some(inner) = expr.strip_suffix('U') {
-        parse_simple_cexpr(inner)
-    } else if let Some(inner) = expr.strip_suffix("ULL") {
-        parse_simple_cexpr(inner)
-    } else if let Ok(v) = expr.parse() {
-        v
-    } else {
-        todo!("{:?}", expr)
-    }
-}
-
 fn parse_enum_type_value(value: &str, type_suffix: Option<EnumType>) -> EnumTypeValue {
     match type_suffix {
-        Some(EnumType::U32) => EnumTypeValue::U32(if let Ok(v) = value.parse::<u32>() {
-            v
-        } else if let Some(v) = value.strip_prefix("0x") {
-            u32::from_str_radix(v, 16).unwrap()
-        } else {
-            parse_simple_cexpr(value)
-        }),
-        Some(EnumType::U64) => EnumTypeValue::U64(if let Ok(v) = value.parse::<u64>() {
-            v
-        } else if let Some(v) = value.strip_prefix("0x") {
-            u64::from_str_radix(v, 16).unwrap()
-        } else {
-            parse_simple_cexpr(value)
-        }),
+        Some(EnumType::U32) => {
+            if let Ok(v) = value.parse::<u32>() {
+                EnumTypeValue::U32(v)
+            } else if let Some(v) = value.strip_prefix("0x") {
+                EnumTypeValue::U32(u32::from_str_radix(v, 16).unwrap())
+            } else {
+                EnumTypeValue::Expression(parse_cexpr(value).unwrap())
+            }
+        }
+        Some(EnumType::U64) => {
+            if let Ok(v) = value.parse::<u64>() {
+                EnumTypeValue::U64(v)
+            } else if let Some(v) = value.strip_prefix("0x") {
+                EnumTypeValue::U64(u64::from_str_radix(v, 16).unwrap())
+            } else {
+                EnumTypeValue::Expression(parse_cexpr(value).unwrap())
+            }
+        }
         Some(EnumType::F32) => {
             let value = value.strip_suffix('F').unwrap_or(value);
             EnumTypeValue::F32(if let Ok(v) = value.parse::<f32>() {
