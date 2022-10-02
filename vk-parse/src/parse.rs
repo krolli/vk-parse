@@ -793,22 +793,13 @@ fn parse_type_funcptr<R: Read>(
     ctx: &mut ParseCtx<R>,
     requires: Option<String>,
 ) -> Option<TypeFunctionPointer> {
+    use crate::c_parser::c_with_vk_ext::{
+        type_funcptr_text_0, type_funcptr_text_args_start, type_funcptr_text_inter_args,
+    };
+
     let (type_name, pointer_kind) = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next()
     {
-        let trimmed_text = text.trim();
-        let trimmed_text = trimmed_text.strip_prefix("typedef").expect("").trim_start();
-        let trimmed_text = trimmed_text.strip_suffix('*').expect("").trim_end();
-        let trimmed_text = trimmed_text.strip_suffix("VKAPI_PTR").expect("").trim_end();
-        let type_str = trimmed_text.strip_suffix('(').expect("").trim_end();
-        // FIXME `type_str` can be any C type and needs full parsing, but for now just assuming is either a basic type or a non-const pointer to one
-        let (type_str, pointer_kind) =
-            type_str.strip_suffix('*').map_or((type_str, None), |rest| {
-                (
-                    rest.trim_end(),
-                    Some(PointerKind::Single { is_const: false }),
-                )
-            });
-        (type_str.to_string(), pointer_kind)
+        type_funcptr_text_0(text.as_str()).unwrap()
     } else {
         ctx.errors.push(Error::MissingCharacters {
             xpath: ctx.xpath.clone(),
@@ -851,20 +842,8 @@ fn parse_type_funcptr<R: Read>(
 
     let mut params = Vec::new();
 
-    let mut parsed_pre = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-        let trimmed_text = text.trim();
-        // empty params will have text be `)(void);`
-        if trimmed_text.ends_with(';') {
-            return Some(TypeFunctionPointer {
-                proto: fnptr_defn,
-                params,
-                requires,
-            });
-        }
-
-        let trimmed_text = trimmed_text.strip_prefix(')').expect("").trim_start();
-        let trimmed_text = trimmed_text.strip_prefix('(').expect("").trim_start();
-        parse_pre_type_tag_text(trimmed_text)
+    let parsed_pre_or_void = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
+        type_funcptr_text_args_start(text.as_str()).unwrap()
     } else {
         ctx.errors.push(Error::MissingCharacters {
             xpath: ctx.xpath.clone(),
@@ -872,57 +851,57 @@ fn parse_type_funcptr<R: Read>(
         return None;
     };
 
-    loop {
-        let type_name = match ctx.events.next() {
-            Some(Ok(XmlEvent::StartElement {
-                name: OwnedName { local_name, .. },
-                ..
-            })) if local_name == "type" => {
-                ctx.push_element(&local_name);
+    if let Some(mut parsed_pre) = parsed_pre_or_void {
+        loop {
+            let type_name = match ctx.events.next() {
+                Some(Ok(XmlEvent::StartElement {
+                    name: OwnedName { local_name, .. },
+                    ..
+                })) if local_name == "type" => {
+                    ctx.push_element(&local_name);
 
-                parse_text_element(ctx)
-            }
-            _ => {
-                ctx.errors.push(Error::MissingElement {
+                    parse_text_element(ctx)
+                }
+                _ => {
+                    ctx.errors.push(Error::MissingElement {
+                        xpath: ctx.xpath.clone(),
+                        name: String::from("type"),
+                    });
+                    return None;
+                }
+            };
+
+            if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
+                let (pointer_kind, name, next) =
+                    type_funcptr_text_inter_args(text.as_str()).unwrap();
+                let pointer_kind = parsed_pre.fix_ptr_kind(pointer_kind);
+
+                params.push(NameWithType {
+                    type_name,
+                    pointer_kind,
+                    is_struct: parsed_pre.is_struct,
+                    bitfield_size: None,
+                    array_shape: None,
+                    name: name.to_string(),
+                    dynamic_shape: None,
+                    externsync: None,
+                    optional: None,
+                    noautovalidity: None,
+                    objecttype: None,
+                    comment: None,
+                });
+                if let Some(rest) = next {
+                    parsed_pre = rest;
+                } else {
+                    break;
+                }
+            } else {
+                ctx.errors.push(Error::MissingCharacters {
                     xpath: ctx.xpath.clone(),
-                    name: String::from("type"),
                 });
                 return None;
-            }
-        };
-
-        if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-            let (pointer_kind, rest) = parse_post_type_tag_text(&text, parsed_pre);
-
-            let (name, rest) = rest.split_once(',').map_or_else(
-                || (rest.strip_suffix(");").unwrap_or(rest), None),
-                |(n, r)| (n, Some(r)),
-            );
-            params.push(NameWithType {
-                type_name,
-                pointer_kind,
-                is_struct: parsed_pre.is_struct,
-                bitfield_size: None,
-                array_shape: None,
-                name: name.to_string(),
-                dynamic_shape: None,
-                externsync: None,
-                optional: None,
-                noautovalidity: None,
-                objecttype: None,
-                comment: None,
-            });
-            if let Some(rest) = rest {
-                parsed_pre = parse_pre_type_tag_text(rest.trim());
-            } else {
-                break;
-            }
-        } else {
-            ctx.errors.push(Error::MissingCharacters {
-                xpath: ctx.xpath.clone(),
-            });
-            return None;
-        };
+            };
+        }
     }
 
     Some(TypeFunctionPointer {
@@ -985,7 +964,7 @@ fn parse_type_define<R: Read>(
     };
 
     let res1 = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-        (type_define_text_1((text.as_str())).ok())
+        type_define_text_1(text.as_str()).ok()
     } else {
         None
     };

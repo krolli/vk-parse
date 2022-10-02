@@ -293,70 +293,99 @@ pub enum TypeDefineText1Res {
     Function(Vec<String>, String),
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ParsedPreTypeTag {
+    pub is_const: bool,
+    pub is_struct: bool,
+}
+
+use crate::PointerKind;
+
+impl ParsedPreTypeTag {
+    pub fn fix_ptr_kind(&self, ptr_kind: Option<PointerKind>) -> Option<PointerKind> {
+        match (self.is_const, ptr_kind) {
+            (is_const, Some(PointerKind::Single { .. })) => Some(PointerKind::Single { is_const }),
+            (is_const, Some(PointerKind::Double { inner_is_const, .. })) => {
+                Some(PointerKind::Double {
+                    is_const,
+                    inner_is_const,
+                })
+            }
+            (true, None) => unreachable!(),
+            (false, None) => None,
+        }
+    }
+}
+
 peg::parser! {
-  pub grammar c_with_vk_ext() for str {
-      pub rule line_comment() = "//" [^ '\n']* ("\n" / ![_])
+    pub grammar c_with_vk_ext() for str {
+        use crate::PointerKind;
 
-      rule _() = ([' ' | '\t' | '\n' | '\r']+ / line_comment())*
+        pub rule line_comment() = "//" [^ '\n']* ("\n" / ![_])
 
-      rule __() = ([' ' | '\t' | '\n' | '\r']+ / line_comment())+
+        rule _() = ([' ' | '\t' | '\n' | '\r']+ / line_comment())*
 
-      pub rule identifier() -> String
+        rule __() = ([' ' | '\t' | '\n' | '\r']+ / line_comment())+
+
+        pub rule identifier() -> String
           = i:$(quiet!{[ '_' | 'a'..='z' | 'A'..='Z'] ['_' | 'a'..='z' | 'A'..='Z' | '0'..='9']*}) { i.to_owned() }
           / expected!("identifier")
 
-      pub rule type_name() -> Type
+        pub rule type_name() -> Type
           = i:identifier() { Type::Identifier(TypeIdentifier::Plain(i)) }
 
 
-      // C-expr rules
+        // C-expr rules
 
-      rule zero() -> u64 = "0" { 0 }
+        rule zero() -> u64 = "0" { 0 }
 
-      rule decimal() -> u64
+        rule decimal() -> u64
           = n:$(quiet!{['1'..='9']['0'..='9']*}) {? n.parse().or(Err("u64")) }
           / expected!("decimal constant")
 
-      rule octal() -> u64
+        rule octal() -> u64
           = "0" n:$(['0'..='7']+) {? u64::from_str_radix(n, 8).or(Err("u64")) }
 
-      rule hexadecimal() -> u64
+        rule hexadecimal() -> u64
           = "0[xX]" n:$(['0'..='9'|'a'..='f'|'A'..='F']+) {? u64::from_str_radix(n, 16).or(Err("u64")) }
 
-      rule integer_constant() -> u64
+        rule integer_constant() -> u64
           = n:(octal() / decimal() / hexadecimal() / zero()) ['u' | 'U' | 'l' | 'L' ]* { n }
 
-      rule float_constant() -> f64
+        rule float_constant() -> f64
           = n:$(['0'..='9']+ ("." ['0'..='9']*)?) ['f' | 'F' | 'l' | 'L' ]? {? n.parse().or(Err("f64")) }
 
-      rule char_constant() -> u8
+        rule char_constant() -> u8
           = "L"? "'" c:$("\\.|[^\\']"+) "'" {? c.parse::<char>().map(|c| c as u8).or(Err("u64")) }
 
-      pub rule constant() -> Constant
+        pub rule constant() -> Constant
           = (n:integer_constant() {Constant::Integer(n)}) / (n:float_constant() {Constant::Float(n)}) / (c:char_constant() {Constant::Char(c)})
 
-      rule literal() -> String
+        rule literal() -> String
           = "L"? "\"" s:$("\\.|[^\\\"]"*) "\"" { s.to_owned() }
 
-      rule primary_expr() -> Expression
-          = i:identifier() { Expression::Identifier(i) } / l:literal() { Expression::Literal(l) } / c:constant() { Expression::Constant(c) } / "(" _ e:expr() _ ")" { e }
+        rule primary_expr() -> Expression
+          = i:identifier() { Expression::Identifier(i) }
+          / l:literal() { Expression::Literal(l) }
+          / c:constant() { Expression::Constant(c) }
+          / "(" _ e:expr() _ ")" { e }
 
-      rule arithmetic() -> Expression = precedence!{
-          x:(@) _ "=" _ y:@ { Expression::Assignment(None, Box::new(x), Box::new(y)) }
-          x:(@) _ "+=" _ y:@ { Expression::Assignment(Some(BinaryOp::Addition), Box::new(x), Box::new(y)) }
-          x:(@) _ "-=" _ y:@ { Expression::Assignment(Some(BinaryOp::Subtraction), Box::new(x), Box::new(y)) }
-          x:(@) _ "*=" _ y:@ { Expression::Assignment(Some(BinaryOp::Multiplication), Box::new(x), Box::new(y)) }
-          x:(@) _ "/=" _ y:@ { Expression::Assignment(Some(BinaryOp::Division), Box::new(x), Box::new(y)) }
-          x:(@) _ "%=" _ y:@ { Expression::Assignment(Some(BinaryOp::Remainder), Box::new(x), Box::new(y)) }
-          x:(@) _ "<<=" _ y:@ { Expression::Assignment(Some(BinaryOp::LeftShift), Box::new(x), Box::new(y)) }
-          x:(@) _ ">>=" _ y:@ { Expression::Assignment(Some(BinaryOp::RightShift), Box::new(x), Box::new(y)) }
-          x:(@) _ "&=" _ y:@ { Expression::Assignment(Some(BinaryOp::BitwiseAnd), Box::new(x), Box::new(y)) }
-          x:(@) _ "|=" _ y:@ { Expression::Assignment(Some(BinaryOp::BitwiseOr), Box::new(x), Box::new(y)) }
-          x:(@) _ "^=" _ y:@ { Expression::Assignment(Some(BinaryOp::BitwiseXor), Box::new(x), Box::new(y)) }
-          x:(@) _ "&&=" _ y:@ { Expression::Assignment(Some(BinaryOp::LogicalAnd), Box::new(x), Box::new(y)) }
-          x:(@) _ "||=" _ y:@ { Expression::Assignment(Some(BinaryOp::LogicalOr), Box::new(x), Box::new(y)) }
+        rule arithmetic() -> Expression = precedence!{
+          x:@ _ "=" _ y:(@) { Expression::Assignment(None, Box::new(x), Box::new(y)) }
+          x:@ _ "+=" _ y:(@) { Expression::Assignment(Some(BinaryOp::Addition), Box::new(x), Box::new(y)) }
+          x:@ _ "-=" _ y:(@) { Expression::Assignment(Some(BinaryOp::Subtraction), Box::new(x), Box::new(y)) }
+          x:@ _ "*=" _ y:(@) { Expression::Assignment(Some(BinaryOp::Multiplication), Box::new(x), Box::new(y)) }
+          x:@ _ "/=" _ y:(@) { Expression::Assignment(Some(BinaryOp::Division), Box::new(x), Box::new(y)) }
+          x:@ _ "%=" _ y:(@) { Expression::Assignment(Some(BinaryOp::Remainder), Box::new(x), Box::new(y)) }
+          x:@ _ "<<=" _ y:(@) { Expression::Assignment(Some(BinaryOp::LeftShift), Box::new(x), Box::new(y)) }
+          x:@ _ ">>=" _ y:(@) { Expression::Assignment(Some(BinaryOp::RightShift), Box::new(x), Box::new(y)) }
+          x:@ _ "&=" _ y:(@) { Expression::Assignment(Some(BinaryOp::BitwiseAnd), Box::new(x), Box::new(y)) }
+          x:@ _ "|=" _ y:(@) { Expression::Assignment(Some(BinaryOp::BitwiseOr), Box::new(x), Box::new(y)) }
+          x:@ _ "^=" _ y:(@) { Expression::Assignment(Some(BinaryOp::BitwiseXor), Box::new(x), Box::new(y)) }
+          x:@ _ "&&=" _ y:(@) { Expression::Assignment(Some(BinaryOp::LogicalAnd), Box::new(x), Box::new(y)) }
+          x:@ _ "||=" _ y:(@) { Expression::Assignment(Some(BinaryOp::LogicalOr), Box::new(x), Box::new(y)) }
           --
-          x:(@) _ "?" _ y:expr() _ ":" _ z:@ { Expression::TernaryIfElse(Box::new(x), Box::new(y), Box::new(z)) }
+          x:@ _ "?" _ y:expr() _ ":" _ z:(@) { Expression::TernaryIfElse(Box::new(x), Box::new(y), Box::new(z)) }
           --
           x:(@) _ "||" _ y:@ { wrap_binary((x, BinaryOp::LogicalOr, y)) }
           --
@@ -397,37 +426,64 @@ peg::parser! {
           "++" _ x:(@) { wrap_unary((UnaryOp::Increment(FixOrder::Prefix), x)) }
           "--" _ x:(@) { wrap_unary((UnaryOp::Decrement(FixOrder::Prefix), x)) }
           --
-          x:@ "." y:identifier() { Expression::Member(Box::new(x), y) }
-          x:@ "->" y:identifier() { Expression::PointMember(Box::new(x), y) }
-          x:@ "[" _ y:expr() _ "]" { Expression::ArrayElement(Box::new(x), Box::new(y)) }
-          x:@ "(" _ y:(arithmetic() ** (_ "," _)) _ ("," _)? ")" { Expression::FunctionCall(Box::new(x), y.into_boxed_slice()) }
-          x:@ "++" { wrap_unary((UnaryOp::Increment(FixOrder::Postfix), x)) }
-          x:@ "--" { wrap_unary((UnaryOp::Decrement(FixOrder::Postfix), x)) }
+          x:(@) "." y:identifier() { Expression::Member(Box::new(x), y) }
+          x:(@) "->" y:identifier() { Expression::PointMember(Box::new(x), y) }
+          x:(@) "[" _ y:expr() _ "]" { Expression::ArrayElement(Box::new(x), Box::new(y)) }
+          x:(@) "(" _ y:(arithmetic() ** (_ "," _)) _ ("," _)? ")" { Expression::FunctionCall(Box::new(x), y.into_boxed_slice()) }
+          x:(@) "++" { wrap_unary((UnaryOp::Increment(FixOrder::Postfix), x)) }
+          x:(@) "--" { wrap_unary((UnaryOp::Decrement(FixOrder::Postfix), x)) }
           --
           p:primary_expr() { p }
-      }
+        }
 
-      pub rule expr() -> Expression
+        pub rule expr() -> Expression
           = v:(arithmetic() ++ (_ "," _)) { comma_expr_or_single(v) }
 
 
-      // C vk.xml exts
-      rule define_macro_value() -> String
+        // C vk.xml exts
+        rule define_macro_value() -> String
           = l:$([^ '\\' | '\n']*) ** ("\\" [' ' | '\t' | '\r']* "\n") { l.concat() }
 
-      /// parses the text between <type category="define"> ... <name>
-      pub rule type_define_text_0()
+        /// handle const_ptr / struct info, can be 'const', 'struct', or 'const struct'
+        pub rule pre_type_tag_text() -> ParsedPreTypeTag
+            = _ c:"const"? _ s:"struct"? _ { ParsedPreTypeTag { is_const: c.is_some(), is_struct: s.is_some() } }
+
+        // handle pointer info, can be '*' or '**' or '* const*'
+        pub rule post_type_tag_text() -> Option<PointerKind>
+            = _ p:("*" _ b:(c:"const"? _ "*" { c })? { b })? {
+                match p {
+                    Some(None) => Some(PointerKind::Single { is_const: false }),
+                    Some(Some(None)) => Some(PointerKind::Double { is_const: false, inner_is_const: false }),
+                    Some(Some(Some(()))) => Some(PointerKind::Double { is_const: false, inner_is_const: true }),
+                    None => None,
+                }
+            }
+
+        /// parses the text between <type category="define"> ... <name>
+        pub rule type_define_text_0()
           = _ "#define" __
 
-      /// parses the text between </name> ... (<type> or </type>)
-      pub rule type_define_text_1() -> TypeDefineText1Res
+        /// parses the text between </name> ... (<type> or </type>)
+        pub rule type_define_text_1() -> TypeDefineText1Res
           = __ e:expr() _ { TypeDefineText1Res::Simple(e) }
           / "(" _ args:(identifier() ** (_ "," _)) _ ("," _)? ")" [' ' | '\t' | '\r']+ v:define_macro_value() { TypeDefineText1Res::Function(args, v) }
 
-      /// parses the text between </type>....</type>
-      pub rule type_define_text_2() -> Box<[Expression]>
+        /// parses the text between </type>....</type>
+        pub rule type_define_text_2() -> Box<[Expression]>
           = "(" _ v:(arithmetic() ** (_ "," _)) _ ("," _)? ")" _ { v.into_boxed_slice() }
 
+
+        /// parses the text between <type category="funcptr"> ... <name>
+        pub rule type_funcptr_text_0() -> (String, Option<PointerKind>)
+          = _ "typedef" __ id:identifier() _ ptr:"*"? _ "(" _ "VKAPI_PTR" _ "*" _ { (id, ptr.map(|()| PointerKind::Single { is_const: false })) }
+        //   = _ "typedef" __ rty:type_name() _ "(" _ "VKAPI_PTR" _ "*" _ { rty }
+
+        /// parses the text between </name> ... (<type> or </type>)
+        pub rule type_funcptr_text_args_start() -> Option<ParsedPreTypeTag>
+          = _ ")" _ "(" _ v:("void" _ ")" _ ";" _ { None } / p:pre_type_tag_text() {Some(p)} ) { v }
+
+        pub rule type_funcptr_text_inter_args() -> (Option<PointerKind>, String, Option<ParsedPreTypeTag>)
+          = _ post:post_type_tag_text() _ name:identifier() _ pre:( "," p:pre_type_tag_text() {Some(p)} / ")" _ ";" _ { None } ) { (post, name, pre) }
   }
 }
 
