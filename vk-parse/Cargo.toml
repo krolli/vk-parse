@@ -9,7 +9,7 @@ documentation = "https://docs.rs/vk-parse"
 repository = "https://github.com/krolli/vk-parse"
 keywords = ["vulkan", "parser"]
 categories = ["parser-implementations", "rendering::graphics-api"]
-edition = "2018"
+edition = "2021"
 
 [features]
 serialize = ["serde", "serde_derive"]
@@ -17,6 +17,7 @@ vkxml-convert = ["vkxml"]
 
 [dependencies]
 xml-rs = "^0.8"
+logos = "^0.12"
 peg = "^0.8"
 bitflags = "^1.3"
 

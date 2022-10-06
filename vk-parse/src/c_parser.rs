@@ -1,5 +1,6 @@
-use core::num::NonZeroU32;
-use std::fmt::Display;
+use core::num::{NonZeroU32, NonZeroU8};
+use std::fmt;
+use std::{borrow::Cow, fmt::Display, ops::Deref};
 // Using the C grammer from https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1124.pdf
 
 // C Type Decleration types
@@ -39,35 +40,11 @@ pub enum TypeSpecifier {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 
 pub enum Type {
-    Void,
-    // The signedness of char & int, and short, long, & long long dont't appear at all in the refrence, but keeping for technical correctness
-    Char {
-        signed: Option<bool>,
-    },
-    Short {
-        signed: Option<bool>,
-    },
-    Int {
-        signed: Option<bool>,
-    },
-    Long {
-        signed: Option<bool>,
-    },
-    LongLong {
-        signed: Option<bool>,
-    },
-    Float,
-    Double,
-    ExactInteger {
-        bits: u32,
-        signed: bool,
-    },
-    Identifier(TypeIdentifier),
+    Specifier(TypeSpecifier),
     Pointer {
-        is_const: bool,
         pointee_ty: Box<Type>,
     },
-    Array(Option<NonZeroU32>, Box<Type>),
+    Array(Box<Type>, Option<NonZeroU32>),
     Function {
         return_ty: Box<Type>,
         name: String,
@@ -135,17 +112,9 @@ pub enum BinaryOp {
     LogicalOr,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+use logos::Lexer;
 
-pub enum Constant {
-    Char(u8),
-    Integer(u64),
-    Float(f64),
-}
-
-// SAFETY: Floating point constants must be finite (NaN is a macro)
-impl Eq for Constant {}
+use crate::c_lexer::{Constant, Token};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -186,8 +155,34 @@ fn comma_expr_or_single(mut v: Vec<Expression>) -> Expression {
     }
 }
 
-impl Display for Type {
+impl Display for TypeIdentifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeIdentifier::Plain(ident) => write!(f, "{}", ident),
+            TypeIdentifier::Struct(ident) => write!(f, "struct {}", ident),
+            TypeIdentifier::Union(ident) => write!(f, "union {}", ident),
+            TypeIdentifier::Enum(ident) => write!(f, "enum {}", ident),
+        }
+    }
+}
+
+impl Display for TypeSpecifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeSpecifier::Void => write!(f, "void"),
+            TypeSpecifier::Char => write!(f, "char"),
+            TypeSpecifier::Short => write!(f, "short"),
+            TypeSpecifier::Int => write!(f, "int"),
+            TypeSpecifier::Long => write!(f, "long"),
+            TypeSpecifier::Float => write!(f, "float"),
+            TypeSpecifier::Double => write!(f, "double"),
+            TypeSpecifier::Identifier(ident) => write!(f, "{}", ident),
+        }
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
@@ -286,83 +281,149 @@ impl Display for Expression {
     }
 }
 
-// C vk.xml text parsing helpers
-#[derive(Debug)]
-pub enum TypeDefineText1Res {
-    Simple(Expression),
-    Function(Vec<String>, String),
+#[derive(Debug, Clone, PartialEq)]
+pub enum VkXMLToken<'a> {
+    C(Token<'a>),
+    TextTag {
+        name: Cow<'a, str>,
+        text: Cow<'a, str>,
+    },
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct ParsedPreTypeTag {
-    pub is_const: bool,
-    pub is_struct: bool,
-}
-
-use crate::PointerKind;
-
-impl ParsedPreTypeTag {
-    pub fn fix_ptr_kind(&self, ptr_kind: Option<PointerKind>) -> Option<PointerKind> {
-        match (self.is_const, ptr_kind) {
-            (is_const, Some(PointerKind::Single { .. })) => Some(PointerKind::Single { is_const }),
-            (is_const, Some(PointerKind::Double { inner_is_const, .. })) => {
-                Some(PointerKind::Double {
-                    is_const,
-                    inner_is_const,
-                })
-            }
-            (true, None) => unreachable!(),
-            (false, None) => None,
+impl<'a> fmt::Display for VkXMLToken<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VkXMLToken::C(token) => write!(f, "{}", token),
+            VkXMLToken::TextTag { name, text } => write!(f, "<{0}>{1}</{0}>", name, text),
         }
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct VkXMLTokens<'s, 'a>(pub Cow<'s, [VkXMLToken<'a>]>);
+
+impl<'s, 'a> Deref for VkXMLTokens<'s, 'a> {
+    type Target = [VkXMLToken<'a>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> FromIterator<VkXMLToken<'a>> for VkXMLTokens<'static, 'a> {
+    fn from_iter<T: IntoIterator<Item = VkXMLToken<'a>>>(iter: T) -> Self {
+        VkXMLTokens(Cow::Owned(iter.into_iter().collect()))
+    }
+}
+
+impl<'s, 'a> peg::Parse for VkXMLTokens<'s, 'a> {
+    type PositionRepr = usize;
+    fn start(&self) -> usize {
+        0
+    }
+
+    fn is_eof(&self, pos: usize) -> bool {
+        pos >= self.len()
+    }
+
+    fn position_repr(&self, pos: usize) -> usize {
+        pos
+    }
+}
+
+impl<'input: 's, 's, 'a> peg::ParseElem<'input> for VkXMLTokens<'s, 'a> {
+    type Element = &'s VkXMLToken<'a>;
+
+    fn parse_elem(&'input self, pos: usize) -> peg::RuleResult<Self::Element> {
+        match self[pos..].first() {
+            Some(c) => peg::RuleResult::Matched(pos + 1, c),
+            None => peg::RuleResult::Failed,
+        }
+    }
+}
+
+impl<'s, 'a> peg::ParseLiteral for VkXMLTokens<'s, 'a> {
+    fn parse_string_literal(&self, pos: usize, literal: &str) -> peg::RuleResult<()> {
+        if let Some(VkXMLToken::C(tok)) = self.get(pos) {
+            let literal_token =
+                Token::from_literal(literal).unwrap_or_else(|| panic!("I'm dum {:?}", literal));
+            if &literal_token == tok {
+                peg::RuleResult::Matched(pos + 1, ())
+            } else {
+                peg::RuleResult::Failed
+            }
+        } else {
+            peg::RuleResult::Failed
+        }
+    }
+}
+
+impl<'input, 's, 'a: 'input> peg::ParseSlice<'input> for VkXMLTokens<'s, 'a> {
+    type Slice = &'input [VkXMLToken<'a>];
+    fn parse_slice(&'input self, p1: usize, p2: usize) -> Self::Slice {
+        &self[p1..p2]
+    }
+}
+
+// C vk.xml text parsing helpers
+use crate::ArrayLength;
+
+#[derive(Debug)]
+enum BitFieldSizeOrArrayshape {
+    BitfieldSize(NonZeroU8),
+    ArrayShape(Vec<ArrayLength>),
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct ParsedPreTypeTag {
+    pub is_const: bool,
+    pub is_struct: bool,
+}
+
 peg::parser! {
-    pub grammar c_with_vk_ext() for str {
+    pub grammar c_with_vk_ext<'s, 'a>() for VkXMLTokens<'s, 'a> {
         use crate::PointerKind;
+        use crate::TypeDefine;
+        use crate::TypeDefineValue;
+        use crate::NameWithType;
+        use crate::TypeFunctionPointer;
 
-        pub rule line_comment() = "//" [^ '\n']* ("\n" / ![_])
+        pub rule line_comment() = [VkXMLToken::C(Token::Comment)] "\n"?
 
-        rule _() = ([' ' | '\t' | '\n' | '\r']+ / line_comment())*
+        rule _() = [VkXMLToken::C(Token::Whitespace | Token::NewLine | Token::Comment)]*
 
-        rule __() = ([' ' | '\t' | '\n' | '\r']+ / line_comment())+
+        rule __() = [VkXMLToken::C(Token::Whitespace | Token::NewLine | Token::Comment)]*
 
         pub rule identifier() -> String
-          = i:$(quiet!{[ '_' | 'a'..='z' | 'A'..='Z'] ['_' | 'a'..='z' | 'A'..='Z' | '0'..='9']*}) { i.to_owned() }
-          / expected!("identifier")
+          = i:[VkXMLToken::C(Token::Identifier(i))] { i.to_string() }
+
+        rule type_identifier() -> TypeIdentifier
+          = "struct" i:identifier() { TypeIdentifier::Struct(i) }
+          / "union" i:identifier() { TypeIdentifier::Union(i) }
+          / "enum" i:identifier() { TypeIdentifier::Enum(i) }
+          / i:identifier() { TypeIdentifier::Plain(i) }
+
+        rule type_specifier() -> TypeSpecifier
+          = i:type_identifier() { TypeSpecifier::Identifier(i) }
+          / "void" { TypeSpecifier::Void }
+          / "char" { TypeSpecifier::Char }
+          / "short" { TypeSpecifier::Short }
+          / "int" { TypeSpecifier::Int }
+          / "long" { TypeSpecifier::Long }
+          / "float" { TypeSpecifier::Float }
+          / "double" { TypeSpecifier::Double }
 
         pub rule type_name() -> Type
-          = i:identifier() { Type::Identifier(TypeIdentifier::Plain(i)) }
+          = ty:type_specifier() { Type::Specifier(ty) }
 
 
         // C-expr rules
 
-        rule zero() -> u64 = "0" { 0 }
-
-        rule decimal() -> u64
-          = n:$(quiet!{['1'..='9']['0'..='9']*}) {? n.parse().or(Err("u64")) }
-          / expected!("decimal constant")
-
-        rule octal() -> u64
-          = "0" n:$(['0'..='7']+) {? u64::from_str_radix(n, 8).or(Err("u64")) }
-
-        rule hexadecimal() -> u64
-          = "0[xX]" n:$(['0'..='9'|'a'..='f'|'A'..='F']+) {? u64::from_str_radix(n, 16).or(Err("u64")) }
-
-        rule integer_constant() -> u64
-          = n:(octal() / decimal() / hexadecimal() / zero()) ['u' | 'U' | 'l' | 'L' ]* { n }
-
-        rule float_constant() -> f64
-          = n:$(['0'..='9']+ ("." ['0'..='9']*)?) ['f' | 'F' | 'l' | 'L' ]? {? n.parse().or(Err("f64")) }
-
-        rule char_constant() -> u8
-          = "L"? "'" c:$("\\.|[^\\']"+) "'" {? c.parse::<char>().map(|c| c as u8).or(Err("u64")) }
-
         pub rule constant() -> Constant
-          = (n:integer_constant() {Constant::Integer(n)}) / (n:float_constant() {Constant::Float(n)}) / (c:char_constant() {Constant::Char(c)})
+          = c:[VkXMLToken::C(Token::Constant(c))] { c.clone() }
 
         rule literal() -> String
-          = "L"? "\"" s:$("\\.|[^\\\"]"*) "\"" { s.to_owned() }
+          = l:[VkXMLToken::C(Token::Literal(l))] { l.to_string() }
 
         rule primary_expr() -> Expression
           = i:identifier() { Expression::Identifier(i) }
@@ -382,8 +443,6 @@ peg::parser! {
           x:@ _ "&=" _ y:(@) { Expression::Assignment(Some(BinaryOp::BitwiseAnd), Box::new(x), Box::new(y)) }
           x:@ _ "|=" _ y:(@) { Expression::Assignment(Some(BinaryOp::BitwiseOr), Box::new(x), Box::new(y)) }
           x:@ _ "^=" _ y:(@) { Expression::Assignment(Some(BinaryOp::BitwiseXor), Box::new(x), Box::new(y)) }
-          x:@ _ "&&=" _ y:(@) { Expression::Assignment(Some(BinaryOp::LogicalAnd), Box::new(x), Box::new(y)) }
-          x:@ _ "||=" _ y:(@) { Expression::Assignment(Some(BinaryOp::LogicalOr), Box::new(x), Box::new(y)) }
           --
           x:@ _ "?" _ y:expr() _ ":" _ z:(@) { Expression::TernaryIfElse(Box::new(x), Box::new(y), Box::new(z)) }
           --
@@ -442,111 +501,104 @@ peg::parser! {
 
         // C vk.xml exts
         rule define_macro_value() -> String
-          = l:$([^ '\\' | '\n']*) ** ("\\" [' ' | '\t' | '\r']* "\n") { l.concat() }
+          = l:$([^ VkXMLToken::C(Token::BackSlash | Token::NewLine)]*) ** ("\\" [VkXMLToken::C(Token::Whitespace)]* "\n") { l.into_iter().flat_map(|l| l.iter().map(|v| v.to_string())).collect() }
 
         /// handle const_ptr / struct info, can be 'const', 'struct', or 'const struct'
-        pub rule pre_type_tag_text() -> ParsedPreTypeTag
+        rule pre_type_tag_text() -> ParsedPreTypeTag
             = _ c:"const"? _ s:"struct"? _ { ParsedPreTypeTag { is_const: c.is_some(), is_struct: s.is_some() } }
 
         // handle pointer info, can be '*' or '**' or '* const*'
-        pub rule post_type_tag_text() -> Option<PointerKind>
+        rule post_type_tag_text() -> Option<PointerKind>
             = _ p:("*" _ b:(c:"const"? _ "*" { c })? { b })? {
                 match p {
-                    Some(None) => Some(PointerKind::Single { is_const: false }),
-                    Some(Some(None)) => Some(PointerKind::Double { is_const: false, inner_is_const: false }),
-                    Some(Some(Some(()))) => Some(PointerKind::Double { is_const: false, inner_is_const: true }),
+                    Some(None) => Some(PointerKind::Single),
+                    Some(Some(None)) => Some(PointerKind::Double { inner_is_const: false }),
+                    Some(Some(Some(()))) => Some(PointerKind::Double { inner_is_const: true }),
                     None => None,
                 }
             }
 
-        /// parses the text between <type category="define"> ... <name>
-        pub rule type_define_text_0()
-          = _ "#define" __
+        rule typed_tag<T: Display>(name_text: rule<T>) -> NameWithType
+            = pre:pre_type_tag_text() type_name:([VkXMLToken::TextTag { name, text } if name == "type"] { text }) pointer_kind:post_type_tag_text() name:name_text() {
+                NameWithType {
+                    type_name: type_name.to_string(),
+                    pointer_kind,
+                    is_const: pre.is_const,
+                    is_struct: pre.is_struct,
+                    name: name.to_string(),
+                    ..NameWithType::default()
+                }
+            }
 
-        /// parses the text between </name> ... (<type> or </type>)
-        pub rule type_define_text_1() -> TypeDefineText1Res
-          = __ e:expr() _ { TypeDefineText1Res::Simple(e) }
-          / "(" _ args:(identifier() ** (_ "," _)) _ ("," _)? ")" [' ' | '\t' | '\r']+ v:define_macro_value() { TypeDefineText1Res::Function(args, v) }
+        rule name_tag() -> Cow<'a, str> = [VkXMLToken::TextTag { name, text } if name == "name"] { text.to_owned() }
 
-        /// parses the text between </type>....</type>
-        pub rule type_define_text_2() -> Box<[Expression]>
-          = "(" _ v:(arithmetic() ** (_ "," _)) _ ("," _)? ")" _ { v.into_boxed_slice() }
+        /// parses the content of <member> ... </member> or <proto> ... </proto> or <param> ... </param>
+        pub rule name_with_type() -> NameWithType
+            = typed:typed_tag(<name_tag()>) bitOrArr:(
+                ":" bitfield_size:([VkXMLToken::C(Token::Constant(Constant::Integer(v)))] { NonZeroU8::new((*v).try_into().unwrap()).unwrap() }) { BitFieldSizeOrArrayshape::BitfieldSize(bitfield_size) }
+                / array_shape:("[" n:(
+                    [VkXMLToken::C(Token::Constant(Constant::Integer(v)))] { ArrayLength::Static(NonZeroU32::new((*v).try_into().unwrap()).unwrap()) }
+                    / [VkXMLToken::TextTag { name, text } if name == "enum"] { ArrayLength::Constant(name.to_string()) }
+                ) "]" { n })+ { BitFieldSizeOrArrayshape::ArrayShape(array_shape) }
+            )? comment:([VkXMLToken::TextTag { name, text } if name == "comment"] { text })? {
+                let (bitfield_size, array_shape) = match bitOrArr {
+                    Some(BitFieldSizeOrArrayshape::BitfieldSize(size)) => (Some(size), None),
+                    Some(BitFieldSizeOrArrayshape::ArrayShape(shape)) => (None, Some(shape)),
+                    None => (None, None),
+                };
+                NameWithType {
+                    bitfield_size,
+                    array_shape,
+                    comment: comment.map(|s| s.to_string()),
+                    ..typed
+                }
+            }
+
+        /// <type category="define"> ... </type>
+        pub rule type_define(name_attr: Option<&str>, requires_attr: Option<&str>) -> TypeDefine
+            = _ is_disabled:("#define" {false} / "//#define"? {true}) __ name:([VkXMLToken::TextTag { name, text } if name == "name"] { text }) value:(
+                // / "(" _ params:(identifier() ** (_ "," _)) _ ("," _)? ")" [VkXMLToken::C(Token::Whitespace)]* e:define_macro_value() {
+                "(" params:(identifier() ** ",") ")" e:$([VkXMLToken::C(_)]+) {
+                    TypeDefineValue::FunctionDefine {
+                        params: params.into_boxed_slice(),
+                        expression: e.iter().map(|v| v.to_string()).collect(),
+                    }
+                }
+                / __ e:expr() _ { TypeDefineValue::Expression(e) }
+                / _ macro_name:([VkXMLToken::TextTag { name, text } if name == "type"] { text }) "(" _ args:(arithmetic() ** (_ "," _)) _ ("," _)? ")" _ { TypeDefineValue::MacroFunctionCall {
+                    name: macro_name.to_string(),
+                    args: args.into_boxed_slice(),
+                } }
+            ) { TypeDefine {
+                name: name.to_string(),
+                comment: None,
+                requires: requires_attr.map(|s| s.to_string()),
+                is_disabled,
+                value,
+            } }
+            / l:$([VkXMLToken::C(_)]+) {
+                name_attr.unwrap_or_else(|| panic!("{:?}", l));
+                TypeDefine {
+                name: name_attr.map(|s| s.to_string()).expect("If no name is found inside the tag <type category=\"define\"> then it must be an attribute"),
+                comment: None, requires: requires_attr.map(|s| s.to_string()), is_disabled: false, value: TypeDefineValue::Code(l.iter().map(|v| v.to_string()).collect())
+            } }
 
 
-        /// parses the text between <type category="funcptr"> ... <name>
-        pub rule type_funcptr_text_0() -> (String, Option<PointerKind>)
-          = _ "typedef" __ id:identifier() _ ptr:"*"? _ "(" _ "VKAPI_PTR" _ "*" _ { (id, ptr.map(|()| PointerKind::Single { is_const: false })) }
-        //   = _ "typedef" __ rty:type_name() _ "(" _ "VKAPI_PTR" _ "*" _ { rty }
-
-        /// parses the text between </name> ... (<type> or </type>)
-        pub rule type_funcptr_text_args_start() -> Option<ParsedPreTypeTag>
-          = _ ")" _ "(" _ v:("void" _ ")" _ ";" _ { None } / p:pre_type_tag_text() {Some(p)} ) { v }
-
-        pub rule type_funcptr_text_inter_args() -> (Option<PointerKind>, String, Option<ParsedPreTypeTag>)
-          = _ post:post_type_tag_text() _ name:identifier() _ pre:( "," p:pre_type_tag_text() {Some(p)} / ")" _ ";" _ { None } ) { (post, name, pre) }
+        /// <type category="funcptr"> ... </type>
+        pub rule type_funcptr(requires_attr: Option<&str>) -> TypeFunctionPointer
+          = _ "typedef" __ ty_name:type_specifier() _ ptr:"*"? _ "(" _ [VkXMLToken::C(Token::Identifier(id)) if id == "VKAPI_PTR"] _ "*" _ name:([VkXMLToken::TextTag { name, text } if name == "name"] { text }) ")" "(" _ params:(
+            "void" ")" ";" { Vec::new() }
+            / params:(typed_tag(<identifier()>) ** (_ "," _)) ")" ";" { params }
+          ) { TypeFunctionPointer { proto: NameWithType { name: name.to_string(), type_name: ty_name.to_string(), pointer_kind: ptr.map(|()| PointerKind::Single), ..NameWithType::default() }, params, requires: requires_attr.map(|s| s.to_string()) } }
   }
 }
 
-pub use c_with_vk_ext::expr as parse_cexpr;
-
-#[cfg(test)]
-mod test_peg {
-    use super::{
-        c_with_vk_ext::{type_define_text_1, type_define_text_2},
-        *,
-    };
-
-    #[test]
-    fn test_expr() {
-        assert_eq!(
-            parse_cexpr("2* size").unwrap(),
-            Expression::Binary(
-                BinaryOp::Multiplication,
-                Box::new(Expression::Constant(Constant::Integer(2))),
-                Box::new(Expression::Identifier("size".to_string()))
-            )
-        )
-    }
-
-    #[test]
-    fn test_rasterization_sample_expr() {
-        assert_eq!(
-            parse_cexpr("(rasterizationSamples + 31) / 32").unwrap(),
-            Expression::Binary(
-                BinaryOp::Division,
-                Box::new(Expression::Binary(
-                    BinaryOp::Addition,
-                    Box::new(Expression::Identifier("rasterizationSamples".to_string())),
-                    Box::new(Expression::Constant(Constant::Integer(31))),
-                )),
-                Box::new(Expression::Constant(Constant::Integer(32))),
-            )
-        )
-    }
-
-    #[test]
-    fn test_vk_macro_fn_define() {
-        let res = type_define_text_1("(major, minor, patch) \\\n    ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))").unwrap();
-        match res {
-            TypeDefineText1Res::Simple(_) => panic!(),
-            TypeDefineText1Res::Function(args, value) => {
-                assert_eq!(args.as_slice(), &["major", "minor", "patch"]);
-                assert_eq!(value.trim_start(), "((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))");
-            }
-        }
-    }
-
-    #[test]
-    fn test_vk_macro_fn_define_cast() {
-        let res =
-            type_define_text_2("(1, 0, 0) // Patch version should always be set to 0").unwrap();
-        assert_eq!(
-            &*res,
-            &[
-                Expression::Constant(Constant::Integer(1)),
-                Expression::Constant(Constant::Integer(0)),
-                Expression::Constant(Constant::Integer(0))
-            ]
-        )
-    }
+// pub use c_with_vk_ext::expr as parse_cexpr;
+// pub fn parse_cexpr(text: &str) -> Result<Expression, impl std::error::Error> {
+pub fn parse_cexpr(text: &str) -> Option<Expression> {
+    let tokens = Lexer::new(text)
+        .into_iter()
+        .map(|token: Token| VkXMLToken::<'static>::C(token.into_owned()))
+        .collect();
+    c_with_vk_ext::expr(&tokens).ok()
 }

@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+use core::num::{NonZeroU32, NonZeroU8};
 
 use crate::c_parser::Expression;
 
@@ -424,7 +425,7 @@ pub struct TypeDefine {
 pub enum TypeDefineValue {
     Expression(Expression),
     FunctionDefine {
-        params: Vec<String>,
+        params: Box<[String]>,
         expression: String,
     },
     MacroFunctionCall {
@@ -1402,7 +1403,7 @@ pub enum FormatCompressionType {
 #[non_exhaustive]
 pub enum FormatComponentBits {
     Compressed,
-    Bits(core::num::NonZeroU8),
+    Bits(NonZeroU8),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1436,20 +1437,15 @@ pub enum FormatComponentName {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub enum PointerKind {
-    Single {
-        is_const: bool,
-    },
-    Double {
-        is_const: bool,
-        inner_is_const: bool,
-    },
+    Single,
+    Double { inner_is_const: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub enum ArrayLength {
-    Static(core::num::NonZeroUsize),
+    Static(NonZeroU32),
     Constant(String),
 }
 
@@ -1459,7 +1455,7 @@ pub enum ArrayLength {
 pub enum DynamicLength {
     NullTerminated,
     // FIXME only found in VkAccelerationStructureBuildGeometryInfoKHR->ppGeometries, is this a mistake?
-    Static(core::num::NonZeroUsize),
+    Static(NonZeroU32),
     Parameterized(String),
     ParameterizedField { parameter: String, field: String },
 }
@@ -1507,6 +1503,12 @@ pub struct NameWithType {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub is_const: bool,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub pointer_kind: Option<PointerKind>,
 
     #[cfg_attr(
@@ -1519,7 +1521,7 @@ pub struct NameWithType {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub bitfield_size: Option<core::num::NonZeroU8>,
+    pub bitfield_size: Option<NonZeroU8>,
 
     #[cfg_attr(
         feature = "serialize",

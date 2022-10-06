@@ -14,6 +14,7 @@ mod parse;
 mod convert;
 mod types;
 
+mod c_lexer;
 mod c_parser;
 
 #[cfg(feature = "vkxml-convert")]

@@ -1,9 +1,11 @@
+use logos::Lexer;
+use std::borrow::Cow;
 use std::io::Read;
 use std::str::FromStr;
-use xml::name::OwnedName;
 use xml::reader::XmlEvent;
 
-use crate::c_parser::parse_cexpr;
+use crate::c_lexer::Token;
+use crate::c_parser::{parse_cexpr, VkXMLToken, VkXMLTokens};
 use crate::types::*;
 
 type XmlEvents<R> = xml::reader::Events<R>;
@@ -39,6 +41,34 @@ fn xpath_attribute(xpath: &str, attribute_name: &str) -> String {
     xpath.push_str(attribute_name);
     xpath.push(']');
     xpath
+}
+
+fn tokenize<R: Read>(ctx: &mut ParseCtx<R>) -> VkXMLTokens<'static, 'static> {
+    let mut tokens = Vec::new();
+    while let Some(Ok(e)) = ctx.events.next() {
+        match e {
+            XmlEvent::StartElement { name, .. } => {
+                let name = name.local_name.as_str();
+                ctx.push_element(name);
+                let text = parse_text_element(ctx);
+                tokens.push(VkXMLToken::TextTag {
+                    name: Cow::Owned(name.to_string()),
+                    text: Cow::Owned(text),
+                })
+            }
+            XmlEvent::Characters(text) => tokens.extend(
+                Lexer::new(text.as_str())
+                    .into_iter()
+                    .map(|token: Token| VkXMLToken::<'static>::C(token.into_owned())),
+            ),
+            XmlEvent::EndElement { .. } => {
+                ctx.pop_element();
+                break;
+            }
+            _ => {}
+        }
+    }
+    VkXMLTokens(Cow::Owned(tokens))
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -425,82 +455,6 @@ fn parse_tag<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> O
     })
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-struct ParsedPreTypeTag {
-    is_const: bool,
-    is_struct: bool,
-}
-
-fn parse_pre_type_tag_text(text: &str) -> ParsedPreTypeTag {
-    // handle const_ptr / struct info, can be 'const', 'struct', or 'const struct'
-    let trimmed_text = text.trim();
-    let (is_const, trimmed_text) = trimmed_text
-        .strip_prefix("const")
-        .map_or((false, trimmed_text), |t| (true, t.trim_start()));
-    let (is_struct, trimmed_text) = trimmed_text
-        .strip_prefix("struct")
-        .map_or((false, trimmed_text), |t| (true, t.trim_start()));
-    assert_eq!(trimmed_text, "");
-    ParsedPreTypeTag {
-        is_const,
-        is_struct,
-    }
-}
-
-fn parse_post_type_tag_text(
-    text: &str,
-    parsed_pre: ParsedPreTypeTag,
-) -> (Option<PointerKind>, &str) {
-    let ParsedPreTypeTag { is_const, .. } = parsed_pre;
-    // handle pointer info, can be '*' or '**' or '* const*'
-    let trimmed_text = text.trim();
-    if let Some(trimmed_text) = trimmed_text.strip_prefix('*') {
-        let trimmed_text = trimmed_text.trim_start();
-        if let Some(trimmed_text) = trimmed_text.strip_prefix("const") {
-            (
-                Some(PointerKind::Double {
-                    is_const,
-                    inner_is_const: true,
-                }),
-                trimmed_text
-                    .trim_start()
-                    .strip_prefix('*')
-                    .expect("In post type tag text a '* const' must be followed by '*'")
-                    .trim_start(),
-            )
-        } else if let Some(trimmed_text) = trimmed_text.strip_prefix('*') {
-            (
-                Some(PointerKind::Double {
-                    is_const,
-                    inner_is_const: false,
-                }),
-                trimmed_text.trim_start(),
-            )
-        } else {
-            (Some(PointerKind::Single { is_const }), trimmed_text)
-        }
-    } else {
-        (None, trimmed_text)
-    }
-}
-
-fn parse_array_shape_text(text: &str, shape_vec: &mut Vec<ArrayLength>) -> bool {
-    if let Some(mut trimmed_text) = text.trim().strip_prefix('[') {
-        while let Some((n, rest)) = trimmed_text.split_once(']') {
-            shape_vec.push(ArrayLength::Static(n.parse().unwrap()));
-            if let Some(rest) = rest.trim_start().strip_prefix('[') {
-                trimmed_text = rest;
-            } else {
-                assert_eq!(rest, "");
-                return false;
-            }
-        }
-        true
-    } else {
-        false
-    }
-}
-
 fn parse_name_with_type<R: Read>(
     ctx: &mut ParseCtx<R>,
     len: Option<String>,
@@ -582,180 +536,18 @@ fn parse_name_with_type<R: Read>(
             v
         ),
     };
-    let mut event = ctx.events.next();
-    if let Some(Ok(XmlEvent::Whitespace(_))) = event {
-        event = ctx.events.next();
-    }
-    let parsed_pre = if let Some(Ok(XmlEvent::Characters(text))) = event {
-        event = ctx.events.next();
 
-        parse_pre_type_tag_text(&text)
-    } else {
-        Default::default()
-    };
-
-    let type_name = match event {
-        Some(Ok(XmlEvent::StartElement {
-            name: OwnedName { local_name, .. },
-            ..
-        })) if local_name == "type" => {
-            ctx.push_element(&local_name);
-            let text = parse_text_element(ctx);
-            event = ctx.events.next();
-
-            text
-        }
-        _ => {
-            ctx.errors.push(Error::MissingElement {
-                xpath: ctx.xpath.clone(),
-                name: String::from("type"),
-            });
-            return None;
-        }
-    };
-
-    if let Some(Ok(XmlEvent::Whitespace(_))) = event {
-        event = ctx.events.next();
-    }
-    let pointer_kind = if let Some(Ok(XmlEvent::Characters(text))) = event {
-        event = ctx.events.next();
-
-        let (kind, rest) = parse_post_type_tag_text(&text, parsed_pre);
-        assert_eq!(rest, "");
-        kind
-    } else {
-        None
-    };
-
-    let name = match event {
-        Some(Ok(XmlEvent::StartElement {
-            name: OwnedName { local_name, .. },
-            ..
-        })) if local_name == "name" => {
-            ctx.push_element(&local_name);
-            let text = parse_text_element(ctx);
-            event = ctx.events.next();
-
-            text
-        }
-        _ => {
-            ctx.errors.push(Error::MissingElement {
-                xpath: ctx.xpath.clone(),
-                name: String::from("name"),
-            });
-            return None;
-        }
-    };
-
-    let (bitfield_size, mut array_shape, mut hungry) =
-        if let Some(Ok(XmlEvent::Characters(text))) = event {
-            event = ctx.events.next();
-
-            let trimmed_text = text.trim();
-            //  handle bitfield / statically-sized arrays
-            if let Some(rest) = trimmed_text.strip_prefix(':') {
-                (
-                    Some(
-                        rest.trim_start()
-                            .parse()
-                            .expect("after bitfield's ':' only a non-zero integer is expected"),
-                    ),
-                    None,
-                    false,
-                )
-            }
-            // TODO is there anything else that could be here
-            else {
-                let mut shape = Vec::new();
-                let hungry = parse_array_shape_text(trimmed_text, &mut shape);
-                (None, Some(shape), hungry)
-            }
-        } else {
-            (None, None, false)
-        };
-
-    while hungry {
-        let array_shape_vec = array_shape.as_mut().unwrap();
-        //
-        match event {
-            Some(Ok(XmlEvent::StartElement {
-                name: OwnedName { local_name, .. },
-                ..
-            })) if local_name == "enum" => {
-                ctx.push_element(&local_name);
-                let text = parse_text_element(ctx);
-                event = ctx.events.next();
-
-                array_shape_vec.push(ArrayLength::Constant(text));
-            }
-            _ => {
-                ctx.errors.push(Error::MissingElement {
-                    xpath: ctx.xpath.clone(),
-                    name: String::from("enum"),
-                });
-                return None;
-            }
-        };
-        //
-        if let Some(Ok(XmlEvent::Characters(text))) = event {
-            event = ctx.events.next();
-
-            let trimmed_text = text
-                .trim()
-                .strip_prefix(']')
-                .expect("Expected a ']' to denote the end of an element of a shape");
-            hungry = parse_array_shape_text(trimmed_text.trim_start(), array_shape_vec);
-        } else {
-            ctx.errors.push(Error::MissingCharacters {
-                xpath: ctx.xpath.clone(),
-            });
-            return None;
-        };
-    }
-
-    let mut comment = None;
-    while let Some(Ok(e)) = event {
-        match e {
-            XmlEvent::Whitespace(_) => {}
-            XmlEvent::Characters(text) => {
-                if !text.trim().is_empty() {
-                    todo!("wasn't prepared for characters {}", text)
-                }
-            }
-            XmlEvent::StartElement {
-                name: elem_name, ..
-            } => {
-                let elem_name = elem_name.local_name.as_str();
-                ctx.push_element(elem_name);
-                match elem_name {
-                    "comment" => {
-                        let text = parse_text_element(ctx);
-                        comment.replace(text);
-                    }
-                    _ => {
-                        ctx.errors.push(Error::UnexpectedElement {
-                            xpath: ctx.xpath.clone(),
-                            name: String::from(elem_name),
-                        });
-                        consume_current_element(ctx);
-                    }
-                }
-            }
-            XmlEvent::EndElement { .. } => {
-                ctx.pop_element();
-                break;
-            }
-            _ => {}
-        }
-        event = ctx.events.next();
-    }
+    use crate::c_parser::c_with_vk_ext::name_with_type;
+    let tokens = tokenize(ctx);
+    let base =
+        name_with_type(&tokens).unwrap_or_else(|e| panic!("{} with tokens: {:?}", e, &tokens));
 
     let externsync = externsync.map(|v| {
         if v == "true" {
             ExternSyncKind::Value
         } else {
             let it = v.split(',').map(|value| {
-                let v = value.strip_prefix(name.as_str()).expect("");
+                let v = value.strip_prefix(base.name.as_str()).expect("");
                 if let Some(field) = v.strip_prefix("->") {
                     field
                 } else if let Some(field) = v.strip_prefix("[].") {
@@ -774,18 +566,12 @@ fn parse_name_with_type<R: Read>(
     });
 
     Some(NameWithType {
-        type_name,
-        pointer_kind,
-        is_struct: parsed_pre.is_struct,
-        bitfield_size,
-        name,
-        array_shape,
         dynamic_shape,
         externsync,
         optional,
         noautovalidity,
         objecttype,
-        comment,
+        ..base
     })
 }
 
@@ -793,122 +579,12 @@ fn parse_type_funcptr<R: Read>(
     ctx: &mut ParseCtx<R>,
     requires: Option<String>,
 ) -> Option<TypeFunctionPointer> {
-    use crate::c_parser::c_with_vk_ext::{
-        type_funcptr_text_0, type_funcptr_text_args_start, type_funcptr_text_inter_args,
-    };
-
-    let (type_name, pointer_kind) = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next()
-    {
-        type_funcptr_text_0(text.as_str()).unwrap()
-    } else {
-        ctx.errors.push(Error::MissingCharacters {
-            xpath: ctx.xpath.clone(),
-        });
-        return None;
-    };
-
-    let name = match ctx.events.next() {
-        Some(Ok(XmlEvent::StartElement {
-            name: OwnedName { local_name, .. },
-            ..
-        })) if local_name == "name" => {
-            ctx.push_element(&local_name);
-
-            parse_text_element(ctx)
-        }
-        _ => {
-            ctx.errors.push(Error::MissingElement {
-                xpath: ctx.xpath.clone(),
-                name: String::from("name"),
-            });
-            return None;
-        }
-    };
-
-    let fnptr_defn = NameWithType {
-        name,
-        type_name,
-        pointer_kind,
-        is_struct: false,
-        bitfield_size: None,
-        array_shape: None,
-        dynamic_shape: None,
-        externsync: None,
-        optional: None,
-        noautovalidity: None,
-        objecttype: None,
-        comment: None,
-    };
-
-    let mut params = Vec::new();
-
-    let parsed_pre_or_void = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-        type_funcptr_text_args_start(text.as_str()).unwrap()
-    } else {
-        ctx.errors.push(Error::MissingCharacters {
-            xpath: ctx.xpath.clone(),
-        });
-        return None;
-    };
-
-    if let Some(mut parsed_pre) = parsed_pre_or_void {
-        loop {
-            let type_name = match ctx.events.next() {
-                Some(Ok(XmlEvent::StartElement {
-                    name: OwnedName { local_name, .. },
-                    ..
-                })) if local_name == "type" => {
-                    ctx.push_element(&local_name);
-
-                    parse_text_element(ctx)
-                }
-                _ => {
-                    ctx.errors.push(Error::MissingElement {
-                        xpath: ctx.xpath.clone(),
-                        name: String::from("type"),
-                    });
-                    return None;
-                }
-            };
-
-            if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-                let (pointer_kind, name, next) =
-                    type_funcptr_text_inter_args(text.as_str()).unwrap();
-                let pointer_kind = parsed_pre.fix_ptr_kind(pointer_kind);
-
-                params.push(NameWithType {
-                    type_name,
-                    pointer_kind,
-                    is_struct: parsed_pre.is_struct,
-                    bitfield_size: None,
-                    array_shape: None,
-                    name: name.to_string(),
-                    dynamic_shape: None,
-                    externsync: None,
-                    optional: None,
-                    noautovalidity: None,
-                    objecttype: None,
-                    comment: None,
-                });
-                if let Some(rest) = next {
-                    parsed_pre = rest;
-                } else {
-                    break;
-                }
-            } else {
-                ctx.errors.push(Error::MissingCharacters {
-                    xpath: ctx.xpath.clone(),
-                });
-                return None;
-            };
-        }
-    }
-
-    Some(TypeFunctionPointer {
-        proto: fnptr_defn,
-        params,
-        requires,
-    })
+    use crate::c_parser::c_with_vk_ext::type_funcptr;
+    let tokens = tokenize(ctx);
+    Some(
+        type_funcptr(&tokens, requires.as_deref())
+            .unwrap_or_else(|e| panic!("{} with tokens: {:?}", e, &tokens)),
+    )
 }
 
 fn parse_type_define<R: Read>(
@@ -916,114 +592,13 @@ fn parse_type_define<R: Read>(
     name: Option<String>,
     requires: Option<String>,
 ) -> Option<TypeDefine> {
-    use crate::c_parser::{
-        c_with_vk_ext::{type_define_text_0, type_define_text_1, type_define_text_2},
-        TypeDefineText1Res,
-    };
-
+    use crate::c_parser::c_with_vk_ext::type_define;
+    let tokens = tokenize(ctx);
     // TODO should we parse any comments found inside or not?
-    let comment = None;
-    let is_disabled = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-        if text.contains("//#define") {
-            true
-        } else {
-            match type_define_text_0(text.as_str()) {
-                Ok(()) => false,
-                Err(_) => {
-                    debug_assert_ne!(name, None, "code: {:?}", text);
-                    return Some(TypeDefine {
-                        name: name.expect("If no name is found inside the tag <type category=\"define\"> then it must be an attribute"),
-                        comment, requires, is_disabled: false, value: TypeDefineValue::Code(text)
-                    });
-                }
-            }
-        }
-    } else {
-        ctx.errors.push(Error::MissingCharacters {
-            xpath: ctx.xpath.clone(),
-        });
-        return None;
-    };
-
-    let name = match ctx.events.next() {
-        Some(Ok(XmlEvent::StartElement {
-            name: OwnedName { local_name, .. },
-            ..
-        })) if local_name == "name" => {
-            ctx.push_element(&local_name);
-
-            parse_text_element(ctx)
-        }
-        _ => {
-            ctx.errors.push(Error::MissingElement {
-                xpath: ctx.xpath.clone(),
-                name: String::from("name"),
-            });
-            return None;
-        }
-    };
-
-    let res1 = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-        type_define_text_1(text.as_str()).ok()
-    } else {
-        None
-    };
-
-    if let Some(res1) = res1 {
-        let value = match res1 {
-            TypeDefineText1Res::Simple(value) => TypeDefineValue::Expression(value),
-            TypeDefineText1Res::Function(params, expr) => TypeDefineValue::FunctionDefine {
-                params,
-                expression: expr,
-            },
-        };
-        return Some(TypeDefine {
-            name,
-            comment,
-            requires,
-            is_disabled,
-            value,
-        });
-    }
-
-    let macro_name = match ctx.events.next() {
-        Some(Ok(XmlEvent::StartElement {
-            name: OwnedName { local_name, .. },
-            ..
-        })) if local_name == "type" => {
-            ctx.push_element(&local_name);
-
-            parse_text_element(ctx)
-        }
-        _ => {
-            ctx.errors.push(Error::MissingElement {
-                xpath: ctx.xpath.clone(),
-                name: String::from("type"),
-            });
-            return None;
-        }
-    };
-
-    let args = if let Some(Ok(XmlEvent::Characters(text))) = ctx.events.next() {
-        type_define_text_2(text.as_str())
-            .expect("Expected function args after inner <type> of <type category=\"define\">")
-    } else {
-        ctx.errors.push(Error::MissingCharacters {
-            xpath: ctx.xpath.clone(),
-        });
-        return None;
-    };
-    let value = TypeDefineValue::MacroFunctionCall {
-        name: macro_name,
-        args,
-    };
-    Some(TypeDefine {
-        name,
-        comment,
-        requires,
-        is_disabled,
-        value,
-    })
+    Some(
+        type_define(&tokens, name.as_deref(), requires.as_deref())
+            .unwrap_or_else(|e| panic!("{} with tokens: {:?}", e, &tokens)),
+    )
 }
 
 fn parse_type_member<R: Read>(
@@ -1226,8 +801,6 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
 
     if let Some("funcpointer") = category.as_deref() {
         let fn_ptr_spec = parse_type_funcptr(ctx, requires).unwrap();
-        // might want to ensure the next event is the tag end
-        consume_current_element(ctx);
         return TypesChild::Type {
             definition: Box::new(TypeDefinition::FunctionPointer(fn_ptr_spec)),
             comment,
@@ -1236,8 +809,6 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     if let Some("define") = category.as_deref() {
         let ty_define =
             parse_type_define(ctx, name, requires).unwrap_or_else(|| panic!("{:?}", ctx.errors));
-        // might want to ensure the next event is the tag end
-        consume_current_element(ctx);
         return TypesChild::Type {
             definition: Box::new(TypeDefinition::Define(ty_define)),
             comment,

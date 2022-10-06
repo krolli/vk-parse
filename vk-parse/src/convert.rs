@@ -224,7 +224,7 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             define.value = Some(e.to_string());
                         }
                         TypeDefineValue::FunctionDefine { params, expression } => {
-                            define.parameters = params;
+                            define.parameters = params.to_vec();
                             define.c_expression = Some(expression);
                         }
                         TypeDefineValue::MacroFunctionCall { name, args } => {
@@ -448,6 +448,7 @@ impl From<NameWithType> for vkxml::Field {
             noautovalidity,
             objecttype: _,
             comment,
+            is_const,
         } = nt;
         vkxml::Field {
             array: if dynamic_shape.is_some() {
@@ -467,13 +468,7 @@ impl From<NameWithType> for vkxml::Field {
                 _ => None,
             },
             errorcodes: None,
-            is_const: matches!(
-                pointer_kind,
-                Some(
-                    PointerKind::Single { is_const: true }
-                        | PointerKind::Double { is_const: true, .. }
-                )
-            ),
+            is_const,
             is_struct,
             sync: externsync.map(|es| match es {
                 ExternSyncKind::Value => "true".to_string(),
