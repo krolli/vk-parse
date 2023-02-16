@@ -463,6 +463,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut objtypeenum = None;
     let mut bitvalues = None;
     let mut comment = None;
+    let mut deprecated = None;
 
     let mut code = String::new();
     let mut markup = Vec::new();
@@ -480,7 +481,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         "allowduplicate" => allowduplicate = Some(a.value),
         "objtypeenum"    => objtypeenum    = Some(a.value),
         "bitvalues"      => bitvalues      = Some(a.value),
-        "comment"        => comment        = Some(a.value)
+        "comment"        => comment        = Some(a.value),
+        "deprecated"     => deprecated     = Some(a.value),
     }
 
     match_elements_combine_text! {ctx, attributes, code,
@@ -496,6 +498,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let mut values = None;
             let mut limittype = None;
             let mut objecttype = None;
+            let mut deprecated = None;
             let mut code = String::new();
             let mut markup = Vec::new();
             match_attributes!{ctx, a in attributes,
@@ -509,7 +512,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "validextensionstructs" => validextensionstructs = Some(a.value),
                 "values"                => values                = Some(a.value),
                 "limittype"             => limittype             = Some(a.value),
-                "objecttype"            => objecttype            = Some(a.value)
+                "objecttype"            => objecttype            = Some(a.value),
+                "deprecated"            => deprecated            = Some(a.value),
             }
             match_elements_combine_text!{ctx, code,
                 "type" => {
@@ -546,6 +550,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 objecttype,
                 code,
                 markup,
+                deprecated,
             }))
         },
         "comment" => members.push(TypeMember::Comment(parse_text_element(ctx))),
@@ -579,6 +584,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         objtypeenum,
         bitvalues,
         comment,
+        deprecated,
         spec: if members.len() > 0 {
             TypeSpec::Members(members)
         } else if code.len() > 0 {
@@ -773,6 +779,7 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut positive = true;
     let mut protect = None;
     let mut alias = None;
+    let mut deprecated = None;
 
     match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
@@ -796,7 +803,8 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         "bitpos" => bitpos = Some(a.value),
         "extnumber" => extnumber = Some(a.value),
         "protect" => protect = Some(a.value),
-        "alias" => alias = Some(a.value)
+        "alias" => alias = Some(a.value),
+        "deprecated" => deprecated = Some(a.value),
     }
 
     unwrap_attribute!(ctx, enum, name);
@@ -878,6 +886,7 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         api,
         protect,
         spec,
+        deprecated,
     })
 }
 

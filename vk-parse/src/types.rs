@@ -267,6 +267,12 @@ pub struct Type {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub spec: TypeSpec,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub deprecated: Option<String>,
 }
 
 /// The contents of a type definition.
@@ -400,6 +406,12 @@ pub struct TypeMemberDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub markup: Vec<TypeMemberMarkup>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub deprecated: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -548,6 +560,12 @@ pub struct Enum {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub spec: EnumSpec,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub deprecated: Option<String>,
 }
 
 /// An enum specifier, which assigns a value to the enum.
