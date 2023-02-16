@@ -499,6 +499,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let mut limittype = None;
             let mut objecttype = None;
             let mut deprecated = None;
+            let mut api = None;
             let mut code = String::new();
             let mut markup = Vec::new();
             match_attributes!{ctx, a in attributes,
@@ -514,6 +515,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "limittype"             => limittype             = Some(a.value),
                 "objecttype"            => objecttype            = Some(a.value),
                 "deprecated"            => deprecated            = Some(a.value),
+                "api"                   => api                   = Some(a.value),
             }
             match_elements_combine_text!{ctx, code,
                 "type" => {
@@ -551,6 +553,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 code,
                 markup,
                 deprecated,
+                api,
             }))
         },
         "comment" => members.push(TypeMember::Comment(parse_text_element(ctx))),
@@ -607,6 +610,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
     let mut cmdbufferlevel = None;
     let mut pipeline = None;
     let mut comment = None;
+    let mut api = None;
 
     match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
@@ -619,7 +623,8 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         "videocoding" => videocoding = Some(a.value),
         "cmdbufferlevel" => cmdbufferlevel = Some(a.value),
         "pipeline" => pipeline = Some(a.value),
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
+        "api" => api = Some(a.value),
     }
 
     if let Some(alias) = alias {
@@ -685,6 +690,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 let mut objecttype = None;
                 let mut validstructs = None;
                 let mut stride = None;
+                let mut api = None;
 
                 match_attributes!{ctx, a in attributes,
                     "len"            => len            = Some(a.value),
@@ -695,6 +701,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     "objecttype"     => objecttype     = Some(a.value),
                     "validstructs"   => validstructs   = Some(a.value),
                     "stride"         => stride         = Some(a.value),
+                    "api"            => api            = Some(a.value),
                 }
 
                 let validstructs = validstructs.map_or(
@@ -715,7 +722,8 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                         objecttype,
                         definition,
                         validstructs,
-                        stride
+                        stride,
+                        api,
                     });
                 }
             },
@@ -762,6 +770,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             description,
             implicitexternsyncparams,
             code,
+            api,
         }))
     }
 }

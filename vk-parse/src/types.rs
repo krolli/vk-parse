@@ -412,6 +412,12 @@ pub struct TypeMemberDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub deprecated: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub api: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -747,6 +753,12 @@ pub struct CommandDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub code: String,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub api: Option<String>,
 }
 
 /// Parameter for this Vulkan function.
@@ -817,6 +829,12 @@ pub struct CommandParam {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub stride: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub api: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
