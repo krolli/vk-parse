@@ -463,6 +463,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut objtypeenum = None;
     let mut bitvalues = None;
     let mut comment = None;
+    let mut deprecated = None;
 
     let mut code = String::new();
     let mut markup = Vec::new();
@@ -480,7 +481,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         "allowduplicate" => allowduplicate = Some(a.value),
         "objtypeenum"    => objtypeenum    = Some(a.value),
         "bitvalues"      => bitvalues      = Some(a.value),
-        "comment"        => comment        = Some(a.value)
+        "comment"        => comment        = Some(a.value),
+        "deprecated"     => deprecated     = Some(a.value),
     }
 
     match_elements_combine_text! {ctx, attributes, code,
@@ -496,6 +498,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let mut values = None;
             let mut limittype = None;
             let mut objecttype = None;
+            let mut deprecated = None;
+            let mut api = None;
             let mut code = String::new();
             let mut markup = Vec::new();
             match_attributes!{ctx, a in attributes,
@@ -509,7 +513,9 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "validextensionstructs" => validextensionstructs = Some(a.value),
                 "values"                => values                = Some(a.value),
                 "limittype"             => limittype             = Some(a.value),
-                "objecttype"            => objecttype            = Some(a.value)
+                "objecttype"            => objecttype            = Some(a.value),
+                "deprecated"            => deprecated            = Some(a.value),
+                "api"                   => api                   = Some(a.value),
             }
             match_elements_combine_text!{ctx, code,
                 "type" => {
@@ -544,6 +550,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 values,
                 limittype,
                 objecttype,
+                deprecated,
+                api,
                 code,
                 markup,
             }))
@@ -578,6 +586,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         allowduplicate,
         objtypeenum,
         bitvalues,
+        deprecated,
         comment,
         spec: if members.len() > 0 {
             TypeSpec::Members(members)
@@ -601,6 +610,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
     let mut cmdbufferlevel = None;
     let mut pipeline = None;
     let mut comment = None;
+    let mut api = None;
 
     match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
@@ -613,7 +623,8 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         "videocoding" => videocoding = Some(a.value),
         "cmdbufferlevel" => cmdbufferlevel = Some(a.value),
         "pipeline" => pipeline = Some(a.value),
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
+        "api" => api = Some(a.value),
     }
 
     if let Some(alias) = alias {
@@ -679,6 +690,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                 let mut objecttype = None;
                 let mut validstructs = None;
                 let mut stride = None;
+                let mut api = None;
 
                 match_attributes!{ctx, a in attributes,
                     "len"            => len            = Some(a.value),
@@ -689,6 +701,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     "objecttype"     => objecttype     = Some(a.value),
                     "validstructs"   => validstructs   = Some(a.value),
                     "stride"         => stride         = Some(a.value),
+                    "api"            => api            = Some(a.value),
                 }
 
                 let validstructs = validstructs.map_or(
@@ -709,7 +722,8 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                         objecttype,
                         definition,
                         validstructs,
-                        stride
+                        stride,
+                        api,
                     });
                 }
             },
@@ -755,6 +769,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             alias,
             description,
             implicitexternsyncparams,
+            api,
             code,
         }))
     }
@@ -773,6 +788,7 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut positive = true;
     let mut protect = None;
     let mut alias = None;
+    let mut deprecated = None;
 
     match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
@@ -796,7 +812,8 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         "bitpos" => bitpos = Some(a.value),
         "extnumber" => extnumber = Some(a.value),
         "protect" => protect = Some(a.value),
-        "alias" => alias = Some(a.value)
+        "alias" => alias = Some(a.value),
+        "deprecated" => deprecated = Some(a.value),
     }
 
     unwrap_attribute!(ctx, enum, name);
@@ -877,6 +894,7 @@ fn parse_enum<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         type_suffix,
         api,
         protect,
+        deprecated,
         spec,
     })
 }
@@ -989,6 +1007,7 @@ fn parse_extension<R: Read>(
     let mut provisional = None;
     let mut specialuse = None;
     let mut sortorder = None;
+    let mut depends = None;
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
@@ -1008,7 +1027,8 @@ fn parse_extension<R: Read>(
         "provisional"  => provisional   = Some(a.value),
         "obsoletedby"  => obsoletedby   = Some(a.value),
         "specialuse"   => specialuse    = Some(a.value),
-        "sortorder"    => sortorder     = Some(a.value)
+        "sortorder"    => sortorder     = Some(a.value),
+        "depends"      => depends       = Some(a.value),
     }
 
     let number = match number {
@@ -1061,6 +1081,7 @@ fn parse_extension<R: Read>(
         provisional,
         specialuse,
         sortorder,
+        depends,
         children,
     })
 }
@@ -1074,6 +1095,7 @@ fn parse_extension_item_require<R: Read>(
     let mut extension = None;
     let mut feature = None;
     let mut comment = None;
+    let mut depends = None;
     let mut items = Vec::new();
 
     match_attributes! {ctx, a in attributes,
@@ -1081,7 +1103,8 @@ fn parse_extension_item_require<R: Read>(
         "profile"   => profile   = Some(a.value),
         "extension" => extension = Some(a.value),
         "feature"   => feature   = Some(a.value),
-        "comment"   => comment   = Some(a.value)
+        "comment"   => comment   = Some(a.value),
+        "depends"   => depends   = Some(a.value),
     }
 
     while let Some(Ok(e)) = ctx.events.next() {
@@ -1109,6 +1132,7 @@ fn parse_extension_item_require<R: Read>(
         extension,
         feature,
         comment,
+        depends,
         items,
     }
 }

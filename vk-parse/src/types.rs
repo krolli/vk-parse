@@ -267,6 +267,12 @@ pub struct Type {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub spec: TypeSpec,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub deprecated: Option<String>,
 }
 
 /// The contents of a type definition.
@@ -388,6 +394,18 @@ pub struct TypeMemberDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub objecttype: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub deprecated: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub api: Option<String>,
 
     #[cfg_attr(
         feature = "serialize",
@@ -542,6 +560,12 @@ pub struct Enum {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub protect: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub deprecated: Option<String>,
 
     #[cfg_attr(
         feature = "serialize",
@@ -728,6 +752,12 @@ pub struct CommandDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub api: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub code: String,
 }
 
@@ -799,6 +829,12 @@ pub struct CommandParam {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub stride: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub api: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -959,6 +995,12 @@ pub struct Extension {
     )]
     pub sortorder: Option<i64>,
 
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub depends: Option<String>,
+
     /// The items which make up this extension.
     #[cfg_attr(
         feature = "serialize",
@@ -1006,6 +1048,12 @@ pub enum ExtensionChild {
             serde(default, skip_serializing_if = "is_default")
         )]
         comment: Option<String>,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        depends: Option<String>,
 
         /// The items which form this require block.
         items: Vec<InterfaceItem>,
