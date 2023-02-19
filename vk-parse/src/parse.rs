@@ -989,6 +989,7 @@ fn parse_extension<R: Read>(
     let mut provisional = None;
     let mut specialuse = None;
     let mut sortorder = None;
+    let mut depends = None;
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
@@ -1008,7 +1009,8 @@ fn parse_extension<R: Read>(
         "provisional"  => provisional   = Some(a.value),
         "obsoletedby"  => obsoletedby   = Some(a.value),
         "specialuse"   => specialuse    = Some(a.value),
-        "sortorder"    => sortorder     = Some(a.value)
+        "sortorder"    => sortorder     = Some(a.value),
+        "depends"      => depends       = Some(a.value),
     }
 
     let number = match number {
@@ -1062,6 +1064,7 @@ fn parse_extension<R: Read>(
         specialuse,
         sortorder,
         children,
+        depends,
     })
 }
 
@@ -1074,6 +1077,7 @@ fn parse_extension_item_require<R: Read>(
     let mut extension = None;
     let mut feature = None;
     let mut comment = None;
+    let mut depends = None;
     let mut items = Vec::new();
 
     match_attributes! {ctx, a in attributes,
@@ -1081,7 +1085,8 @@ fn parse_extension_item_require<R: Read>(
         "profile"   => profile   = Some(a.value),
         "extension" => extension = Some(a.value),
         "feature"   => feature   = Some(a.value),
-        "comment"   => comment   = Some(a.value)
+        "comment"   => comment   = Some(a.value),
+        "depends"   => depends   = Some(a.value),
     }
 
     while let Some(Ok(e)) = ctx.events.next() {
@@ -1110,6 +1115,7 @@ fn parse_extension_item_require<R: Read>(
         feature,
         comment,
         items,
+        depends,
     }
 }
 

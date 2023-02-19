@@ -965,6 +965,12 @@ pub struct Extension {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub children: Vec<ExtensionChild>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub depends: Option<String>,
 }
 
 /// A part of an extension declaration.
@@ -1009,6 +1015,12 @@ pub enum ExtensionChild {
 
         /// The items which form this require block.
         items: Vec<InterfaceItem>,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        depends: Option<String>,
     },
 
     /// Indicates the items this extension removes.
