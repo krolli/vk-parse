@@ -37,44 +37,22 @@ jobs:
       # with this approach so we're keeping them in separate crate.
       # See https://github.com/rust-lang/api-guidelines/pull/227#discussion_r527081699
       - name: Update to minimal versions
-        uses: actions-rs/cargo@v1
-        with:
-          toolchain: nightly
-          command: update
-          args: -Z minimal-versions
+        run: cargo +nightly update -Z minimal-versions
 
       - name: 'Build'
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --manifest-path vk-parse/Cargo.toml --features ""
+        run: cargo build --manifest-path vk-parse/Cargo.toml --features ""
 
       - name: 'Build (features: serialize)'
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --manifest-path vk-parse/Cargo.toml --features "serialize"
+        run: cargo build --manifest-path vk-parse/Cargo.toml --features "serialize"
 
       - name: 'Build (features: vkxml-convert)'
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --manifest-path vk-parse/Cargo.toml --features "vkxml-convert"
+        run: cargo build --manifest-path vk-parse/Cargo.toml --features "vkxml-convert"
 
       - name: 'Build (features: serialize,vkxml-convert)'
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --manifest-path vk-parse/Cargo.toml --features "serialize,vkxml-convert"
+        run: cargo build --manifest-path vk-parse/Cargo.toml --features "serialize,vkxml-convert"
 
       - name: 'Build all'
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --all
+        run: cargo build --all
 
       - name: 'Test all'
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all
+        run: cargo test --all
