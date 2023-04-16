@@ -1001,6 +1001,7 @@ fn parse_extension<R: Read>(
     let mut requires = None;
     let mut requires_core = None;
     let mut supported = None;
+    let mut ratified = None;
     let mut deprecatedby = None;
     let mut promotedto = None;
     let mut obsoletedby = None;
@@ -1022,6 +1023,7 @@ fn parse_extension<R: Read>(
         "requires"     => requires      = Some(a.value),
         "requiresCore" => requires_core = Some(a.value),
         "supported"    => supported     = Some(a.value),
+        "ratified"     => ratified      = Some(a.value),
         "deprecatedby" => deprecatedby  = Some(a.value),
         "promotedto"   => promotedto    = Some(a.value),
         "provisional"  => provisional   = Some(a.value),
@@ -1075,6 +1077,7 @@ fn parse_extension<R: Read>(
         requires,
         requires_core,
         supported,
+        ratified,
         deprecatedby,
         promotedto,
         obsoletedby,

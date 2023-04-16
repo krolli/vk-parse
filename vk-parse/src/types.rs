@@ -959,6 +959,12 @@ pub struct Extension {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub ratified: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub deprecatedby: Option<String>,
 
     /// Whether this extension was promoted to core, and in which version.
