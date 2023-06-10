@@ -323,7 +323,8 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
         "extensions" => registry.0.push(parse_extensions(ctx, attributes)),
         "formats" => registry.0.push(parse_formats(ctx)),
         "spirvextensions" => registry.0.push(parse_spirvextensions(ctx, attributes)),
-        "spirvcapabilities" => registry.0.push(parse_spirvcapabilities(ctx, attributes))
+        "spirvcapabilities" => registry.0.push(parse_spirvcapabilities(ctx, attributes)),
+        "sync" => registry.0.push(parse_sync(ctx, attributes))
     }
 
     Ok(registry)
@@ -1545,6 +1546,142 @@ fn parse_enable<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -
     } else {
         unimplemented!();
     }
+}
+
+fn parse_sync<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> RegistryChild {
+    let mut comment = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "syncstage" => if let Some(v) = parse_syncstage(ctx, attributes) {
+            children.push(v);
+        },
+        "syncaccess" => if let Some(v) = parse_syncaccess(ctx, attributes) {
+            children.push(v);
+        },
+        "syncpipeline" => if let Some(v) = parse_syncpipeline(ctx, attributes) {
+            children.push(v);
+        }
+    }
+
+    RegistryChild::Sync(Sync { comment, children })
+}
+
+fn parse_syncsupport<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<SyncSupport> {
+    let mut queues = None;
+    let mut stage = None;
+    match_attributes! { ctx, a in attributes,
+        "queues" => queues = Some(a.value),
+        "stage" => stage = Some(a.value),
+    }
+    consume_current_element(ctx);
+    Some(SyncSupport { queues, stage })
+}
+
+fn parse_syncequivalent<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<SyncEquivalent> {
+    let mut stage = None;
+    let mut access = None;
+    match_attributes! { ctx, a in attributes,
+        "stage" => stage = Some(a.value),
+        "access" => access = Some(a.value),
+    }
+    consume_current_element(ctx);
+    Some(SyncEquivalent { stage, access })
+}
+
+fn parse_syncstage<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<SyncChild> {
+    let mut name = None;
+    let mut alias = None;
+    let mut syncsupport = None;
+    let mut syncequivalent = None;
+
+    match_attributes! { ctx, a in attributes,
+        "name" => name = Some(a.value),
+        "alias" => alias = Some(a.value),
+    }
+
+    match_elements! {ctx, attributes,
+        "syncsupport" => syncsupport = parse_syncsupport(ctx, attributes),
+        "syncequivalent" => syncequivalent = parse_syncequivalent(ctx, attributes)
+    }
+
+    unwrap_attribute!(ctx, syncstage, name);
+
+    Some(SyncChild::Stage(SyncStage {
+        name,
+        alias,
+        syncsupport,
+        syncequivalent,
+    }))
+}
+
+fn parse_syncaccess<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<SyncChild> {
+    let mut name = None;
+    let mut alias = None;
+    let mut comment = None;
+    let mut syncsupport = None;
+    let mut syncequivalent = None;
+
+    match_attributes! { ctx, a in attributes,
+        "name" => name = Some(a.value),
+        "alias" => alias = Some(a.value),
+    }
+
+    match_elements! { ctx, attributes,
+        "comment" => comment = Some(parse_text_element(ctx)),
+        "syncsupport" => syncsupport = parse_syncsupport(ctx, attributes),
+        "syncequivalent" => syncequivalent = parse_syncequivalent(ctx, attributes)
+    }
+
+    unwrap_attribute!(ctx, syncaccess, name);
+
+    consume_current_element(ctx);
+    Some(SyncChild::Access(SyncAccess {
+        name,
+        alias,
+        comment,
+        syncsupport,
+        syncequivalent,
+    }))
+}
+
+fn parse_syncpipeline<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<SyncChild> {
+    let mut order = None;
+    let mut before = None;
+    let mut after = None;
+    match_attributes! {ctx, a in attributes,
+        "order" => order = Some(a.value),
+        "before" => before = Some(a.value),
+        "after" => after = Some(a.value),
+    }
+
+    let text = parse_text_element(ctx);
+
+    Some(SyncChild::Pipeline(SyncPipeline {
+        order,
+        before,
+        after,
+        text,
+    }))
 }
 
 fn parse_integer<R: Read>(ctx: &mut ParseCtx<R>, text: &str) -> Option<i64> {

@@ -104,6 +104,8 @@ pub enum RegistryChild {
     SpirvExtensions(SpirvExtensions),
 
     SpirvCapabilities(SpirvCapabilities),
+
+    Sync(Sync),
 }
 
 pub type VendorIds = CommentedChildren<VendorId>;
@@ -1249,6 +1251,64 @@ pub type SpirvExtensions = CommentedChildren<SpirvExtension>;
 
 pub type SpirvCapability = SpirvExtOrCap;
 pub type SpirvCapabilities = CommentedChildren<SpirvCapability>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum SyncChild {
+    Stage(SyncStage),
+    Access(SyncAccess),
+    Pipeline(SyncPipeline),
+}
+
+pub type Sync = CommentedChildren<SyncChild>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct SyncSupport {
+    pub queues: Option<String>,
+    pub stage: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct SyncEquivalent {
+    pub stage: Option<String>,
+    pub access: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct SyncStage {
+    pub name: String,
+    pub alias: Option<String>,
+    pub syncsupport: Option<SyncSupport>,
+    pub syncequivalent: Option<SyncEquivalent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct SyncAccess {
+    pub name: String,
+    pub alias: Option<String>,
+    pub comment: Option<String>,
+    pub syncsupport: Option<SyncSupport>,
+    pub syncequivalent: Option<SyncEquivalent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct SyncPipeline {
+    pub order: Option<String>,
+    pub before: Option<String>,
+    pub after: Option<String>,
+    pub text: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
