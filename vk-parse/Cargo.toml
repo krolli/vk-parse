@@ -18,7 +18,7 @@ vkxml-convert = ["vkxml"]
 xml-rs = "^0.8"
 
 vkxml = { optional = true, version = "^0.3" }
-serde = { optional = true, version = "^1.0.75" }
-serde_derive = { optional = true, version = "^1.0.75" }
+serde = { optional = true, version = "^1.0.77" }
+serde_derive = { optional = true, version = "^1.0.77" }
 
 [badges]
