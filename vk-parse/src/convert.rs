@@ -92,8 +92,8 @@ impl From<Registry> for vkxml::Registry {
                         .push(vkxml::RegistryElement::Definitions(types.into()));
                 }
 
-                RegistryChild::Enums(e) => match e.kind {
-                    None => {
+                RegistryChild::Enums(e) => match e.kind.as_deref() {
+                    None | Some("constants") => {
                         flush_enums(&mut enums, &mut registry.elements);
                         let mut constants = vkxml::Constants {
                             notation: e.comment,
@@ -112,7 +112,7 @@ impl From<Registry> for vkxml::Registry {
                         let enumeration = vkxml::Enumeration {
                             name: e.name.unwrap_or(String::new()),
                             notation: e.comment,
-                            purpose: if kind.as_str() == "bitmask" {
+                            purpose: if kind == "bitmask" {
                                 Some(vkxml::EnumerationPurpose::Bitmask)
                             } else {
                                 None
