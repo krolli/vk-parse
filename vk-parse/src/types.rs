@@ -859,7 +859,13 @@ pub struct Feature {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
-    pub number: String,
+    pub number: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub depends: Option<String>,
 
     #[cfg_attr(
         feature = "serialize",

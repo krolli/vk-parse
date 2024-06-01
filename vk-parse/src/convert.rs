@@ -1358,7 +1358,11 @@ impl From<Feature> for vkxml::Feature {
             name: orig.name,
             notation: orig.comment,
             api: orig.api,
-            version: f32::from_str(&orig.number).unwrap(),
+            version: if let Some(ref number) = orig.number {
+                f32::from_str(&number).unwrap()
+            } else {
+                0.0
+            },
             define: orig.protect,
             elements: {
                 let mut elements = Vec::with_capacity(orig.children.len());

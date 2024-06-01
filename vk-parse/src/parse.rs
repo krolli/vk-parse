@@ -936,6 +936,7 @@ fn parse_feature<R: Read>(
     let mut api = None;
     let mut name = None;
     let mut number = None;
+    let mut depends = None;
     let mut protect = None;
     let mut comment = None;
     let mut children = Vec::new();
@@ -944,6 +945,7 @@ fn parse_feature<R: Read>(
         "api"     => api     = Some(a.value),
         "name"    => name    = Some(a.value),
         "number"  => number  = Some(a.value),
+        "depends" => depends = Some(a.value),
         "protect" => protect = Some(a.value),
         "comment" => comment = Some(a.value)
     }
@@ -955,12 +957,12 @@ fn parse_feature<R: Read>(
 
     unwrap_attribute!(ctx, feature, api);
     unwrap_attribute!(ctx, feature, name);
-    unwrap_attribute!(ctx, feature, number);
 
     Some(RegistryChild::Feature(Feature {
         api,
         name,
         number,
+        depends,
         protect,
         comment,
         children,
