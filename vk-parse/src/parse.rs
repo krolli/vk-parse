@@ -58,6 +58,32 @@ macro_rules! unwrap_attribute (
     };
 );
 
+macro_rules! parse_attributes {
+    ($ctx:expr, $($attribute:ident),+ => $val:expr) => {
+        {
+            let parse_xpath = &$ctx.xpath;
+            let parse_attribs = move || -> Result<_, Error> {
+                $(
+                    let $attribute = $attribute.ok_or_else(|| {
+                        Error::MissingAttribute {
+                            xpath: parse_xpath.clone(),
+                            name: stringify!($attribute).to_string(),
+                        }
+                    })?;
+                )+
+                Ok($val)
+            };
+            match parse_attribs() {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    $ctx.errors.push(e);
+                    None
+                }
+            }
+        }
+    };
+}
+
 macro_rules! match_attributes {
     ($ctx:expr, $a:ident in $attributes:expr, $($p:pat => $e:expr),+ $(,)?) => {
         for $a in $attributes {
@@ -76,7 +102,7 @@ macro_rules! match_attributes {
 }
 
 macro_rules! match_elements {
-    ($ctx:expr, $($p:pat => $e:expr),+) => {
+    ($ctx:expr, $($p:pat => $e:expr),+ $(,)?) => {
         while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::StartElement { name, .. } => {
@@ -87,11 +113,11 @@ macro_rules! match_elements {
                             $p => $e,
                         )+
                         _ => {
+                            consume_current_element($ctx);
                             $ctx.errors.push(Error::UnexpectedElement {
                                 xpath: $ctx.xpath.clone(),
                                 name: String::from(name),
                             });
-                            consume_current_element($ctx);
                         }
                     }
                 }
@@ -115,11 +141,11 @@ macro_rules! match_elements {
                             $p => $e,
                         )+
                         _ => {
+                            consume_current_element($ctx);
                             $ctx.errors.push(Error::UnexpectedElement {
                                 xpath: $ctx.xpath.clone(),
                                 name: String::from(name),
                             });
-                            consume_current_element($ctx);
                         }
                     }
                 }
@@ -317,9 +343,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
 
             registry.0.push(RegistryChild::Commands(Commands{comment, children}));
         },
-        "feature" => if let Some(v) = parse_feature(ctx, attributes) {
-            registry.0.push(v);
-        },
+        "feature" => registry.0.extend(parse_feature(ctx, attributes)),
         "extensions" => registry.0.push(parse_extensions(ctx, attributes)),
         "formats" => registry.0.push(parse_formats(ctx)),
         "spirvextensions" => registry.0.push(parse_spirvextensions(ctx, attributes)),
@@ -1102,7 +1126,6 @@ fn parse_extension_item_require<R: Read>(
     let mut feature = None;
     let mut comment = None;
     let mut depends = None;
-    let mut items = Vec::new();
 
     match_attributes! {ctx, a in attributes,
         "api"       => api       = Some(a.value),
@@ -1113,24 +1136,7 @@ fn parse_extension_item_require<R: Read>(
         "depends"   => depends   = Some(a.value),
     }
 
-    while let Some(Ok(e)) = ctx.events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                ctx.push_element(name);
-                if let Some(v) = parse_interface_item(ctx, name, attributes) {
-                    items.push(v);
-                }
-            }
-            XmlEvent::EndElement { .. } => {
-                ctx.pop_element();
-                break;
-            }
-            _ => {}
-        }
-    }
+    let items = parse_interface_items(ctx);
 
     ExtensionChild::Require {
         api,
@@ -1150,7 +1156,6 @@ fn parse_extension_item_remove<R: Read>(
     let mut api = None;
     let mut profile = None;
     let mut comment = None;
-    let mut items = Vec::new();
 
     match_attributes! {ctx, a in attributes,
         "api"     => api     = Some(a.value),
@@ -1158,24 +1163,7 @@ fn parse_extension_item_remove<R: Read>(
         "comment" => comment = Some(a.value)
     }
 
-    while let Some(Ok(e)) = ctx.events.next() {
-        match e {
-            XmlEvent::StartElement {
-                name, attributes, ..
-            } => {
-                let name = name.local_name.as_str();
-                ctx.push_element(name);
-                if let Some(v) = parse_interface_item(ctx, name, attributes) {
-                    items.push(v);
-                }
-            }
-            XmlEvent::EndElement { .. } => {
-                ctx.pop_element();
-                break;
-            }
-            _ => {}
-        }
-    }
+    let items = parse_interface_items(ctx);
 
     ExtensionChild::Remove {
         api,
@@ -1185,13 +1173,12 @@ fn parse_extension_item_remove<R: Read>(
     }
 }
 
-fn parse_interface_item<R: Read>(
+fn parse_interface_items<R: Read>(
     ctx: &mut ParseCtx<R>,
-    name: &str,
-    attributes: Vec<XmlAttribute>,
-) -> Option<InterfaceItem> {
-    match name {
-        "comment" => Some(InterfaceItem::Comment(parse_text_element(ctx))),
+) -> Vec<InterfaceItem> {
+    let mut items = Vec::new();
+    match_elements! {ctx, attributes,
+        "comment" => items.push(InterfaceItem::Comment(parse_text_element(ctx))),
         "type" => {
             let mut name = None;
             let mut comment = None;
@@ -1199,11 +1186,16 @@ fn parse_interface_item<R: Read>(
                 "name"    => name    = Some(a.value),
                 "comment" => comment = Some(a.value)
             }
-            unwrap_attribute!(ctx, type, name);
+            let item = parse_attributes!(ctx, name => InterfaceItem::Type {
+                name, comment,
+            });
             consume_current_element(ctx);
-            Some(InterfaceItem::Type { name, comment })
-        }
-        "enum" => parse_enum(ctx, attributes).map(|v| InterfaceItem::Enum(v)),
+            items.extend(item);
+        },
+        "enum" => {
+            let ret = parse_enum(ctx, attributes).map(|v| InterfaceItem::Enum(v));
+            items.extend(ret);
+        },
         "command" => {
             let mut name = None;
             let mut comment = None;
@@ -1211,18 +1203,14 @@ fn parse_interface_item<R: Read>(
                 "name"    => name    = Some(a.value),
                 "comment" => comment = Some(a.value)
             }
-            unwrap_attribute!(ctx, type, name);
-            consume_current_element(ctx);
-            Some(InterfaceItem::Command { name, comment })
-        }
-        _ => {
-            ctx.errors.push(Error::UnexpectedElement {
-                xpath: ctx.xpath.clone(),
-                name: String::from(name),
+            let item = parse_attributes!(ctx, name => InterfaceItem::Command {
+                name, comment,
             });
-            return None;
+            consume_current_element(ctx);
+            items.extend(item);
         }
     }
+    items
 }
 
 fn parse_formats<R: Read>(ctx: &mut ParseCtx<R>) -> RegistryChild {

@@ -7,8 +7,35 @@ extern crate vk_parse;
 extern crate vkxml;
 extern crate xml;
 
-const URL_REPO: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs";
-const URL_MAIN: &str = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml";
+#[cfg(feature = "openxr")]
+#[path = "../src/openxr.rs"]
+mod openxr;
+
+/// Trait representing a given API used for validation tests
+pub(crate) trait TestApi {
+    const MAIN_URL: Option<&'static str>;
+    /// Fail tests on non-fatal parse warnings?
+    const ALLOW_WARNINGS: bool;
+    /// Also try to use [`vk_parse::parse_file_as_vkxml`] compatibility layer
+    const USE_VKXML: bool;
+    fn download_url(major: u32, minor: u32, patch: u32, url_suffix: &str) -> String;
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Vulkan;
+impl TestApi for Vulkan {
+    const MAIN_URL: Option<&'static str> = Some("https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml");
+    const ALLOW_WARNINGS: bool = false;
+    const USE_VKXML: bool = true;
+    fn download_url(major: u32, minor: u32, patch: u32, url_suffix: &str) -> String {
+        format!(
+            "{}/v{}.{}.{}{}/vk.xml",
+            "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs",
+            major, minor, patch,
+            url_suffix
+        )
+    }
+}
 
 fn download<T: std::io::Write>(dst: &mut T, url: &str) {
     let resp = minreq::get(url)
@@ -120,29 +147,27 @@ fn write_code(path: &str, reg: &vk_parse::Registry) {
     }
 }
 
-fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
-    let src = format!(
-        "{}/v{}.{}.{}{}/vk.xml",
-        URL_REPO, major, minor, patch, url_suffix
-    );
+pub(crate) fn parsing_test<A: TestApi>(major: u32, minor: u32, patch: u32, url_suffix: &str) {
+    let src = A::download_url(major, minor, patch, url_suffix);
     use std::io::Cursor;
     let mut buf = Cursor::new(vec![0; 15]);
     download(&mut buf, &src);
     buf.set_position(0);
 
     match vk_parse::parse_stream(buf.clone()) {
-        Ok((_reg, errors)) => {
-            // write_code(&format!("v{}.{}.{}.c", major, minor, patch), &_reg);
-            if !errors.is_empty() {
+        Ok((_reg, errors)) if !errors.is_empty() => {
+            if !A::ALLOW_WARNINGS {
                 panic!("{:?}", errors);
             }
         }
         Err(fatal_error) => panic!("{:?}", fatal_error),
+        Ok(..) => {},
     }
 
-    match vk_parse::parse_stream_as_vkxml(buf) {
-        Ok(_) => (),
-        Err(fatal_error) => panic!("{:?}", fatal_error),
+    if A::USE_VKXML {
+        if let Err(e) = vk_parse::parse_stream_as_vkxml(buf) {
+            panic!("{:?}", e);
+        }
     }
 }
 
@@ -150,7 +175,7 @@ macro_rules! test_version {
     ($test_name:ident, $major:expr, $minor:expr, $patch:expr, $url_suffix:expr) => {
         #[test]
         fn $test_name() {
-            parsing_test($major, $minor, $patch, $url_suffix);
+            parsing_test::<Vulkan>($major, $minor, $patch, $url_suffix);
         }
     };
 }
@@ -159,7 +184,7 @@ macro_rules! test_version {
 fn test_main() {
     use std::io::Cursor;
     let mut buf = Cursor::new(vec![0; 15]);
-    download(&mut buf, URL_MAIN);
+    download(&mut buf, Vulkan::MAIN_URL.unwrap());
     buf.set_position(0);
 
     match vk_parse::parse_stream(buf.clone()) {
