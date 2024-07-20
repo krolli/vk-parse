@@ -56,6 +56,20 @@ macro_rules! unwrap_attribute (
             }
         };
     };
+
+    ($ctx:expr, $element:ident, $var:ident, $attribute_str:literal) => {
+        let $var = match $var {
+            Some(val) => val,
+            None => {
+                $ctx.errors.push(Error::MissingAttribute {
+                    xpath: $ctx.xpath.clone(),
+                    name: String::from($attribute_str),
+                });
+                return None;
+            }
+        };
+    };
+
 );
 
 macro_rules! match_attributes {
@@ -1793,7 +1807,7 @@ fn parse_videoprofiles<R: Read>(
         }
     }
 
-    unwrap_attribute!(ctx, videoprofiles, struct_);
+    unwrap_attribute!(ctx, videoprofiles, struct_, "struct");
 
     Some(VideoProfiles {
         comment,
@@ -1870,7 +1884,7 @@ fn parse_videocapabilities<R: Read>(
 
     consume_current_element(ctx);
 
-    unwrap_attribute!(ctx, videocapabilities, struct_);
+    unwrap_attribute!(ctx, videocapabilities, struct_, "struct");
 
     Some(VideoCapabilities { comment, struct_ })
 }
@@ -1924,7 +1938,7 @@ fn parse_videoformatproperties<R: Read>(
 
     consume_current_element(ctx);
 
-    unwrap_attribute!(ctx, videoformatproperties, struct_);
+    unwrap_attribute!(ctx, videoformatproperties, struct_, "struct");
 
     Some(VideoFormatProperties { comment, struct_ })
 }
@@ -1947,7 +1961,7 @@ fn parse_videorequirecapabilities<R: Read>(
 
     consume_current_element(ctx);
 
-    unwrap_attribute!(ctx, videorequirecapabilities, struct_);
+    unwrap_attribute!(ctx, videorequirecapabilities, struct_, "struct");
     unwrap_attribute!(ctx, videorequirecapabilities, member);
     unwrap_attribute!(ctx, videorequirecapabilities, value);
 
