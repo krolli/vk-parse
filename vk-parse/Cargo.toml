@@ -1,6 +1,6 @@
 [package]
 name = "vk-parse"
-version = "0.13.0"
+version = "0.14.0"
 authors = ["Martin Krošlák <kroslakma@gmail.com>"]
 description = "Vulkan specification parser"
 readme = "README.md"
