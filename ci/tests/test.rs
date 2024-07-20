@@ -120,6 +120,14 @@ fn write_code(path: &str, reg: &vk_parse::Registry) {
     }
 }
 
+#[allow(dead_code)]
+fn write_debug(path: &str, reg: &vk_parse::Registry) {
+    use std::io::Write;
+
+    let mut file = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
+    writeln!(&mut file, "{:#?}", reg).unwrap();
+}
+
 fn parsing_test(major: u32, minor: u32, patch: u32, url_suffix: &str) {
     let src = format!(
         "{}/v{}.{}.{}{}/vk.xml",
@@ -165,6 +173,7 @@ fn test_main() {
     match vk_parse::parse_stream(buf.clone()) {
         Ok((_reg, errors)) => {
             // write_code("main.c", &_reg);
+            // write_debug("main.debug", &_reg);
             if !errors.is_empty() {
                 panic!("{:?}", errors);
             }
