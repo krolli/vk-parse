@@ -106,6 +106,8 @@ pub enum RegistryChild {
     SpirvCapabilities(SpirvCapabilities),
 
     Sync(Sync),
+
+    VideoCodecs(VideoCodecs),
 }
 
 pub type VendorIds = CommentedChildren<VendorId>;
@@ -1310,10 +1312,113 @@ pub struct SyncAccess {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 pub struct SyncPipeline {
+    pub name: String,
+    pub depends: Option<String>,
+    pub children: Vec<SyncPipelineStage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct SyncPipelineStage {
     pub order: Option<String>,
     pub before: Option<String>,
     pub after: Option<String>,
     pub text: String,
+}
+
+pub type VideoCodecs = CommentedChildren<VideoCodec>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct VideoCodec {
+    pub comment: Option<String>,
+    pub name: String,
+    pub extend: Option<String>,
+    pub value: Option<String>,
+    pub children: Vec<VideoCodecChild>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum VideoCodecChild {
+    Profiles(VideoProfiles),
+    Capabilities(VideoCapabilities),
+    Format(VideoFormat),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct VideoProfiles {
+    pub comment: Option<String>,
+    pub struct_: String,
+    pub children: Vec<VideoProfileMember>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct VideoProfileMember {
+    pub comment: Option<String>,
+    pub name: String,
+    pub children: Vec<VideoProfile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct VideoProfile {
+    pub comment: Option<String>,
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct VideoCapabilities {
+    pub comment: Option<String>,
+    pub struct_: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct VideoFormat {
+    pub comment: Option<String>,
+    pub name: Option<String>,
+    pub usage: Option<String>,
+    pub extend: Option<String>,
+    pub children: Vec<VideoFormatChild>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum VideoFormatChild {
+    RequireCapabilities(VideoRequireCapabilities),
+    FormatProperties(VideoFormatProperties),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct VideoFormatProperties {
+    pub comment: Option<String>,
+    pub struct_: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct VideoRequireCapabilities {
+    pub comment: Option<String>,
+    pub struct_: String,
+    pub member: String,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

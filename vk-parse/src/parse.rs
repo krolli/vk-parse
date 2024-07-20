@@ -324,7 +324,8 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
         "formats" => registry.0.push(parse_formats(ctx)),
         "spirvextensions" => registry.0.push(parse_spirvextensions(ctx, attributes)),
         "spirvcapabilities" => registry.0.push(parse_spirvcapabilities(ctx, attributes)),
-        "sync" => registry.0.push(parse_sync(ctx, attributes))
+        "sync" => registry.0.push(parse_sync(ctx, attributes)),
+        "videocodecs" => registry.0.push(parse_videocodecs(ctx, attributes))
     }
 
     Ok(registry)
@@ -1653,7 +1654,6 @@ fn parse_syncaccess<R: Read>(
 
     unwrap_attribute!(ctx, syncaccess, name);
 
-    consume_current_element(ctx);
     Some(SyncChild::Access(SyncAccess {
         name,
         alias,
@@ -1667,6 +1667,34 @@ fn parse_syncpipeline<R: Read>(
     ctx: &mut ParseCtx<R>,
     attributes: Vec<XmlAttribute>,
 ) -> Option<SyncChild> {
+    let mut name = None;
+    let mut depends = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "name" => name = Some(a.value),
+        "depends" => depends = Some(a.value),
+    }
+
+    match_elements! { ctx, attributes,
+        "syncpipelinestage" => if let Some(v) = parse_syncpipelinestage(ctx, attributes) {
+            children.push(v);
+        }
+    }
+
+    unwrap_attribute!(ctx, syncpipeline, name);
+
+    Some(SyncChild::Pipeline(SyncPipeline {
+        name,
+        depends,
+        children,
+    }))
+}
+
+fn parse_syncpipelinestage<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<SyncPipelineStage> {
     let mut order = None;
     let mut before = None;
     let mut after = None;
@@ -1678,12 +1706,257 @@ fn parse_syncpipeline<R: Read>(
 
     let text = parse_text_element(ctx);
 
-    Some(SyncChild::Pipeline(SyncPipeline {
+    Some(SyncPipelineStage {
         order,
         before,
         after,
         text,
-    }))
+    })
+}
+
+fn parse_videocodecs<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> RegistryChild {
+    let mut comment = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "videocodec" => if let Some(v) = parse_videocodec(ctx, attributes) {
+            children.push(v);
+        }
+    }
+
+    RegistryChild::VideoCodecs(VideoCodecs { comment, children })
+}
+
+fn parse_videocodec<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<VideoCodec> {
+    let mut comment = None;
+    let mut name = None;
+    let mut extend = None;
+    let mut value = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value),
+        "name" => name = Some(a.value),
+        "extend" => extend = Some(a.value),
+        "value" => value = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "videoprofiles" => if let Some(v) = parse_videoprofiles(ctx, attributes) {
+            children.push(VideoCodecChild::Profiles(v));
+        },
+        "videocapabilities" => if let Some(v) = parse_videocapabilities(ctx, attributes) {
+            children.push(VideoCodecChild::Capabilities(v));
+        },
+        "videoformat" => if let Some(v) = parse_videoformat(ctx, attributes) {
+            children.push(VideoCodecChild::Format(v));
+        }
+    }
+
+    unwrap_attribute!(ctx, videocodec, name);
+
+    Some(VideoCodec {
+        comment,
+        name,
+        extend,
+        value,
+        children,
+    })
+}
+
+fn parse_videoprofiles<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<VideoProfiles> {
+    let mut comment = None;
+    let mut struct_ = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value),
+        "struct" => struct_ = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "videoprofilemember" => if let Some(v) = parse_videoprofilemember(ctx, attributes) {
+            children.push(v);
+        }
+    }
+
+    unwrap_attribute!(ctx, videoprofiles, struct_);
+
+    Some(VideoProfiles {
+        comment,
+        struct_,
+        children,
+    })
+}
+
+fn parse_videoprofilemember<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<VideoProfileMember> {
+    let mut comment = None;
+    let mut name = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value),
+        "name" => name = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "videoprofile" => if let Some(v) = parse_videoprofile(ctx, attributes) {
+            children.push(v);
+        }
+    }
+
+    unwrap_attribute!(ctx, videoprofilemember, name);
+
+    Some(VideoProfileMember {
+        comment,
+        name,
+        children,
+    })
+}
+
+fn parse_videoprofile<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<VideoProfile> {
+    let mut comment = None;
+    let mut name = None;
+    let mut value = None;
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value),
+        "name" => name = Some(a.value),
+        "value" => value = Some(a.value)
+    }
+
+    consume_current_element(ctx);
+
+    unwrap_attribute!(ctx, videoprofile, name);
+    unwrap_attribute!(ctx, videoprofile, value);
+
+    Some(VideoProfile {
+        comment,
+        name,
+        value,
+    })
+}
+
+fn parse_videocapabilities<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<VideoCapabilities> {
+    let mut comment = None;
+    let mut struct_ = None;
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value),
+        "struct" => struct_ = Some(a.value)
+    }
+
+    consume_current_element(ctx);
+
+    unwrap_attribute!(ctx, videocapabilities, struct_);
+
+    Some(VideoCapabilities { comment, struct_ })
+}
+
+fn parse_videoformat<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<VideoFormat> {
+    let mut comment = None;
+    let mut name = None;
+    let mut usage = None;
+    let mut extend = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value),
+        "name" => name = Some(a.value),
+        "usage" => usage = Some(a.value),
+        "extend" => extend = Some(a.value)
+    }
+
+    match_elements! {ctx, attributes,
+        "videorequirecapabilities" => if let Some(v) = parse_videorequirecapabilities(ctx, attributes) {
+            children.push(VideoFormatChild::RequireCapabilities(v));
+        },
+        "videoformatproperties" => if let Some(v) = parse_videoformatproperties(ctx, attributes) {
+            children.push(VideoFormatChild::FormatProperties(v));
+        }
+    }
+
+    Some(VideoFormat {
+        comment,
+        name,
+        usage,
+        extend,
+        children,
+    })
+}
+
+fn parse_videoformatproperties<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<VideoFormatProperties> {
+    let mut comment = None;
+    let mut struct_ = None;
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value),
+        "struct" => struct_ = Some(a.value)
+    }
+
+    consume_current_element(ctx);
+
+    unwrap_attribute!(ctx, videoformatproperties, struct_);
+
+    Some(VideoFormatProperties { comment, struct_ })
+}
+
+fn parse_videorequirecapabilities<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<VideoRequireCapabilities> {
+    let mut comment = None;
+    let mut struct_ = None;
+    let mut member = None;
+    let mut value = None;
+
+    match_attributes! {ctx, a in attributes,
+        "comment" => comment = Some(a.value),
+        "struct" => struct_ = Some(a.value),
+        "member" => member = Some(a.value),
+        "value" => value = Some(a.value)
+    }
+
+    consume_current_element(ctx);
+
+    unwrap_attribute!(ctx, videorequirecapabilities, struct_);
+    unwrap_attribute!(ctx, videorequirecapabilities, member);
+    unwrap_attribute!(ctx, videorequirecapabilities, value);
+
+    Some(VideoRequireCapabilities {
+        comment,
+        struct_,
+        member,
+        value,
+    })
 }
 
 fn parse_integer<R: Read>(ctx: &mut ParseCtx<R>, text: &str) -> Option<i64> {

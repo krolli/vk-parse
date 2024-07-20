@@ -432,3 +432,8 @@ test_version! {test_v1_3_283, 1, 3, 283, "/xml"}
 test_version! {test_v1_3_284, 1, 3, 284, "/xml"}
 test_version! {test_v1_3_285, 1, 3, 285, "/xml"}
 test_version! {test_v1_3_286, 1, 3, 286, "/xml"}
+test_version! {test_v1_3_287, 1, 3, 287, "/xml"}
+test_version! {test_v1_3_288, 1, 3, 288, "/xml"}
+test_version! {test_v1_3_289, 1, 3, 289, "/xml"}
+test_version! {test_v1_3_290, 1, 3, 290, "/xml"}
+test_version! {test_v1_3_291, 1, 3, 291, "/xml"}

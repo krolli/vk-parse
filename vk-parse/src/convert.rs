@@ -168,6 +168,7 @@ impl From<Registry> for vkxml::Registry {
                 RegistryChild::SpirvExtensions { .. } => (),
                 RegistryChild::SpirvCapabilities { .. } => (),
                 RegistryChild::Sync { .. } => (),
+                RegistryChild::VideoCodecs { .. } => (),
             }
         }
 
