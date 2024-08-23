@@ -1099,6 +1099,12 @@ pub enum ExtensionChild {
             feature = "serialize",
             serde(default, skip_serializing_if = "is_default")
         )]
+        reasonlink: Option<String>,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
         items: Vec<InterfaceItem>,
     },
 }

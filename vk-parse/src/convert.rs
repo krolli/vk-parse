@@ -1006,6 +1006,7 @@ impl From<ExtensionChild> for vkxml::ExtensionElement {
                 api,
                 profile,
                 comment,
+                reasonlink: _,
                 items,
             } => vkxml::ExtensionElement::Remove(vkxml::ExtensionSpecification {
                 profile,

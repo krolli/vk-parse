@@ -1165,12 +1165,14 @@ fn parse_extension_item_remove<R: Read>(
     let mut api = None;
     let mut profile = None;
     let mut comment = None;
+    let mut reasonlink = None;
     let mut items = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "api"     => api     = Some(a.value),
-        "profile" => profile = Some(a.value),
-        "comment" => comment = Some(a.value)
+        "api"        => api        = Some(a.value),
+        "profile"    => profile    = Some(a.value),
+        "comment"    => comment    = Some(a.value),
+        "reasonlink" => reasonlink = Some(a.value),
     }
 
     while let Some(Ok(e)) = ctx.events.next() {
@@ -1196,6 +1198,7 @@ fn parse_extension_item_remove<R: Read>(
         api,
         profile,
         comment,
+        reasonlink,
         items,
     }
 }
