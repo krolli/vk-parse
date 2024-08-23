@@ -1046,16 +1046,16 @@ impl From<ExtensionChild> for Option<vkxml::FeatureSpecification> {
                 profile,
                 notation: comment,
                 extension,
-                elements: items.into_iter().map(|i| i.into()).collect(),
+                elements: items.into_iter().filter_map(|i| i.into()).collect(),
             }),
             ExtensionChild::Remove { .. } => None,
         }
     }
 }
 
-impl From<InterfaceItem> for vkxml::FeatureReference {
+impl From<InterfaceItem> for Option<vkxml::FeatureReference> {
     fn from(orig: InterfaceItem) -> Self {
-        match orig {
+        Some(match orig {
             InterfaceItem::Comment(v) => vkxml::FeatureReference::Notation(v),
             InterfaceItem::Type { name, comment } => {
                 vkxml::FeatureReference::DefinitionReference(vkxml::NamedIdentifier {
@@ -1075,7 +1075,8 @@ impl From<InterfaceItem> for vkxml::FeatureReference {
                     notation: comment,
                 })
             }
-        }
+            InterfaceItem::Feature { .. } => return None,
+        })
     }
 }
 
@@ -1205,6 +1206,8 @@ impl From<InterfaceItem> for Option<vkxml::ExtensionSpecificationElement> {
                     notation: comment,
                 }),
             ),
+
+            InterfaceItem::Feature { .. } => None,
         }
     }
 }

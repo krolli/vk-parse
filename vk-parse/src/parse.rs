@@ -1230,6 +1230,24 @@ fn parse_interface_item<R: Read>(
             consume_current_element(ctx);
             Some(InterfaceItem::Command { name, comment })
         }
+        "feature" => {
+            let mut name = None;
+            let mut struct_ = None;
+            let mut comment = None;
+            match_attributes! {ctx, a in attributes,
+                "name"    => name    = Some(a.value),
+                "struct"  => struct_ = Some(a.value),
+                "comment" => comment = Some(a.value)
+            }
+            unwrap_attribute!(ctx, type, name);
+            unwrap_attribute!(ctx, type, struct_);
+            consume_current_element(ctx);
+            Some(InterfaceItem::Feature {
+                name,
+                struct_,
+                comment,
+            })
+        }
         _ => {
             ctx.errors.push(Error::UnexpectedElement {
                 xpath: ctx.xpath.clone(),

@@ -1133,6 +1133,18 @@ pub enum InterfaceItem {
         )]
         comment: Option<String>,
     },
+
+    Feature {
+        name: String,
+
+        struct_: String,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        comment: Option<String>,
+    },
 }
 
 pub type Formats = CommentedChildren<Format>;
