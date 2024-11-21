@@ -518,6 +518,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let mut api = None;
             let mut code = String::new();
             let mut markup = Vec::new();
+            let mut featurelink = None;
             match_attributes!{ctx, a in attributes,
                 "len"                   => len                   = Some(a.value),
                 "altlen"                => altlen                = Some(a.value),
@@ -532,6 +533,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "objecttype"            => objecttype            = Some(a.value),
                 "deprecated"            => deprecated            = Some(a.value),
                 "api"                   => api                   = Some(a.value),
+                "featurelink"           => featurelink           = Some(a.value),
             }
             match_elements_combine_text!{ctx, code,
                 "type" => {
@@ -570,6 +572,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 api,
                 code,
                 markup,
+                featurelink,
             }))
         },
         "comment" => members.push(TypeMember::Comment(parse_text_element(ctx))),
@@ -1027,6 +1030,7 @@ fn parse_extension<R: Read>(
     let mut specialuse = None;
     let mut sortorder = None;
     let mut depends = None;
+    let mut nofeatures = None;
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
@@ -1049,6 +1053,7 @@ fn parse_extension<R: Read>(
         "specialuse"   => specialuse    = Some(a.value),
         "sortorder"    => sortorder     = Some(a.value),
         "depends"      => depends       = Some(a.value),
+        "nofeatures"   => nofeatures    = Some(a.value),
     }
 
     let number = match number {
@@ -1056,17 +1061,27 @@ fn parse_extension<R: Read>(
         None => None,
     };
 
-    let provisional = match provisional {
+    let provisional = match provisional.as_deref() {
+        Some("true") => true,
+        Some("false") => false,
         Some(value) => {
-            if value == "true" {
-                true
-            } else {
-                ctx.errors.push(Error::SchemaViolation {
-                    xpath: ctx.xpath.clone(),
-                    desc: format!("Unexpected value of 'provisional' attribute: {}", value),
-                });
-                false
-            }
+            ctx.errors.push(Error::SchemaViolation {
+                xpath: ctx.xpath.clone(),
+                desc: format!("Unexpected value of 'provisional' attribute: {}", value),
+            });
+            false
+        }
+        None => false,
+    };
+    let nofeatures = match nofeatures.as_deref() {
+        Some("true") => true,
+        Some("false") => false,
+        Some(value) => {
+            ctx.errors.push(Error::SchemaViolation {
+                xpath: ctx.xpath.clone(),
+                desc: format!("Unexpected value of 'nofeatures' attribute: {}", value),
+            });
+            false
         }
         None => false,
     };
@@ -1103,6 +1118,7 @@ fn parse_extension<R: Read>(
         specialuse,
         sortorder,
         depends,
+        nofeatures,
         children,
     })
 }

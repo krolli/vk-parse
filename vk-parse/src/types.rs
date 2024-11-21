@@ -422,6 +422,12 @@ pub struct TypeMemberDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub markup: Vec<TypeMemberMarkup>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub featurelink: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1016,6 +1022,12 @@ pub struct Extension {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub depends: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub nofeatures: bool,
 
     /// The items which make up this extension.
     #[cfg_attr(
