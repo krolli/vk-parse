@@ -446,3 +446,14 @@ test_version! {test_v1_3_288, 1, 3, 288, "/xml"}
 test_version! {test_v1_3_289, 1, 3, 289, "/xml"}
 test_version! {test_v1_3_290, 1, 3, 290, "/xml"}
 test_version! {test_v1_3_291, 1, 3, 291, "/xml"}
+test_version! {test_v1_3_292, 1, 3, 292, "/xml"}
+test_version! {test_v1_3_293, 1, 3, 293, "/xml"}
+test_version! {test_v1_3_294, 1, 3, 294, "/xml"}
+test_version! {test_v1_3_295, 1, 3, 295, "/xml"}
+test_version! {test_v1_3_296, 1, 3, 296, "/xml"}
+test_version! {test_v1_3_297, 1, 3, 297, "/xml"}
+test_version! {test_v1_3_298, 1, 3, 298, "/xml"}
+test_version! {test_v1_3_299, 1, 3, 299, "/xml"}
+test_version! {test_v1_3_300, 1, 3, 300, "/xml"}
+test_version! {test_v1_3_301, 1, 3, 301, "/xml"}
+test_version! {test_v1_3_302, 1, 3, 302, "/xml"}
