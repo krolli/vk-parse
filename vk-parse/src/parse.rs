@@ -970,6 +970,7 @@ fn parse_feature<R: Read>(
 
     match_elements! {ctx, attributes,
         "require" => children.push(parse_extension_item_require(ctx, attributes)),
+        "deprecate" => if let Some(child) = parse_extension_item_deprecate(ctx, attributes) { children.push(child) },
         "remove"  => children.push(parse_extension_item_remove(ctx, attributes))
     }
 
@@ -1095,6 +1096,7 @@ fn parse_extension<R: Read>(
 
     match_elements! {ctx, attributes,
         "require" => children.push(parse_extension_item_require(ctx, attributes)),
+        "deprecate" => if let Some(child) = parse_extension_item_deprecate(ctx, attributes) { children.push(child) },
         "remove" => children.push(parse_extension_item_remove(ctx, attributes))
     }
 
@@ -1172,6 +1174,53 @@ fn parse_extension_item_require<R: Read>(
         depends,
         items,
     }
+}
+
+fn parse_extension_item_deprecate<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<ExtensionChild> {
+    let mut api = None;
+    let mut profile = None;
+    let mut comment = None;
+    let mut explanationlink = None;
+    let mut items = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "api"             => api             = Some(a.value),
+        "profile"         => profile         = Some(a.value),
+        "comment"         => comment         = Some(a.value),
+        "explanationlink" => explanationlink = Some(a.value),
+    }
+
+    unwrap_attribute!(ctx, deprecate, explanationlink);
+
+    while let Some(Ok(e)) = ctx.events.next() {
+        match e {
+            XmlEvent::StartElement {
+                name, attributes, ..
+            } => {
+                let name = name.local_name.as_str();
+                ctx.push_element(name);
+                if let Some(v) = parse_interface_item(ctx, name, attributes) {
+                    items.push(v);
+                }
+            }
+            XmlEvent::EndElement { .. } => {
+                ctx.pop_element();
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    Some(ExtensionChild::Deprecate {
+        api,
+        profile,
+        comment,
+        explanationlink,
+        items,
+    })
 }
 
 fn parse_extension_item_remove<R: Read>(

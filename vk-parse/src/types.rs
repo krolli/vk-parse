@@ -1087,6 +1087,34 @@ pub enum ExtensionChild {
         items: Vec<InterfaceItem>,
     },
 
+    Deprecate {
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        api: Option<String>,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        profile: Option<String>,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        comment: Option<String>,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        explanationlink: String,
+
+        items: Vec<InterfaceItem>,
+    },
+
     /// Indicates the items this extension removes.
     Remove {
         #[cfg_attr(

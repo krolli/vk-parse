@@ -967,7 +967,9 @@ impl From<Extension> for vkxml::Extension {
 
         let mut elements = Vec::new();
         for item in orig.children {
-            elements.push(item.into());
+            if let Some(child) = item.into() {
+                elements.push(child);
+            }
         }
 
         vkxml::Extension {
@@ -999,7 +1001,7 @@ impl From<Extension> for vkxml::Extension {
     }
 }
 
-impl From<ExtensionChild> for vkxml::ExtensionElement {
+impl From<ExtensionChild> for Option<vkxml::ExtensionElement> {
     fn from(orig: ExtensionChild) -> Self {
         match orig {
             ExtensionChild::Remove {
@@ -1008,13 +1010,15 @@ impl From<ExtensionChild> for vkxml::ExtensionElement {
                 comment,
                 reasonlink: _,
                 items,
-            } => vkxml::ExtensionElement::Remove(vkxml::ExtensionSpecification {
-                profile,
-                notation: comment,
-                extension: None,
-                api,
-                elements: items.into_iter().filter_map(|i| i.into()).collect(),
-            }),
+            } => Some(vkxml::ExtensionElement::Remove(
+                vkxml::ExtensionSpecification {
+                    profile,
+                    notation: comment,
+                    extension: None,
+                    api,
+                    elements: items.into_iter().filter_map(|i| i.into()).collect(),
+                },
+            )),
 
             ExtensionChild::Require {
                 api,
@@ -1023,13 +1027,17 @@ impl From<ExtensionChild> for vkxml::ExtensionElement {
                 comment,
                 items,
                 ..
-            } => vkxml::ExtensionElement::Require(vkxml::ExtensionSpecification {
-                profile,
-                notation: comment,
-                extension,
-                api,
-                elements: items.into_iter().filter_map(|i| i.into()).collect(),
-            }),
+            } => Some(vkxml::ExtensionElement::Require(
+                vkxml::ExtensionSpecification {
+                    profile,
+                    notation: comment,
+                    extension,
+                    api,
+                    elements: items.into_iter().filter_map(|i| i.into()).collect(),
+                },
+            )),
+
+            _ => None,
         }
     }
 }
@@ -1049,7 +1057,7 @@ impl From<ExtensionChild> for Option<vkxml::FeatureSpecification> {
                 extension,
                 elements: items.into_iter().filter_map(|i| i.into()).collect(),
             }),
-            ExtensionChild::Remove { .. } => None,
+            _ => None,
         }
     }
 }
