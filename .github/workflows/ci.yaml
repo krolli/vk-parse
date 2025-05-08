@@ -18,15 +18,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Install ${{ matrix.rust }} toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
+
+      - name: Install ${{ matrix.rust }} toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
 
       # Using -Z minimal-versions is less work than manually maintained Cargo.lock
       # file for testing minimal versions. However, dev-dependencies can cause issues
