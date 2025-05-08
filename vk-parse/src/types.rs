@@ -1,5 +1,8 @@
 #![allow(non_snake_case)]
 
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
+
 /// Errors from which parser cannot recover.
 #[derive(Debug)]
 #[non_exhaustive]

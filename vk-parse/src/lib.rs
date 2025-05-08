@@ -7,9 +7,6 @@
 extern crate xml;
 
 #[cfg(feature = "serialize")]
-#[macro_use]
-extern crate serde_derive;
-#[cfg(feature = "serialize")]
 extern crate serde;
 
 #[cfg(feature = "vkxml-convert")]

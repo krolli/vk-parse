@@ -12,14 +12,13 @@ keywords = ["vulkan", "parser"]
 categories = ["parser-implementations", "rendering::graphics-api"]
 
 [features]
-serialize = ["serde", "serde_derive"]
+serialize = ["serde"]
 vkxml-convert = ["vkxml"]
 
 [dependencies]
 xml-rs = "^0.8"
 
 vkxml = { optional = true, version = "^0.3" }
-serde = { optional = true, version = "^1.0.77" }
-serde_derive = { optional = true, version = "^1.0.77" }
+serde = { optional = true, version = "^1.0.113", features = ["derive"] }
 
 [badges]
