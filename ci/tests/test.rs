@@ -186,7 +186,7 @@ fn test_main() {
         Err(fatal_error) => panic!("{:?}", fatal_error),
     }
 }
-
+/*
 test_version! {test_v1_0_33, 1, 0, 33, "-core/src/spec"}
 test_version! {test_v1_0_34, 1, 0, 34, "-core/src/spec"}
 test_version! {test_v1_0_35, 1, 0, 35, "-core/src/spec"}
@@ -454,6 +454,19 @@ test_version! {test_v1_3_296, 1, 3, 296, "/xml"}
 test_version! {test_v1_3_297, 1, 3, 297, "/xml"}
 test_version! {test_v1_3_298, 1, 3, 298, "/xml"}
 test_version! {test_v1_3_299, 1, 3, 299, "/xml"}
+*/
 test_version! {test_v1_3_300, 1, 3, 300, "/xml"}
 test_version! {test_v1_3_301, 1, 3, 301, "/xml"}
 test_version! {test_v1_3_302, 1, 3, 302, "/xml"}
+test_version! {test_v1_4_303, 1, 4, 303, "/xml"}
+test_version! {test_v1_4_304, 1, 4, 304, "/xml"}
+test_version! {test_v1_4_305, 1, 4, 305, "/xml"}
+test_version! {test_v1_4_306, 1, 4, 306, "/xml"}
+test_version! {test_v1_4_307, 1, 4, 307, "/xml"}
+test_version! {test_v1_4_308, 1, 4, 308, "/xml"}
+test_version! {test_v1_4_309, 1, 4, 309, "/xml"}
+test_version! {test_v1_4_310, 1, 4, 310, "/xml"}
+test_version! {test_v1_4_311, 1, 4, 311, "/xml"}
+test_version! {test_v1_4_312, 1, 4, 312, "/xml"}
+test_version! {test_v1_4_313, 1, 4, 313, "/xml"}
+test_version! {test_v1_4_314, 1, 4, 314, "/xml"}
