@@ -627,6 +627,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
     let mut renderpass = None;
     let mut videocoding = None;
     let mut cmdbufferlevel = None;
+    let mut allownoqueues = None;
     let mut pipeline = None;
     let mut comment = None;
     let mut api = None;
@@ -641,6 +642,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         "renderpass" => renderpass = Some(a.value),
         "videocoding" => videocoding = Some(a.value),
         "cmdbufferlevel" => cmdbufferlevel = Some(a.value),
+        "allownoqueues" => allownoqueues = Some(a.value),
         "pipeline" => pipeline = Some(a.value),
         "comment" => comment = Some(a.value),
         "api" => api = Some(a.value),
@@ -781,6 +783,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             renderpass,
             videocoding,
             cmdbufferlevel,
+            allownoqueues,
             pipeline,
             comment,
             proto,

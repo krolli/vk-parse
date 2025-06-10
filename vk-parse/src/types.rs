@@ -723,6 +723,12 @@ pub struct CommandDefinition {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub allownoqueues: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub pipeline: Option<String>,
 
     #[cfg_attr(
