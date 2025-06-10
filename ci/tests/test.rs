@@ -470,3 +470,6 @@ test_version! {test_v1_4_311, 1, 4, 311, "/xml"}
 test_version! {test_v1_4_312, 1, 4, 312, "/xml"}
 test_version! {test_v1_4_313, 1, 4, 313, "/xml"}
 test_version! {test_v1_4_314, 1, 4, 314, "/xml"}
+test_version! {test_v1_4_315, 1, 4, 315, "/xml"}
+test_version! {test_v1_4_316, 1, 4, 316, "/xml"}
+test_version! {test_v1_4_317, 1, 4, 317, "/xml"}
