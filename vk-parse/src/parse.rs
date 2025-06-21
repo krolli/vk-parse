@@ -631,6 +631,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
     let mut pipeline = None;
     let mut comment = None;
     let mut api = None;
+    let mut export = None;
 
     match_attributes! {ctx, a in attributes,
         "name" => name = Some(a.value),
@@ -646,6 +647,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         "pipeline" => pipeline = Some(a.value),
         "comment" => comment = Some(a.value),
         "api" => api = Some(a.value),
+        "export" => export = Some(a.value),
     }
 
     if let Some(alias) = alias {
@@ -792,6 +794,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             description,
             implicitexternsyncparams,
             api,
+            export,
             code,
         }))
     }
