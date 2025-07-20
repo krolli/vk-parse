@@ -626,6 +626,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
     let mut errorcodes = None;
     let mut renderpass = None;
     let mut videocoding = None;
+    let mut conditionalrendering = None;
     let mut cmdbufferlevel = None;
     let mut allownoqueues = None;
     let mut pipeline = None;
@@ -642,6 +643,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         "errorcodes" => errorcodes = Some(a.value),
         "renderpass" => renderpass = Some(a.value),
         "videocoding" => videocoding = Some(a.value),
+        "conditionalrendering" => conditionalrendering = Some(a.value),
         "cmdbufferlevel" => cmdbufferlevel = Some(a.value),
         "allownoqueues" => allownoqueues = Some(a.value),
         "pipeline" => pipeline = Some(a.value),
@@ -777,6 +779,23 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             return None;
         };
 
+        let conditionalrendering = if let Some(v) = conditionalrendering {
+            match v.as_str() {
+                "true" => Some(true),
+                "false" => Some(false),
+                _ => {
+                    ctx.errors.push(Error::UnexpectedAttributeValue {
+                        xpath: ctx.xpath.clone(),
+                        name: String::from("conditionalrendering"),
+                        value: v,
+                    });
+                    return None;
+                }
+            }
+        } else {
+            None
+        };
+
         Some(Command::Definition(CommandDefinition {
             tasks,
             queues,
@@ -784,6 +803,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             errorcodes,
             renderpass,
             videocoding,
+            conditionalrendering,
             cmdbufferlevel,
             allownoqueues,
             pipeline,
