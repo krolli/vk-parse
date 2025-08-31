@@ -477,6 +477,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut structextends = None;
     let mut allowduplicate = None;
     let mut objtypeenum = None;
+    let mut requiredlimittype = None;
     let mut bitvalues = None;
     let mut comment = None;
     let mut deprecated = None;
@@ -496,6 +497,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         "structextends"  => structextends  = Some(a.value),
         "allowduplicate" => allowduplicate = Some(a.value),
         "objtypeenum"    => objtypeenum    = Some(a.value),
+        "requiredlimittype" => requiredlimittype = Some(a.value),
         "bitvalues"      => bitvalues      = Some(a.value),
         "comment"        => comment        = Some(a.value),
         "deprecated"     => deprecated     = Some(a.value),
@@ -604,6 +606,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         structextends,
         allowduplicate,
         objtypeenum,
+        requiredlimittype,
         bitvalues,
         deprecated,
         comment,
