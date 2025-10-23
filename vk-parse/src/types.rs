@@ -888,6 +888,12 @@ pub struct Feature {
         feature = "serialize",
         serde(default, skip_serializing_if = "is_default")
     )]
+    pub apitype: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub name: String,
 
     #[cfg_attr(

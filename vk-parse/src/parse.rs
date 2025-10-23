@@ -981,6 +981,7 @@ fn parse_feature<R: Read>(
     attributes: Vec<XmlAttribute>,
 ) -> Option<RegistryChild> {
     let mut api = None;
+    let mut apitype = None;
     let mut name = None;
     let mut number = None;
     let mut depends = None;
@@ -990,6 +991,7 @@ fn parse_feature<R: Read>(
 
     match_attributes! {ctx, a in attributes,
         "api"     => api     = Some(a.value),
+        "apitype" => apitype = Some(a.value),
         "name"    => name    = Some(a.value),
         "number"  => number  = Some(a.value),
         "depends" => depends = Some(a.value),
@@ -1008,6 +1010,7 @@ fn parse_feature<R: Read>(
 
     Some(RegistryChild::Feature(Feature {
         api,
+        apitype,
         name,
         number,
         depends,
