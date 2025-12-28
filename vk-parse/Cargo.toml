@@ -1,6 +1,6 @@
 [package]
 name = "vk-parse"
-version = "0.17.0"
+version = "0.18.0"
 edition = "2015"
 rust-version = "1.40"
 authors = ["Martin Krošlák <kroslakma@gmail.com>"]
