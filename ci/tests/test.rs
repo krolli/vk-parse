@@ -485,3 +485,13 @@ test_version! {test_v1_4_326, 1, 4, 326, "/xml"}
 test_version! {test_v1_4_327, 1, 4, 327, "/xml"}
 test_version! {test_v1_4_328, 1, 4, 328, "/xml"}
 test_version! {test_v1_4_329, 1, 4, 329, "/xml"}
+test_version! {test_v1_4_330, 1, 4, 330, "/xml"}
+test_version! {test_v1_4_331, 1, 4, 331, "/xml"}
+test_version! {test_v1_4_332, 1, 4, 332, "/xml"}
+test_version! {test_v1_4_333, 1, 4, 333, "/xml"}
+test_version! {test_v1_4_334, 1, 4, 334, "/xml"}
+test_version! {test_v1_4_335, 1, 4, 335, "/xml"}
+test_version! {test_v1_4_336, 1, 4, 336, "/xml"}
+test_version! {test_v1_4_337, 1, 4, 337, "/xml"}
+test_version! {test_v1_4_338, 1, 4, 338, "/xml"}
+test_version! {test_v1_4_339, 1, 4, 339, "/xml"}
