@@ -485,6 +485,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut code = String::new();
     let mut markup = Vec::new();
     let mut members = Vec::new();
+    let mut proto = String::new();
+    let mut params = Vec::new();
 
     match_attributes! {ctx, a in attributes,
         "api"            => api            = Some(a.value),
@@ -592,7 +594,60 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let text = parse_text_element(ctx);
             code.push_str(&text);
             markup.push(TypeCodeMarkup::ApiEntry(text));
+        },
+        "proto" => {
+            match_elements_combine_text! {ctx, proto,
+                "type" => {
+                    let text = parse_text_element(ctx);
+                    proto.push_str("typedef ");
+                    proto.push_str(&text);
+                },
+                "name" => {
+                    let text = parse_text_element(ctx);
+                    proto.push_str("(VKAPI_PTR *");
+                    proto.push_str(&text);
+                    proto.push_str(")");
+                    markup.push(TypeCodeMarkup::Name(text)); // emulate pre-1.4.339 markup
+                }
+            }
+        },
+        "param" => {
+            let mut param = String::new();
+            match_elements_combine_text! {ctx, param,
+                "type" => {
+                    let text = parse_text_element(ctx);
+                    param.push_str(&text);
+                    markup.push(TypeCodeMarkup::Type(text)); // emulate pre-1.4.339 markup
+                },
+                "name" => {
+                    let text = parse_text_element(ctx);
+                    param.push_str(&text);
+                }
+            }
+            params.push(param);
         }
+    }
+
+    if proto.len() > 0 {
+        // emulate pre-1.4.339 typedef
+        code.clear();
+        code.push_str(&proto);
+        
+        code.push_str("(");
+        if params.is_empty() {
+            code.push_str("void");
+        } else {
+            let mut is_first = true;
+            for param in &params {
+                if is_first {
+                    is_first = false;
+                } else {
+                    code.push_str(", ");
+                }
+                code.push_str(param);
+            }
+        }
+        code.push_str(");");
     }
 
     TypesChild::Type(Type {
