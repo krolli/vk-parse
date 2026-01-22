@@ -90,7 +90,7 @@ macro_rules! match_attributes {
 }
 
 macro_rules! match_elements {
-    ($ctx:expr, $($p:pat => $e:expr),+) => {
+    ($ctx:expr, $($p:pat => $e:expr),+ $(,)?) => {
         while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::StartElement { name, .. } => {
@@ -118,7 +118,7 @@ macro_rules! match_elements {
         }
     };
 
-    ( $ctx:expr, $attributes:ident, $($p:pat => $e:expr),+) => {
+    ( $ctx:expr, $attributes:ident, $($p:pat => $e:expr),+ $(,)?) => {
         while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::StartElement { name, $attributes, .. } => {
@@ -148,7 +148,7 @@ macro_rules! match_elements {
 }
 
 macro_rules! match_elements_combine_text {
-    ( $ctx:expr, $buffer:ident, $($p:pat => $e:expr),+) => {
+    ( $ctx:expr, $buffer:ident, $($p:pat => $e:expr),+ $(,)?) => {
         while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::Characters(text) => $buffer.push_str(&text),
@@ -178,7 +178,7 @@ macro_rules! match_elements_combine_text {
         }
     };
 
-    ( $ctx:expr, $attributes:ident, $buffer:ident, $($p:pat => $e:expr),+) => {
+    ( $ctx:expr, $attributes:ident, $buffer:ident, $($p:pat => $e:expr),+ $(,)?) => {
         while let Some(Ok(e)) = $ctx.events.next() {
             match e {
                 XmlEvent::Characters(text) => $buffer.push_str(&text),
@@ -235,7 +235,7 @@ fn parse_xml<R: Read>(events: XmlEvents<R>) -> Result<(Registry, Vec<Error>), Fa
     {
         let ctx = &mut ctx;
         match_elements! {ctx,
-            "registry" => result = parse_registry(ctx)
+            "registry" => result = parse_registry(ctx),
         }
     }
 
@@ -253,7 +253,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
             let mut children = Vec::new();
 
             match_attributes!{ctx, a in attributes,
-                "comment" => comment = Some(a.value)
+                "comment" => comment = Some(a.value),
             }
 
             match_elements!{ctx, attributes,
@@ -270,7 +270,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
             let mut comment = None;
             let mut children = Vec::new();
             match_attributes!{ctx, a in attributes,
-                "comment" => comment = Some(a.value)
+                "comment" => comment = Some(a.value),
             }
             match_elements!{ctx, attributes,
                 "comment" => children.push(TypesChild::Comment(parse_text_element(ctx))),
@@ -297,7 +297,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
                 "end"      => end      = Some(a.value),
                 "vendor"   => vendor   = Some(a.value),
                 "comment"  => comment  = Some(a.value),
-                "bitwidth" => bitwidth = Some(a.value)
+                "bitwidth" => bitwidth = Some(a.value),
             }
             match_elements!{ctx, attributes,
                 "enum" => if let Some(v) = parse_enum(ctx, attributes) {
@@ -320,7 +320,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
             let mut children = Vec::new();
 
             match_attributes!{ctx, a in attributes,
-                "comment" => comment = Some(a.value)
+                "comment" => comment = Some(a.value),
             }
 
             match_elements!{ctx, attributes,
@@ -339,7 +339,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
         "spirvextensions" => registry.0.push(parse_spirvextensions(ctx, attributes)),
         "spirvcapabilities" => registry.0.push(parse_spirvcapabilities(ctx, attributes)),
         "sync" => registry.0.push(parse_sync(ctx, attributes)),
-        "videocodecs" => registry.0.push(parse_videocodecs(ctx, attributes))
+        "videocodecs" => registry.0.push(parse_videocodecs(ctx, attributes)),
     }
 
     Ok(registry)
@@ -350,13 +350,13 @@ fn parse_vendorids<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "vendorid" => if let Some(v) = parse_vendorid(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     RegistryChild::VendorIds(VendorIds { comment, children })
@@ -388,7 +388,7 @@ fn parse_vendorid<R: Read>(
                     value: a.value.clone(),
                 });
             }
-        }
+        },
     }
 
     consume_current_element(ctx);
@@ -410,7 +410,7 @@ fn parse_platform<R: Read>(
     match_attributes! {ctx, a in attributes,
         "name"    => name    = Some(a.value),
         "comment" => comment = Some(a.value),
-        "protect" => protect = Some(a.value)
+        "protect" => protect = Some(a.value),
     }
 
     consume_current_element(ctx);
@@ -430,13 +430,13 @@ fn parse_tags<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "tag" => if let Some(v) = parse_tag(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     RegistryChild::Tags(Tags { comment, children })
@@ -450,7 +450,7 @@ fn parse_tag<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> O
     match_attributes! {ctx, a in attributes,
         "name"    => name    = Some(a.value),
         "author"  => author  = Some(a.value),
-        "contact" => contact = Some(a.value)
+        "contact" => contact = Some(a.value),
     }
 
     consume_current_element(ctx);
@@ -558,7 +558,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "comment" => {
                     let text = parse_text_element(ctx);
                     markup.push(TypeMemberMarkup::Comment(text));
-                }
+                },
             }
             members.push(TypeMember::Definition(TypeMemberDefinition {
                 len,
@@ -608,7 +608,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                     proto.push_str(&text);
                     proto.push_str(")");
                     markup.push(TypeCodeMarkup::Name(text)); // emulate pre-1.4.339 markup
-                }
+                },
             }
         },
         "param" => {
@@ -622,17 +622,17 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "name" => {
                     let text = parse_text_element(ctx);
                     param.push_str(&text);
-                }
+                },
             }
             params.push(param);
-        }
+        },
     }
 
     if proto.len() > 0 {
         // emulate pre-1.4.339 typedef
         code.clear();
         code.push_str(&proto);
-        
+
         code.push_str("(");
         if params.is_empty() {
             code.push_str("void");
@@ -738,7 +738,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
                     let text = parse_text_element(ctx);
                     code.push_str(&text);
                     name = Some(text);
-                }
+                },
             }
             let name = if let Some(v) = name {
                 v
@@ -813,7 +813,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
 
             "alias" => {
                 match_attributes!{ctx, a in attributes,
-                    "name" => alias = Some(a.value)
+                    "name" => alias = Some(a.value),
                 }
                 consume_current_element(ctx);
             },
@@ -821,7 +821,7 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
             "description" => description = Some(parse_text_element(ctx)),
             "implicitexternsyncparams" => {
                 match_elements!{ctx,
-                    "param" => implicitexternsyncparams.push(parse_text_element(ctx))
+                    "param" => implicitexternsyncparams.push(parse_text_element(ctx)),
                 }
             }
         }
@@ -1014,7 +1014,7 @@ fn parse_enums_child_unused<R: Read>(
         "start"   => start   = Some(a.value),
         "end"     => end     = Some(a.value),
         "vendor"  => vendor  = Some(a.value),
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
     }
     consume_current_element(ctx);
     unwrap_attribute!(ctx, unused, start);
@@ -1051,13 +1051,13 @@ fn parse_feature<R: Read>(
         "number"  => number  = Some(a.value),
         "depends" => depends = Some(a.value),
         "protect" => protect = Some(a.value),
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "require" => children.push(parse_extension_item_require(ctx, attributes)),
         "deprecate" => if let Some(child) = parse_extension_item_deprecate(ctx, attributes) { children.push(child) },
-        "remove"  => children.push(parse_extension_item_remove(ctx, attributes))
+        "remove"  => children.push(parse_extension_item_remove(ctx, attributes)),
     }
 
     unwrap_attribute!(ctx, feature, api);
@@ -1083,13 +1083,13 @@ fn parse_extensions<R: Read>(
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "extension" => if let Some(v) = parse_extension(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     RegistryChild::Extensions(Extensions { comment, children })
@@ -1184,7 +1184,7 @@ fn parse_extension<R: Read>(
     match_elements! {ctx, attributes,
         "require" => children.push(parse_extension_item_require(ctx, attributes)),
         "deprecate" => if let Some(child) = parse_extension_item_deprecate(ctx, attributes) { children.push(child) },
-        "remove" => children.push(parse_extension_item_remove(ctx, attributes))
+        "remove" => children.push(parse_extension_item_remove(ctx, attributes)),
     }
 
     Some(Extension {
@@ -1367,7 +1367,7 @@ fn parse_interface_item<R: Read>(
             let mut comment = None;
             match_attributes! {ctx, a in attributes,
                 "name"    => name    = Some(a.value),
-                "comment" => comment = Some(a.value)
+                "comment" => comment = Some(a.value),
             }
             unwrap_attribute!(ctx, type, name);
             consume_current_element(ctx);
@@ -1379,7 +1379,7 @@ fn parse_interface_item<R: Read>(
             let mut comment = None;
             match_attributes! {ctx, a in attributes,
                 "name"    => name    = Some(a.value),
-                "comment" => comment = Some(a.value)
+                "comment" => comment = Some(a.value),
             }
             unwrap_attribute!(ctx, type, name);
             consume_current_element(ctx);
@@ -1392,7 +1392,7 @@ fn parse_interface_item<R: Read>(
             match_attributes! {ctx, a in attributes,
                 "name"    => name    = Some(a.value),
                 "struct"  => struct_ = Some(a.value),
-                "comment" => comment = Some(a.value)
+                "comment" => comment = Some(a.value),
             }
             unwrap_attribute!(ctx, type, name);
             unwrap_attribute!(ctx, type, struct_);
@@ -1419,7 +1419,7 @@ fn parse_formats<R: Read>(ctx: &mut ParseCtx<R>) -> RegistryChild {
     match_elements! {ctx, attributes,
         "format" => if let Some(v) = parse_format(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     RegistryChild::Formats(Formats {
@@ -1448,7 +1448,7 @@ fn parse_format<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -
         "blockExtent"    => blockExtent    = Some(a.value),
         "packed"         => packed         = Some(a.value),
         "compressed"     => compressed     = Some(a.value),
-        "chroma"         => chroma         = Some(a.value)
+        "chroma"         => chroma         = Some(a.value),
     }
 
     unwrap_attribute!(ctx, extension, name);
@@ -1459,7 +1459,7 @@ fn parse_format<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -
     match_elements! {ctx, attributes,
         "component"        => if let Some(v) = parse_format_component(ctx, attributes) { children.push(v); },
         "plane"            => if let Some(v) = parse_format_plane(ctx, attributes) { children.push(v); },
-        "spirvimageformat" => if let Some(v) = parse_format_spirvimageformat(ctx, attributes) { children.push(v); }
+        "spirvimageformat" => if let Some(v) = parse_format_spirvimageformat(ctx, attributes) { children.push(v); },
     }
 
     let blockSize: Option<u8> = parse_int_attribute(ctx, blockSize, "blockSize");
@@ -1509,7 +1509,7 @@ fn parse_format_component<R: Read>(
         "name"          => name          = Some(a.value),
         "bits"          => bits          = Some(a.value),
         "numericFormat" => numericFormat = Some(a.value),
-        "planeIndex"    => planeIndex    = Some(a.value)
+        "planeIndex"    => planeIndex    = Some(a.value),
     }
 
     unwrap_attribute!(ctx, extension, name);
@@ -1549,7 +1549,7 @@ fn parse_format_plane<R: Read>(
         "index"         => index         = Some(a.value),
         "widthDivisor"  => widthDivisor  = Some(a.value),
         "heightDivisor" => heightDivisor = Some(a.value),
-        "compatible"    => compatible    = Some(a.value)
+        "compatible"    => compatible    = Some(a.value),
     }
 
     unwrap_attribute!(ctx, extension, index);
@@ -1593,7 +1593,7 @@ fn parse_format_spirvimageformat<R: Read>(
     let mut name = None;
 
     match_attributes! {ctx, a in attributes,
-        "name" => name = Some(a.value)
+        "name" => name = Some(a.value),
     }
 
     unwrap_attribute!(ctx, extension, name);
@@ -1611,13 +1611,13 @@ fn parse_spirvextensions<R: Read>(
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "spirvextension" => if let Some(v) = parse_spirvextension(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     RegistryChild::SpirvExtensions(SpirvExtensions { comment, children })
@@ -1631,13 +1631,13 @@ fn parse_spirvextension<R: Read>(
     let mut enables = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "name" => name = Some(a.value)
+        "name" => name = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "enable" => if let Some(v) = parse_enable(ctx, attributes) {
             enables.push(v);
-        }
+        },
     }
 
     unwrap_attribute!(ctx, spirvextension, name);
@@ -1653,13 +1653,13 @@ fn parse_spirvcapabilities<R: Read>(
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "spirvcapability" => if let Some(v) = parse_spirvcapability(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     RegistryChild::SpirvCapabilities(SpirvCapabilities { comment, children })
@@ -1673,13 +1673,13 @@ fn parse_spirvcapability<R: Read>(
     let mut enables = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "name" => name = Some(a.value)
+        "name" => name = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "enable" => if let Some(v) = parse_enable(ctx, attributes) {
             enables.push(v);
-        }
+        },
     }
 
     unwrap_attribute!(ctx, spirvcapability, name);
@@ -1707,7 +1707,7 @@ fn parse_enable<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -
         "alias" => alias = Some(a.value),
         "property" => property = Some(a.value),
         "member" => member = Some(a.value),
-        "value" => value = Some(a.value)
+        "value" => value = Some(a.value),
     }
 
     consume_current_element(ctx);
@@ -1743,7 +1743,7 @@ fn parse_sync<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
@@ -1755,7 +1755,7 @@ fn parse_sync<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         },
         "syncpipeline" => if let Some(v) = parse_syncpipeline(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     RegistryChild::Sync(Sync { comment, children })
@@ -1805,7 +1805,7 @@ fn parse_syncstage<R: Read>(
 
     match_elements! {ctx, attributes,
         "syncsupport" => syncsupport = parse_syncsupport(ctx, attributes),
-        "syncequivalent" => syncequivalent = parse_syncequivalent(ctx, attributes)
+        "syncequivalent" => syncequivalent = parse_syncequivalent(ctx, attributes),
     }
 
     unwrap_attribute!(ctx, syncstage, name);
@@ -1836,7 +1836,7 @@ fn parse_syncaccess<R: Read>(
     match_elements! { ctx, attributes,
         "comment" => comment = Some(parse_text_element(ctx)),
         "syncsupport" => syncsupport = parse_syncsupport(ctx, attributes),
-        "syncequivalent" => syncequivalent = parse_syncequivalent(ctx, attributes)
+        "syncequivalent" => syncequivalent = parse_syncequivalent(ctx, attributes),
     }
 
     unwrap_attribute!(ctx, syncaccess, name);
@@ -1866,7 +1866,7 @@ fn parse_syncpipeline<R: Read>(
     match_elements! { ctx, attributes,
         "syncpipelinestage" => if let Some(v) = parse_syncpipelinestage(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     unwrap_attribute!(ctx, syncpipeline, name);
@@ -1909,13 +1909,13 @@ fn parse_videocodecs<R: Read>(
     let mut children = Vec::new();
 
     match_attributes! {ctx, a in attributes,
-        "comment" => comment = Some(a.value)
+        "comment" => comment = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "videocodec" => if let Some(v) = parse_videocodec(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     RegistryChild::VideoCodecs(VideoCodecs { comment, children })
@@ -1935,7 +1935,7 @@ fn parse_videocodec<R: Read>(
         "comment" => comment = Some(a.value),
         "name" => name = Some(a.value),
         "extend" => extend = Some(a.value),
-        "value" => value = Some(a.value)
+        "value" => value = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
@@ -1947,7 +1947,7 @@ fn parse_videocodec<R: Read>(
         },
         "videoformat" => if let Some(v) = parse_videoformat(ctx, attributes) {
             children.push(VideoCodecChild::Format(v));
-        }
+        },
     }
 
     unwrap_attribute!(ctx, videocodec, name);
@@ -1971,13 +1971,13 @@ fn parse_videoprofiles<R: Read>(
 
     match_attributes! {ctx, a in attributes,
         "comment" => comment = Some(a.value),
-        "struct" => struct_ = Some(a.value)
+        "struct" => struct_ = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "videoprofilemember" => if let Some(v) = parse_videoprofilemember(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     unwrap_attribute!(ctx, videoprofiles, struct_, "struct");
@@ -1999,13 +1999,13 @@ fn parse_videoprofilemember<R: Read>(
 
     match_attributes! {ctx, a in attributes,
         "comment" => comment = Some(a.value),
-        "name" => name = Some(a.value)
+        "name" => name = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
         "videoprofile" => if let Some(v) = parse_videoprofile(ctx, attributes) {
             children.push(v);
-        }
+        },
     }
 
     unwrap_attribute!(ctx, videoprofilemember, name);
@@ -2028,7 +2028,7 @@ fn parse_videoprofile<R: Read>(
     match_attributes! {ctx, a in attributes,
         "comment" => comment = Some(a.value),
         "name" => name = Some(a.value),
-        "value" => value = Some(a.value)
+        "value" => value = Some(a.value),
     }
 
     consume_current_element(ctx);
@@ -2052,7 +2052,7 @@ fn parse_videocapabilities<R: Read>(
 
     match_attributes! {ctx, a in attributes,
         "comment" => comment = Some(a.value),
-        "struct" => struct_ = Some(a.value)
+        "struct" => struct_ = Some(a.value),
     }
 
     consume_current_element(ctx);
@@ -2076,7 +2076,7 @@ fn parse_videoformat<R: Read>(
         "comment" => comment = Some(a.value),
         "name" => name = Some(a.value),
         "usage" => usage = Some(a.value),
-        "extend" => extend = Some(a.value)
+        "extend" => extend = Some(a.value),
     }
 
     match_elements! {ctx, attributes,
@@ -2085,7 +2085,7 @@ fn parse_videoformat<R: Read>(
         },
         "videoformatproperties" => if let Some(v) = parse_videoformatproperties(ctx, attributes) {
             children.push(VideoFormatChild::FormatProperties(v));
-        }
+        },
     }
 
     Some(VideoFormat {
@@ -2106,7 +2106,7 @@ fn parse_videoformatproperties<R: Read>(
 
     match_attributes! {ctx, a in attributes,
         "comment" => comment = Some(a.value),
-        "struct" => struct_ = Some(a.value)
+        "struct" => struct_ = Some(a.value),
     }
 
     consume_current_element(ctx);
@@ -2129,7 +2129,7 @@ fn parse_videorequirecapabilities<R: Read>(
         "comment" => comment = Some(a.value),
         "struct" => struct_ = Some(a.value),
         "member" => member = Some(a.value),
-        "value" => value = Some(a.value)
+        "value" => value = Some(a.value),
     }
 
     consume_current_element(ctx);
