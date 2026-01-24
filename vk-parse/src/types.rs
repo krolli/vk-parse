@@ -296,6 +296,7 @@ pub enum TypeSpec {
     None,
     Code(TypeCode),
     Members(Vec<TypeMember>),
+    Funcpointer(FuncpointerCode),
 }
 
 impl Default for TypeSpec {
@@ -325,6 +326,27 @@ pub enum TypeCodeMarkup {
     Type(String),
     ApiEntry(String),
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub struct FuncpointerCode {
+    // Compatibility with pre-1.4.339
+    pub code: String,
+    pub markup: Vec<TypeCodeMarkup>,
+
+    pub proto: FuncpointerProtoMarkup,
+    pub params: Vec<FuncpointerParamMarkup>,
+}
+
+pub type FuncpointerProtoMarkup = NameWithType;
+
+// According to schema, `param` can have a bunch of attributes not present on
+// proto. However, in current version of the xml, those are not used, so parsing
+// both into same type. User code should use these aliases to ensure
+// compatibility when they need to become distinct types. At that point, it might
+// become the same thing as CommandParam.
+pub type FuncpointerParamMarkup = NameWithType;
 
 /// A member of a type definition, i.e. a struct member.
 #[derive(Debug, Clone, PartialEq, Eq)]

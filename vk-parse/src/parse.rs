@@ -485,7 +485,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
     let mut code = String::new();
     let mut markup = Vec::new();
     let mut members = Vec::new();
-    let mut proto = String::new();
+    let mut proto = None;
     let mut params = Vec::new();
 
     match_attributes! {ctx, a in attributes,
@@ -596,43 +596,53 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             markup.push(TypeCodeMarkup::ApiEntry(text));
         },
         "proto" => {
-            match_elements_combine_text! {ctx, proto,
+            let mut name = None;
+            let mut type_name = None;
+            let mut code = String::new();
+            match_elements_combine_text! {ctx, code,
                 "type" => {
                     let text = parse_text_element(ctx);
-                    proto.push_str("typedef ");
-                    proto.push_str(&text);
+                    code.push_str(&text);
+                    type_name = Some(text);
                 },
                 "name" => {
                     let text = parse_text_element(ctx);
-                    proto.push_str("(VKAPI_PTR *");
-                    proto.push_str(&text);
-                    proto.push_str(")");
-                    markup.push(TypeCodeMarkup::Name(text)); // emulate pre-1.4.339 markup
+                    code.push_str("(VKAPI_PTR *");
+                    code.push_str(&text);
+                    code.push_str(")");
+                    markup.push(TypeCodeMarkup::Name(text.clone())); // emulate pre-1.4.339 markup
+                    name = Some(text);
                 },
+            };
+            if let Some(name) = name {
+                proto = Some(FuncpointerProtoMarkup {
+                    type_name,
+                    name,
+                    code,
+                });
+            } else {
+                ctx.errors.push(Error::MissingElement {
+                    xpath: ctx.xpath.clone(),
+                    name: String::from("name"),
+                });
             }
         },
         "param" => {
             let mut param = String::new();
-            match_elements_combine_text! {ctx, param,
-                "type" => {
-                    let text = parse_text_element(ctx);
-                    param.push_str(&text);
-                    markup.push(TypeCodeMarkup::Type(text)); // emulate pre-1.4.339 markup
-                },
-                "name" => {
-                    let text = parse_text_element(ctx);
-                    param.push_str(&text);
-                },
+            if let Some(p) = parse_name_with_type(ctx, &mut param) {
+                if let Some(ref t) = p.type_name {
+                    markup.push(TypeCodeMarkup::Type(t.clone())); // emulate pre-1.4.339 markup
+                }
+                params.push(p);
             }
-            params.push(param);
-        },
+        }
     }
 
-    if proto.len() > 0 {
+    if let Some(ref proto) = proto {
         // emulate pre-1.4.339 typedef
         code.clear();
-        code.push_str(&proto);
-
+        code.push_str("typedef ");
+        code.push_str(&proto.code);
         code.push_str("(");
         if params.is_empty() {
             code.push_str("void");
@@ -644,7 +654,7 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 } else {
                     code.push_str(", ");
                 }
-                code.push_str(param);
+                code.push_str(&param.code);
             }
         }
         code.push_str(");");
@@ -667,6 +677,13 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
         comment,
         spec: if members.len() > 0 {
             TypeSpec::Members(members)
+        } else if let Some(proto) = proto {
+            TypeSpec::Funcpointer(FuncpointerCode {
+                code,
+                markup,
+                proto,
+                params,
+            })
         } else if code.len() > 0 {
             TypeSpec::Code(TypeCode { code, markup })
         } else {
@@ -720,43 +737,6 @@ fn parse_command<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) 
         let mut params = Vec::new();
         let mut description = None;
         let mut implicitexternsyncparams = Vec::new();
-
-        fn parse_name_with_type<R: Read>(
-            ctx: &mut ParseCtx<R>,
-            buffer: &mut String,
-        ) -> Option<NameWithType> {
-            let mut name = None;
-            let mut type_name = None;
-            let mut code = String::new();
-            match_elements_combine_text! {ctx, code,
-                "type" => {
-                    let text = parse_text_element(ctx);
-                    code.push_str(&text);
-                    type_name = Some(text);
-                },
-                "name" => {
-                    let text = parse_text_element(ctx);
-                    code.push_str(&text);
-                    name = Some(text);
-                },
-            }
-            let name = if let Some(v) = name {
-                v
-            } else {
-                ctx.errors.push(Error::MissingElement {
-                    xpath: ctx.xpath.clone(),
-                    name: String::from("name"),
-                });
-                return None;
-            };
-
-            buffer.push_str(&code);
-            Some(NameWithType {
-                name,
-                type_name,
-                code,
-            })
-        }
 
         match_elements! {ctx, attributes,
             "proto" => {
@@ -2143,6 +2123,43 @@ fn parse_videorequirecapabilities<R: Read>(
         struct_,
         member,
         value,
+    })
+}
+
+fn parse_name_with_type<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    buffer: &mut String,
+) -> Option<NameWithType> {
+    let mut name = None;
+    let mut type_name = None;
+    let mut code = String::new();
+    match_elements_combine_text! {ctx, code,
+        "type" => {
+            let text = parse_text_element(ctx);
+            code.push_str(&text);
+            type_name = Some(text);
+        },
+        "name" => {
+            let text = parse_text_element(ctx);
+            code.push_str(&text);
+            name = Some(text);
+        }
+    }
+    let name = if let Some(v) = name {
+        v
+    } else {
+        ctx.errors.push(Error::MissingElement {
+            xpath: ctx.xpath.clone(),
+            name: String::from("name"),
+        });
+        return None;
+    };
+
+    buffer.push_str(&code);
+    Some(NameWithType {
+        name,
+        type_name,
+        code,
     })
 }
 

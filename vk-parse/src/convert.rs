@@ -350,13 +350,17 @@ impl From<TypesChild> for Option<vkxml::DefinitionsElement> {
                             return_type: new_field(),
                             param: Vec::new(),
                         };
-                        let code = match t.spec {
-                            TypeSpec::Code(TypeCode { code, .. }) => code,
+                        match t.spec {
+                            TypeSpec::Code(TypeCode { code, .. }) => {
+                                parse_type_funcptr(&mut fnptr, &code);
+                                return Some(vkxml::DefinitionsElement::FuncPtr(fnptr));
+                            }
+                            TypeSpec::Funcpointer(FuncpointerCode { code, .. }) => {
+                                parse_type_funcptr(&mut fnptr, &code);
+                                return Some(vkxml::DefinitionsElement::FuncPtr(fnptr));
+                            }
                             _ => panic!("Unexpected contents of handle {:?}", t.spec),
                         };
-
-                        parse_type_funcptr(&mut fnptr, &code);
-                        return Some(vkxml::DefinitionsElement::FuncPtr(fnptr));
                     }
 
                     "struct" => {
