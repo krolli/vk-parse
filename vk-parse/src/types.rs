@@ -333,9 +333,20 @@ pub enum TypeCodeMarkup {
 pub struct FuncpointerCode {
     // Compatibility with pre-1.4.339
     pub code: String,
+
+    // Compatibility with pre-1.4.339
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub markup: Vec<TypeCodeMarkup>,
 
     pub proto: FuncpointerProtoMarkup,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
     pub params: Vec<FuncpointerParamMarkup>,
 }
 
