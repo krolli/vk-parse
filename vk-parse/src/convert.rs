@@ -1070,7 +1070,7 @@ impl From<InterfaceItem> for Option<vkxml::FeatureReference> {
     fn from(orig: InterfaceItem) -> Self {
         Some(match orig {
             InterfaceItem::Comment(v) => vkxml::FeatureReference::Notation(v),
-            InterfaceItem::Type { name, comment } => {
+            InterfaceItem::Type { name, comment, .. } => {
                 vkxml::FeatureReference::DefinitionReference(vkxml::NamedIdentifier {
                     name,
                     notation: comment,
@@ -1082,7 +1082,7 @@ impl From<InterfaceItem> for Option<vkxml::FeatureReference> {
                     notation: e.comment,
                 })
             }
-            InterfaceItem::Command { name, comment } => {
+            InterfaceItem::Command { name, comment, .. } => {
                 vkxml::FeatureReference::CommandReference(vkxml::NamedIdentifier {
                     name,
                     notation: comment,
@@ -1206,14 +1206,14 @@ impl From<InterfaceItem> for Option<vkxml::ExtensionSpecificationElement> {
                 )),
             },
 
-            InterfaceItem::Command { name, comment } => Some(
+            InterfaceItem::Command { name, comment, .. } => Some(
                 vkxml::ExtensionSpecificationElement::CommandReference(vkxml::NamedIdentifier {
                     name,
                     notation: comment,
                 }),
             ),
 
-            InterfaceItem::Type { name, comment } => Some(
+            InterfaceItem::Type { name, comment, .. } => Some(
                 vkxml::ExtensionSpecificationElement::DefinitionReference(vkxml::NamedIdentifier {
                     name,
                     notation: comment,

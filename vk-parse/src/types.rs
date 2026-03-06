@@ -1232,6 +1232,12 @@ pub enum InterfaceItem {
             serde(default, skip_serializing_if = "is_default")
         )]
         comment: Option<String>,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        supersededby: Option<String>,
     },
 
     Enum(Enum),
@@ -1244,6 +1250,12 @@ pub enum InterfaceItem {
             serde(default, skip_serializing_if = "is_default")
         )]
         comment: Option<String>,
+
+        #[cfg_attr(
+            feature = "serialize",
+            serde(default, skip_serializing_if = "is_default")
+        )]
+        supersededby: Option<String>,
     },
 
     Feature {

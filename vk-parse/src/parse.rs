@@ -1345,25 +1345,37 @@ fn parse_interface_item<R: Read>(
         "type" => {
             let mut name = None;
             let mut comment = None;
+            let mut supersededby = None;
             match_attributes! {ctx, a in attributes,
                 "name"    => name    = Some(a.value),
                 "comment" => comment = Some(a.value),
+                "supersededby" => supersededby = Some(a.value),
             }
             unwrap_attribute!(ctx, type, name);
             consume_current_element(ctx);
-            Some(InterfaceItem::Type { name, comment })
+            Some(InterfaceItem::Type {
+                name,
+                comment,
+                supersededby,
+            })
         }
         "enum" => parse_enum(ctx, attributes).map(|v| InterfaceItem::Enum(v)),
         "command" => {
             let mut name = None;
             let mut comment = None;
+            let mut supersededby = None;
             match_attributes! {ctx, a in attributes,
                 "name"    => name    = Some(a.value),
                 "comment" => comment = Some(a.value),
+                "supersededby" => supersededby = Some(a.value),
             }
             unwrap_attribute!(ctx, type, name);
             consume_current_element(ctx);
-            Some(InterfaceItem::Command { name, comment })
+            Some(InterfaceItem::Command {
+                name,
+                comment,
+                supersededby,
+            })
         }
         "feature" => {
             let mut name = None;
