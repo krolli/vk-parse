@@ -20,7 +20,7 @@ After that, in your Rust project:
 `Cargo.toml`
 ```toml
 [dependencies]
-vk-parse = "0.20"
+vk-parse = "0.21"
 ```
 
 `main.rs`
@@ -36,10 +36,10 @@ fn main() {
 
 Conversion to structures from [vkxml](https://github.com/terrybrashaw/vkxml) is optional and must be enabled using feature.
 
-`Cargo.toml`
+    `Cargo.toml`
 ```toml
 [dependencies]
-vk-parse = { version = "0.20", features = ["vkxml-convert"] }
+vk-parse = { version = "0.21", features = ["vkxml-convert"] }
 vkxml = "0.3"
 ```
 
