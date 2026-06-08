@@ -259,7 +259,7 @@ impl<'src> IterTokenInner<'src> {
         }
     }
 
-    fn next(&mut self) -> Option<Token> {
+    fn next(&mut self) -> Option<Token<'_>> {
         self.buf.clear();
         loop {
             let c = if let Some(c) = self.peek {
