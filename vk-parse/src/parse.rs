@@ -523,6 +523,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
             let mut code = String::new();
             let mut markup = Vec::new();
             let mut featurelink = None;
+            let mut flagsextend = None;
+            let mut flagsextendmember = None;
             match_attributes!{ctx, a in attributes,
                 "len"                   => len                   = Some(a.value),
                 "altlen"                => altlen                = Some(a.value),
@@ -538,6 +540,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 "deprecated"            => deprecated            = Some(a.value),
                 "api"                   => api                   = Some(a.value),
                 "featurelink"           => featurelink           = Some(a.value),
+                "flagsextend"           => flagsextend           = Some(a.value),
+                "flagsextendmember"     => flagsextendmember     = Some(a.value),
             }
             match_elements_combine_text!{ctx, code,
                 "type" => {
@@ -577,6 +581,8 @@ fn parse_type<R: Read>(ctx: &mut ParseCtx<R>, attributes: Vec<XmlAttribute>) -> 
                 code,
                 markup,
                 featurelink,
+                flagsextend,
+                flagsextendmember,
             }))
         },
         "comment" => members.push(TypeMember::Comment(parse_text_element(ctx))),

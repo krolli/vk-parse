@@ -470,6 +470,18 @@ pub struct TypeMemberDefinition {
         serde(default, skip_serializing_if = "is_default")
     )]
     pub featurelink: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub flagsextend: Option<String>,
+
+    #[cfg_attr(
+        feature = "serialize",
+        serde(default, skip_serializing_if = "is_default")
+    )]
+    pub flagsextendmember: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
