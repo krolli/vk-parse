@@ -501,3 +501,11 @@ test_version! {test_v1_4_342, 1, 4, 342, "/xml"}
 test_version! {test_v1_4_343, 1, 4, 343, "/xml"}
 test_version! {test_v1_4_344, 1, 4, 344, "/xml"}
 test_version! {test_v1_4_345, 1, 4, 345, "/xml"}
+test_version! {test_v1_4_346, 1, 4, 346, "/xml"}
+test_version! {test_v1_4_347, 1, 4, 347, "/xml"}
+test_version! {test_v1_4_348, 1, 4, 348, "/xml"}
+test_version! {test_v1_4_349, 1, 4, 349, "/xml"}
+test_version! {test_v1_4_350, 1, 4, 350, "/xml"}
+test_version! {test_v1_4_351, 1, 4, 351, "/xml"}
+test_version! {test_v1_4_352, 1, 4, 352, "/xml"}
+test_version! {test_v1_4_353, 1, 4, 353, "/xml"}
