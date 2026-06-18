@@ -856,6 +856,11 @@ fn parse_c_field<'a, I: Iterator<Item = &'a str>>(
             "]" => {
                 break;
             }
+            ":" => {
+                iter.next().unwrap();
+                let _bitfield_size: usize = iter.peek().unwrap().parse().unwrap();
+                dbg!(_bitfield_size);
+            }
             t => {
                 if r.array.is_some() {
                     let mut is_number = true;
