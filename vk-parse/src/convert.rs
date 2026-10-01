@@ -169,6 +169,7 @@ impl From<Registry> for vkxml::Registry {
                 RegistryChild::SpirvCapabilities { .. } => (),
                 RegistryChild::Sync { .. } => (),
                 RegistryChild::VideoCodecs { .. } => (),
+                RegistryChild::DynamicStates { .. } => (),
             }
         }
 

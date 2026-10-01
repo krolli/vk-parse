@@ -111,6 +111,8 @@ pub enum RegistryChild {
     Sync(Sync),
 
     VideoCodecs(VideoCodecs),
+
+    DynamicStates(DynamicStates),
 }
 
 pub type VendorIds = CommentedChildren<VendorId>;
@@ -1347,6 +1349,41 @@ pub enum FormatChild {
 
     #[non_exhaustive]
     SpirvImageFormat { name: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct DynamicState {
+    pub name: String,
+    pub shaderstage: String,
+    pub pipelinesubstate: Option<String>,
+    pub requiresrasterization: Option<String>,
+    pub children: Vec<DynamicStateChild>,
+}
+
+pub type DynamicStates = Vec<DynamicState>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub enum DynamicStateChild {
+    DynamicStateCmd(DynamicStateCmd),
+    Enable(Enable),
+    StateCondition(StateCondition),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct DynamicStateCmd {
+    pub name: String,
+    pub pipeline: String,
+    pub pipelineonly: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct StateCondition {
+    pub state: Option<String>,
+    pub special: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

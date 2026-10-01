@@ -340,6 +340,7 @@ fn parse_registry<R: Read>(ctx: &mut ParseCtx<R>) -> Result<Registry, FatalError
         "spirvcapabilities" => registry.0.push(parse_spirvcapabilities(ctx, attributes)),
         "sync" => registry.0.push(parse_sync(ctx, attributes)),
         "videocodecs" => registry.0.push(parse_videocodecs(ctx, attributes)),
+        "dynamicstates" => registry.0.push(parse_dynamicstates(ctx, attributes)),
     }
 
     Ok(registry)
@@ -2142,6 +2143,112 @@ fn parse_videorequirecapabilities<R: Read>(
         member,
         value,
     })
+}
+
+fn parse_dynamicstates<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> RegistryChild {
+    let mut children = Vec::new();
+
+    for a in attributes {
+        ctx.errors.push(Error::UnexpectedAttribute {
+            xpath: ctx.xpath.clone(),
+            name: a.name.local_name.clone(),
+        });
+    }
+
+    match_elements! {ctx, attributes,
+        "dynamicstate" => if let Some(v) = parse_dynamicstate(ctx, attributes) {
+            children.push(v);
+        },
+    }
+
+    RegistryChild::DynamicStates(children)
+}
+
+fn parse_dynamicstate<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<DynamicState> {
+    let mut name = None;
+    let mut shaderstage = None;
+    let mut pipelinesubstate = None;
+    let mut requiresrasterization = None;
+    let mut children = Vec::new();
+
+    match_attributes! {ctx, a in attributes,
+        "name" => name = Some(a.value),
+        "shaderstage" => shaderstage = Some(a.value),
+        "pipelinesubstate" => pipelinesubstate = Some(a.value),
+        "requiresrasterization" => requiresrasterization = Some(a.value),
+    }
+
+    unwrap_attribute!(ctx, dynamicstate, name);
+    unwrap_attribute!(ctx, dynamicstate, shaderstage);
+
+    match_elements! {ctx, attributes,
+        "dynamicstatecmd" => if let Some(v) = parse_dynamicstatecmd(ctx, attributes) {
+            children.push(DynamicStateChild::DynamicStateCmd(v));
+        },
+        "statecondition" => {
+            children.push(DynamicStateChild::StateCondition(parse_statecondition(ctx, attributes)));
+        },
+        "enable" => if let Some(v) = parse_enable(ctx, attributes) {
+            children.push(DynamicStateChild::Enable(v));
+        },
+    }
+
+    Some(DynamicState {
+        name,
+        shaderstage,
+        pipelinesubstate,
+        requiresrasterization,
+        children,
+    })
+}
+
+fn parse_dynamicstatecmd<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> Option<DynamicStateCmd> {
+    let mut name = None;
+    let mut pipeline = None;
+    let mut pipelineonly = None;
+
+    match_attributes! {ctx, a in attributes,
+        "name" => name = Some(a.value),
+        "pipeline" => pipeline = Some(a.value),
+        "pipelineonly" => pipelineonly = Some(a.value),
+    }
+
+    unwrap_attribute!(ctx, dynamicstatecmd, name);
+    unwrap_attribute!(ctx, dynamicstatecmd, pipeline);
+
+    consume_current_element(ctx);
+
+    Some(DynamicStateCmd {
+        name,
+        pipeline,
+        pipelineonly,
+    })
+}
+
+fn parse_statecondition<R: Read>(
+    ctx: &mut ParseCtx<R>,
+    attributes: Vec<XmlAttribute>,
+) -> StateCondition {
+    let mut state = None;
+    let mut special = None;
+
+    match_attributes! {ctx, a in attributes,
+        "state" => state = Some(a.value),
+        "special" => special = Some(a.value),
+    }
+
+    consume_current_element(ctx);
+
+    StateCondition { state, special }
 }
 
 fn parse_name_with_type<R: Read>(
