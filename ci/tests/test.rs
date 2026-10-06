@@ -509,3 +509,15 @@ test_version! {test_v1_4_350, 1, 4, 350, "/xml"}
 test_version! {test_v1_4_351, 1, 4, 351, "/xml"}
 test_version! {test_v1_4_352, 1, 4, 352, "/xml"}
 test_version! {test_v1_4_353, 1, 4, 353, "/xml"}
+test_version! {test_v1_4_354, 1, 4, 354, "/xml"}
+test_version! {test_v1_4_355, 1, 4, 355, "/xml"}
+test_version! {test_v1_4_356, 1, 4, 356, "/xml"}
+test_version! {test_v1_4_357, 1, 4, 357, "/xml"}
+test_version! {test_v1_4_358, 1, 4, 358, "/xml"}
+test_version! {test_v1_4_359, 1, 4, 359, "/xml"}
+test_version! {test_v1_4_360, 1, 4, 360, "/xml"}
+test_version! {test_v1_4_361, 1, 4, 361, "/xml"}
+test_version! {test_v1_4_362, 1, 4, 362, "/xml"}
+test_version! {test_v1_4_363, 1, 4, 363, "/xml"}
+test_version! {test_v1_4_364, 1, 4, 364, "/xml"}
+test_version! {test_v1_4_365, 1, 4, 365, "/xml"}
